@@ -5,15 +5,18 @@
 =================================================================================
 اسکریپت مستقل (فقط requests). روی سیستم خودتان اجرا شود.
 
-مسیرها از سورس کتابخانهٔ منبع‌باز `tsetmc` (5j9/tsetmc، نسخهٔ 0.68) استخراج شده‌اند و
-**برای این اسکریپت تست نشده‌اند**؛ هیچ‌کدام از ساختار پاسخ‌ها را از نزدیک ندیده‌ام. به همین
-دلیل ابتدا --probe بزنید و خروجی را برای من بفرستید.
+مسیرها از سورس کتابخانهٔ منبع‌باز `tsetmc` (5j9/tsetmc، نسخهٔ 0.68) استخراج شده‌اند.
+وضعیت پس از اجرای کاربر (۲۰۲۶-۱۰-۱۵):
+  ✔ GetPriceAdjustList  — کار می‌کند: dEven, pClosing (تعدیل‌شده), pClosingNotAdjusted
+  ✔ GetInstrumentShareChange — کار می‌کند: dEven, numberOfShareNew, numberOfShareOld
+  ✔ GetInstrumentInfo — کار می‌کند (zTitad = تعداد سهام فعلی)
+  ✘ DPSData.aspx — برای ~۸۴٪ نمادها پاسخ خالی؛ رکوردها با «;» جدا می‌شوند نه خط جدید. نامطمئن.
 
   ۱) تعدیل قیمت هر نماد (API جدید):   cdn.tsetmc.com/api/ClosingPrice/GetPriceAdjustList/{insCode}
   ۲) تعدیل قیمت کل یک بازار (یک درخواست): old.tsetmc.com/Loader.aspx?ParTree=151319&Flow={1|2}
   ۳) سابقهٔ DPS (سود نقدی هر سهم):       old.tsetmc.com/tsev2/data/DPSData.aspx?s={نماد با حروف عربی}
   ۴) تعداد سهام فعلی:                  cdn.tsetmc.com/api/Instrument/GetInstrumentInfo/{insCode}  (zTitad)
-  ۵) [حدس من، تأییدنشده] تغییر سرمایه:  cdn.tsetmc.com/api/Instrument/GetInstrumentShareChange/{insCode}
+  ۵) تاریخچهٔ تعداد سهام (تغییر سرمایه):  cdn.tsetmc.com/api/Instrument/GetInstrumentShareChange/{insCode}
 
 اجرا
 ----
@@ -28,6 +31,7 @@
     data/raw/ca/...                   پاسخ‌های خام (برای بازبینی ساختار)
     data/corporate_actions/price_adjust.csv   ردیف‌های تعدیل قیمت هر نماد
     data/corporate_actions/dps.csv            ردیف‌های DPS (تاریخ‌ها میلادی + متن شمسی اصلی)
+    data/corporate_actions/share_change.csv   تاریخچهٔ تعداد سهام هر نماد
     data/corporate_actions/flow_adjust_<n>.csv  فهرست یک‌جای تعدیل‌های بازار
 """
 from __future__ import annotations
@@ -200,17 +204,63 @@ def collect_adjust(limit, force, workers):
     print(f"تعدیل قیمت: {done[0]} نماد، {len(rows_all)} ردیف، خطا={fail[0]} -> {OUT/'price_adjust.csv'}")
 
 
+# ── تاریخچهٔ تعداد سهام ───────────────────────────────────────────────────
+def fetch_shares(ins_code: str) -> list[dict]:
+    raw = get(f"{API}Instrument/GetInstrumentShareChange/{ins_code}")
+    save_raw(f"shares_{ins_code}.json", raw)
+    return json.loads(raw.decode("utf-8")).get("instrumentShareChange") or []
+
+
+def collect_shares(limit, force, workers):
+    st = load_stocks()[:limit] if limit else load_stocks()
+    OUT.mkdir(parents=True, exist_ok=True)
+    rows_all, lock, done, fail = [], threading.Lock(), [0], [0]
+
+    def one(r):
+        code = r["ins_code"]
+        cache = RAW / f"shares_{code}.json"
+        try:
+            if cache.exists() and not force:
+                items = json.loads(cache.read_text(encoding="utf-8")).get("instrumentShareChange") or []
+            else:
+                items = fetch_shares(code)
+            with lock:
+                for it in items:
+                    rows_all.append({"ins_code": code, "symbol": r["symbol"], "dEven": it.get("dEven"),
+                                     "shares_new": it.get("numberOfShareNew"), "shares_old": it.get("numberOfShareOld")})
+                done[0] += 1
+                if done[0] % 25 == 0:
+                    print(f"  shares [{done[0]}/{len(st)}] ردیف={len(rows_all)}")
+        except Exception as e:  # noqa: BLE001
+            with lock:
+                fail[0] += 1
+            print(f"  خطا {r['symbol']}: {e}", file=sys.stderr)
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        list(ex.map(one, st))
+    write_csv(OUT / "share_change.csv", rows_all)
+    print(f"تعداد سهام: {done[0]} نماد، {len(rows_all)} رویداد، خطا={fail[0]} -> {OUT/'share_change.csv'}")
+
+
 # ── DPS ───────────────────────────────────────────────────────────────────
 DPS_COLS = ["publish_date", "meeting_date", "fiscal_year", "profit_after_tax",
             "distributable_profit", "accumulated_profit", "cash_eps"]
 
 
 def parse_dps(text: str) -> list[dict]:
-    out = []
-    for line in text.replace("\r", "").split("\n"):
+    """رکوردها با «;» (یا خط جدید) جدا و فیلدها با «@». نمونهٔ واقعی (۲۰۲۶-۱۰-۱۵):
+    1402/04/28@1402/04/21@1401/12/29@@12839689.00@@500.00  →
+    publish, meeting, fiscal_year, ‹خالی›, ‹عدد›, ‹خالی›, ‹آخرین ستون = احتمالاً DPS ریال›
+    معنای دقیق ستون‌های ۴ تا ۷ تأیید نشده؛ ردیف‌های تکراری حذف می‌شوند."""
+    out, seen = [], set()
+    for line in re.split(r"[;\n]", text.replace("\r", "")):
         parts = line.strip().split("@")
-        if len(parts) < 7:
+        if len(parts) < 7 or not re.match(r"^\d{4}/", parts[0].translate(_FA).strip()):
             continue
+        key = tuple(p.strip() for p in parts[:7])
+        if key in seen:
+            continue
+        seen.add(key)
         rec = {k: v.strip() for k, v in zip(DPS_COLS, parts)}
         for c in ("publish_date", "meeting_date", "fiscal_year"):
             rec[c + "_jalali"] = rec[c]
@@ -322,11 +372,12 @@ def main() -> int:
     ap.add_argument("--flow", type=int, help="شمارهٔ بازار برای فهرست تعدیل‌ها (۱ = بورس، ۲ = فرابورس) [راستی‌آزمایی نشده]")
     ap.add_argument("--collect-adjust", action="store_true")
     ap.add_argument("--collect-dps", action="store_true")
+    ap.add_argument("--collect-shares", action="store_true")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--workers", type=int, default=3)
     a = ap.parse_args()
-    if not (a.probe or a.flow or a.collect_adjust or a.collect_dps):
+    if not (a.probe or a.flow or a.collect_adjust or a.collect_dps or a.collect_shares):
         ap.print_help()
         return 1
     for s in (sys.stdout, sys.stderr):
@@ -340,6 +391,8 @@ def main() -> int:
         collect_adjust(a.limit, a.force, a.workers)
     if a.collect_dps:
         collect_dps(a.limit, a.force, a.workers)
+    if a.collect_shares:
+        collect_shares(a.limit, a.force, a.workers)
     return 0
 
 
