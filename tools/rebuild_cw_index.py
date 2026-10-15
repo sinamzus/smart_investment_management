@@ -15,6 +15,7 @@
   • رویداد تعدیل = ردیفی که B ≠ C_prev؛ «تغییر سرمایه» اگر در ±۷ روز آن تغییر تعداد سهام ثبت شده باشد،
     وگرنه «سود نقدی». (طبقه‌بندی تقریبی؛ رویداد ترکیبی سود+سرمایه به‌عنوان سرمایه می‌ماند.)
   • قواعد پاک‌سازی ردیف مانند rebuild_ew_index.py.
+  • قاعدهٔ ۷ (fix_unadjusted_capital_events): افزایش سرمایه‌ای که مبنای روزانه آن تعدیل نشده با تعداد سهام اصلاح می‌شود.
 """
 import argparse
 from pathlib import Path
@@ -63,6 +64,23 @@ def classify_events(R: pd.DataFrame, sc: pd.DataFrame) -> pd.DataFrame:
     R.loc[cap[~cap].index, "is_dividend"] = True
     R["r_tr"] = R.r
     R["r_pr"] = np.where(R.is_dividend, R.pClosing / R.prevC - 1, R.r)
+    return fix_unadjusted_capital_events(R, sc)
+
+
+def fix_unadjusted_capital_events(R: pd.DataFrame, sc: pd.DataFrame, max_abs: float = 0.25) -> pd.DataFrame:
+    """قاعدهٔ ۷: در برخی ردیف‌های قدیمی (عمدتاً ۲۰۱۴) روز افزایش سرمایه مبنا (priceYesterday) تعدیل نشده
+    (f = 1) و بازده خام −۳۰٪ تا −۶۰٪ می‌شود، در حالی که شاخص رسمی آن را تعدیل‌شده می‌بیند.
+    اگر در همان روز افزایش تعداد سهام ثبت شده باشد، بازده با ضریب shares_old/shares_new بازمحاسبه می‌شود
+    (فقط اگر بازده جدید در ±max_abs باشد)."""
+    inc = sc[sc.shares_new > sc.shares_old][["ins_code", "date", "shares_old", "shares_new"]].drop_duplicates(["ins_code", "date"], keep="last")
+    R = R.reset_index(drop=True)
+    m = R.reset_index().merge(inc, on=["ins_code", "date"], how="left").set_index("index")
+    cand = m.shares_old.notna() & ((m.f - 1).abs() < 1e-3)
+    alt = m.pClosing / (m.prevC * m.shares_old / m.shares_new) - 1
+    use = cand & (alt.abs() <= max_abs) & (alt.abs() < m.r.abs())
+    R.loc[use[use].index, ["r_tr", "r_pr"]] = np.column_stack([alt[use], alt[use]])
+    R["capital_fixed"] = use.reindex(R.index).fillna(False)
+    print(f"قاعدهٔ ۷: {int(R.capital_fixed.sum())} ردیف افزایش سرمایهٔ تعدیل‌نشده در مبنا اصلاح شد")
     return R
 
 
