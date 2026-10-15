@@ -156,6 +156,11 @@ def load_stocks():
     if not INSTR.exists():
         raise SystemExit("ابتدا tools/fetch_stock_daily.py --discover را اجرا کنید.")
     rows = list(csv.DictReader(INSTR.open(encoding="utf-8")))
+    known = {r["ins_code"] for r in rows}
+    extra_p = DATA / "instruments_extra.csv"
+    if extra_p.exists():  # سهام اضافه‌شده با fetch_stock_daily.py --search
+        rows += [{"ins_code": r["ins_code"], "symbol": r["symbol"], "name": r["name"], "market": "bourse", "type": "stock"}
+                 for r in csv.DictReader(extra_p.open(encoding="utf-8")) if r["ins_code"] not in known]
     return [r for r in rows if r["type"] == "stock" and r["market"] in ("bourse", "farabourse")]
 
 

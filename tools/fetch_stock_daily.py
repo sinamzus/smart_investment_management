@@ -18,6 +18,7 @@
     python tools/fetch_stock_daily.py --collect --types stock,fund
     python tools/fetch_stock_daily.py --collect --limit 20     # فقط ۲۰ نماد (آزمایش)
     python tools/fetch_stock_daily.py --summary                # گزارش آنچه جمع شده
+    python tools/fetch_stock_daily.py --search پالایش          # سهام خارج از MarketWatch (مثلاً حذف‌شده‌ها) → data/instruments_extra.csv
 
 خروجی
 -----
@@ -44,6 +45,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 
@@ -51,6 +53,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 PRICES = DATA / "prices"
 INSTR = DATA / "instruments.csv"
+EXTRA = DATA / "instruments_extra.csv"   # نمادهایی که با --search اضافه می‌شوند (مثلاً نمادهای حذف‌شده از MarketWatch)
 
 CDN = "https://cdn.tsetmc.com/api"
 HEADERS = {
@@ -178,10 +181,43 @@ def save_instruments(rows: list[dict]) -> None:
         print(f"  {k[0]:10s} {k[1]:8s} {v}")
 
 
+def load_extra() -> list[dict]:
+    if not EXTRA.exists():
+        return []
+    return [{"ins_code": r["ins_code"], "symbol": r["symbol"], "name": r["name"], "market": "bourse",
+             "type": "stock", "base_volume": 0, "extra": 1} for r in csv.DictReader(EXTRA.open(encoding="utf-8"))]
+
+
 def load_instruments() -> list[dict]:
     if not INSTR.exists():
         raise SystemExit("ابتدا --discover را اجرا کنید.")
-    return list(csv.DictReader(INSTR.open(encoding="utf-8")))
+    rows = list(csv.DictReader(INSTR.open(encoding="utf-8")))
+    known = {r["ins_code"] for r in rows}
+    return rows + [r for r in load_extra() if r["ins_code"] not in known]
+
+
+def search(term: str) -> None:
+    """GetInstrumentSearch: نماد/نام را در همهٔ ابزارها (حتی خارج از MarketWatch) جست‌وجو و در instruments_extra.csv ذخیره می‌کند."""
+    d = get_json(f"{CDN}/Instrument/GetInstrumentSearch/{quote(term)}")
+    items = d.get("instrumentSearch") or []
+    print(f"«{term}»: {len(items)} نتیجه")
+    known = {r["ins_code"] for r in csv.DictReader(INSTR.open(encoding="utf-8"))} if INSTR.exists() else set()
+    old = list(csv.DictReader(EXTRA.open(encoding="utf-8"))) if EXTRA.exists() else []
+    seen = {r["ins_code"] for r in old}
+    new = []
+    for i in items:
+        code, sym, name = str(i.get("insCode", "")), normalize(i.get("lVal18AFC", "")), normalize(i.get("lVal30", ""))
+        flag = "در MarketWatch" if code in known else "خارج از MarketWatch"
+        print(f"  {code}  {sym:12s} {name}  [{flag}; نوع={classify(sym, name)}]")
+        if code and code not in known and code not in seen and classify(sym, name) == "stock":
+            new.append({"ins_code": code, "symbol": sym, "name": name})
+    if new:
+        DATA.mkdir(parents=True, exist_ok=True)
+        with EXTRA.open("w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["ins_code", "symbol", "name"])
+            w.writeheader()
+            w.writerows(old + new)
+        print(f"  {len(new)} سهم جدید به {EXTRA.name} اضافه شد (جمعاً {len(old)+len(new)})")
 
 
 # ── تاریخچهٔ روزانه ──────────────────────────────────────────────────────
@@ -292,6 +328,7 @@ def main() -> int:
     ap.add_argument("--probe", metavar="SYMBOL")
     ap.add_argument("--collect", action="store_true")
     ap.add_argument("--summary", action="store_true")
+    ap.add_argument("--search", action="append", metavar="TERM", help="جست‌وجوی نماد/نام و افزودن سهام خارج از MarketWatch (قابل تکرار)")
     ap.add_argument("--types", default="stock", help="مثلاً stock,fund,right (پیش‌فرض stock)")
     ap.add_argument("--days", type=int, default=9999, help="حداکثر تعداد روز برای هر نماد")
     ap.add_argument("--limit", type=int)
@@ -299,7 +336,7 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--codes-file", help="فایل متنی ins_code اضافه (مثلاً نمادهای حذف‌شده)")
     a = ap.parse_args()
-    if not (a.discover or a.probe or a.collect or a.summary):
+    if not (a.discover or a.probe or a.collect or a.summary or a.search):
         ap.print_help()
         return 1
     for s in (sys.stdout, sys.stderr):
@@ -307,6 +344,8 @@ def main() -> int:
             s.reconfigure(encoding="utf-8")
     if a.discover:
         save_instruments(discover())
+    for t in a.search or []:
+        search(t)
     if a.probe:
         probe(a.probe, a.days)
     if a.collect:

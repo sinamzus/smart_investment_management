@@ -29,6 +29,11 @@ OFFICIAL = {"TR": "67130298613737946", "PR": "8384385859414435"}  # كل (هم �
 
 def load_panel() -> pd.DataFrame:
     inst = pd.read_csv(ROOT / "data/instruments.csv", dtype={"ins_code": str})
+    extra_p = ROOT / "data/instruments_extra.csv"
+    if extra_p.exists():  # سهام خارج از MarketWatch (fetch_stock_daily.py --search)
+        ex = pd.read_csv(extra_p, dtype={"ins_code": str})
+        ex = ex[~ex.ins_code.isin(inst.ins_code)].assign(market="bourse", type="stock", base_volume=0)
+        inst = pd.concat([inst, ex[["ins_code", "symbol", "name", "market", "type", "base_volume"]]], ignore_index=True)
     cols = ["dEven", "pClosing", "priceYesterday", "zTotTran"]
     frames = []
     for f in glob.glob(str(ROOT / "data/prices/*.csv.gz")):
