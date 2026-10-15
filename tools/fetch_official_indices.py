@@ -18,6 +18,7 @@
     python tools/fetch_official_indices.py --list
     python tools/fetch_official_indices.py --list --grep هم
     python tools/fetch_official_indices.py --fetch                     # پنج شاخص پیش‌فرض
+    python tools/fetch_official_indices.py --fetch --all               # همهٔ ۵۸ شاخص (صنایع هم)
     python tools/fetch_official_indices.py --fetch --code 32097828799138957 --code 67130298613737946
 
 خروجی
@@ -111,6 +112,12 @@ def _name_of(row: dict) -> str:
     return ""
 
 
+def all_index_codes() -> list[tuple[str, str]]:
+    """(کد، نام) همهٔ شاخص‌ها از همان فهرست --list."""
+    rows = _find_list(_get(f"{CDN}/Index/GetIndexB1LastAll/All/1"))
+    return [(str(r.get("insCode") or r.get("InsCode")), _name_of(r)) for r in rows if (r.get("insCode") or r.get("InsCode"))]
+
+
 def list_indices(grep: str | None) -> None:
     data = _get(f"{CDN}/Index/GetIndexB1LastAll/All/1")
     rows = _find_list(data)
@@ -195,6 +202,7 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="فهرست شاخص‌ها با کد")
     ap.add_argument("--grep", help="فیلتر نام برای --list")
     ap.add_argument("--fetch", action="store_true", help="دریافت تاریخچه")
+    ap.add_argument("--all", action="store_true", help="همهٔ شاخص‌های فهرست (صنایع، آزاد شناور، ۳۰ شرکت…) را بگیر")
     ap.add_argument("--code", action="append", help="کد شاخص (قابل تکرار)؛ پیش‌فرض پنج شاخص اصلی")
     ap.add_argument("--endpoint", action="append",
                     help="الگوی مسیر، مثلاً Index/GetIndexB2History/{code} (قابل تکرار؛ جایگزین پیش‌فرض)")
@@ -208,7 +216,12 @@ def main() -> int:
     if a.list:
         list_indices(a.grep)
     if a.fetch:
-        codes = a.code or list(DEFAULT_CODES)
+        if a.all:
+            pairs = all_index_codes()
+            print(f"{len(pairs)} شاخص در فهرست؛ دریافت همه (حدود {len(pairs)*2} ثانیه)")
+            codes = [c for c, _ in pairs]
+        else:
+            codes = a.code or list(DEFAULT_CODES)
         for c in codes:
             try:
                 fetch_index(c, a.endpoint)
