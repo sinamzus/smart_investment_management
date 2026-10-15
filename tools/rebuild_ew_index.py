@@ -51,7 +51,7 @@ def load_panel() -> pd.DataFrame:
     # شرکت‌هایی مثل «وصندوق» (سرمایه‌گذاری صندوق بازنشستگی) و «بورس» به‌خطا صندوق/اوراق شمرده می‌شدند.
     cons_p = ROOT / "data/index_constituents.csv"
     if cons_p.exists():
-        cons = pd.read_csv(cons_p, dtype={"ins_code": str})
+        cons = pd.read_csv(cons_p, dtype={"ins_code": str, "index_code": str})
         kmem = set(cons[cons.index_code == "32097828799138957"].ins_code)
         P.loc[P.ins_code.isin(kmem) & (P.type != "stock"), ["market", "type"]] = ["bourse", "stock"]
     P.loc[P.name.fillna("").str.startswith("ص ") & ~P.ins_code.isin(kmem if cons_p.exists() else set()), "type"] = "fund"
