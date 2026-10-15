@@ -17,7 +17,7 @@
     pip install requests
     python tools/fetch_official_indices.py --list
     python tools/fetch_official_indices.py --list --grep هم
-    python tools/fetch_official_indices.py --fetch                     # دو شاخص پیش‌فرض
+    python tools/fetch_official_indices.py --fetch                     # پنج شاخص پیش‌فرض
     python tools/fetch_official_indices.py --fetch --code 32097828799138957 --code 67130298613737946
 
 خروجی
@@ -52,11 +52,23 @@ HEADERS = {
 TIMEOUT = 30
 MIN_INTERVAL = 1.5  # ثانیه بین درخواست‌ها
 
-# [راستی‌آزمایی نشده] کدهای پیش‌فرض از حافظه‌اند؛ با --list تأیید شوند.
+# کدها با خروجی --list روی سیستم کاربر تأیید شدند (۲۰۲۶-۱۰-۱۵).
 DEFAULT_CODES = {
-    "32097828799138957": "شاخص کل",
-    "67130298613737946": "شاخص کل (هم وزن)",
+    "32097828799138957": "شاخص كل",
+    "67130298613737946": "شاخص كل (هم وزن)",
+    "30655480864841493": "شاخص بازده نقدي قيمت",
+    "5798407779416661":  "شاخص قيمت(وزني-ارزشي)",
+    "8384385859414435":  "شاخص قيمت (هم وزن)",
 }
+
+# [راستی‌آزمایی نشده] مسیر B1History ۴۰۴ داد؛ مسیرهای محتمل به ترتیب امتحان می‌شوند.
+HISTORY_ENDPOINTS = [
+    "Index/GetIndexB2History/{code}",
+    "Index/GetIndexB1History/{code}",
+    "Index/GetIndexHistory/{code}",
+]
+# نام‌های محتمل فیلد close در تاریخچه [راستی‌آزمایی نشده]
+CLOSE_KEYS = ["xNivInuClMresIbs", "xNivInuPbMresIbs", "xDrNivJIdx004", "close", "last"]
 
 _last = 0.0
 
@@ -131,15 +143,32 @@ def normalize(rows: list[dict]) -> list[dict]:
                 continue
             if isinstance(v, (int, float)):
                 rec[k] = v
-        close = r.get("xNivInuClMresIbs")
+        close = next((r[k] for k in CLOSE_KEYS if isinstance(r.get(k), (int, float))), None)
         rec = {"date": rec["date"], "close": close, **{k: v for k, v in rec.items() if k != "date"}}
         out.append(rec)
     out.sort(key=lambda x: x["date"])
     return out
 
 
-def fetch_index(code: str) -> Path:
-    data = _get(f"{CDN}/Index/GetIndexB1History/{code}")
+def _get_first_working(code: str, endpoints: list[str]):
+    errs = []
+    for ep in endpoints:
+        url = f"{CDN}/{ep.format(code=code)}"
+        try:
+            data = _get(url, retries=1)
+        except Exception as e:  # noqa: BLE001
+            errs.append(str(e))
+            continue
+        rows = _find_list(data)
+        if rows and any(("dEven" in r or "DEven" in r) for r in rows[:3]):
+            print(f"  endpoint موفق: {ep}  | کلیدها: {list(rows[0].keys())}")
+            return data
+        errs.append(f"{url} -> پاسخ بدون dEven: {json.dumps(data, ensure_ascii=False)[:200]}")
+    raise RuntimeError("هیچ مسیری جواب نداد:\n    " + "\n    ".join(errs))
+
+
+def fetch_index(code: str, endpoints: list[str] | None = None) -> Path:
+    data = _get_first_working(code, endpoints or HISTORY_ENDPOINTS)
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (RAW_DIR / f"index_{code}.json").write_text(
@@ -166,7 +195,9 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="فهرست شاخص‌ها با کد")
     ap.add_argument("--grep", help="فیلتر نام برای --list")
     ap.add_argument("--fetch", action="store_true", help="دریافت تاریخچه")
-    ap.add_argument("--code", action="append", help="کد شاخص (قابل تکرار)؛ پیش‌فرض دو شاخص اصلی")
+    ap.add_argument("--code", action="append", help="کد شاخص (قابل تکرار)؛ پیش‌فرض پنج شاخص اصلی")
+    ap.add_argument("--endpoint", action="append",
+                    help="الگوی مسیر، مثلاً Index/GetIndexB2History/{code} (قابل تکرار؛ جایگزین پیش‌فرض)")
     a = ap.parse_args()
     if not (a.list or a.fetch):
         ap.print_help()
@@ -180,7 +211,7 @@ def main() -> int:
         codes = a.code or list(DEFAULT_CODES)
         for c in codes:
             try:
-                fetch_index(c)
+                fetch_index(c, a.endpoint)
             except Exception as e:  # noqa: BLE001
                 print(f"{c}: خطا: {e}", file=sys.stderr)
     return 0

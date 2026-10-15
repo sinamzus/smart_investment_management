@@ -1,0 +1,102 @@
+/* SIM Components — فقط از tokens.css رنگ و اندازه می‌گیرد. RTL-first. */
+*,*::before,*::after { box-sizing: border-box; }
+html,body { margin:0; height:100%; }
+body {
+  background: var(--bg-app); color: var(--tx-1);
+  font: 400 var(--fs-md)/var(--lh-ui) var(--font-ui);
+  -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+button,input { font: inherit; color: inherit; }
+:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+.up { color: var(--up); } .down { color: var(--down); } .mute { color: var(--tx-2); } .dim { color: var(--tx-3); }
+
+/* ── App shell ───────────────────────────────────────────── */
+.app { display:grid; grid-template-rows: 36px 1fr 22px; height:100vh; }
+.topbar { display:flex; align-items:center; gap: var(--s-4); padding: 0 var(--s-4);
+  background: var(--bg-head); border-bottom: var(--hair) solid var(--line-strong); }
+.mark { font: 700 var(--fs-md)/1 var(--font-num); letter-spacing: .08em; display:flex; gap:6px; align-items:center; }
+.mark i { width:10px; height:10px; background: var(--accent); display:inline-block; clip-path: polygon(0 100%,0 40%,35% 40%,35% 0,100% 0,100% 100%); }
+.nav { display:flex; height:100%; }
+.nav a { display:flex; align-items:center; padding: 0 var(--s-4); color: var(--tx-2); text-decoration:none;
+  border-bottom: 2px solid transparent; font-size: var(--fs-sm); }
+.nav a:hover { color: var(--tx-1); background: var(--bg-hover); }
+.nav a[aria-current="page"] { color: var(--tx-1); border-bottom-color: var(--accent); }
+.nav kbd { margin-inline-start: 6px; }
+
+/* ── Command bar ─────────────────────────────────────────── */
+.cmd { flex: 1; max-width: 560px; display:flex; align-items:center; height: var(--ctl-h);
+  background: var(--bg-app); border: var(--hair) solid var(--line-strong); border-radius: var(--radius); padding: 0 var(--s-3); gap: var(--s-3); }
+.cmd:focus-within { border-color: var(--accent); }
+.cmd .prompt { font-family: var(--font-num); color: var(--accent); }
+.cmd input { flex:1; background:none; border:0; outline:0; font-size: var(--fs-sm); }
+.cmd input::placeholder { color: var(--tx-3); }
+kbd { font: 500 var(--fs-2xs)/1 var(--font-num); color: var(--tx-2); border: var(--hair) solid var(--line-strong);
+  border-radius: var(--radius); padding: 2px 5px; background: var(--bg-panel); }
+
+.chip { display:inline-flex; align-items:center; gap:5px; height:18px; padding: 0 6px; border-radius: var(--radius);
+  font-size: var(--fs-2xs); border: var(--hair) solid var(--line-strong); color: var(--tx-2); white-space: nowrap; }
+.chip.ok   { color: var(--up);   border-color: color-mix(in srgb, var(--up) 45%, transparent);   background: var(--up-bg); }
+.chip.bad  { color: var(--down); border-color: color-mix(in srgb, var(--down) 45%, transparent); background: var(--down-bg); }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: var(--warn-bg); }
+.chip.info { color: var(--accent-tx); border-color: var(--accent-dim); background: var(--info-bg); }
+.spacer { flex:1; }
+
+/* ── Workspace grid & panel ──────────────────────────────── */
+.workspace { display:grid; gap: 1px; background: var(--line-strong); padding: 1px; min-height:0;
+  grid-template-columns: 1.55fr 1fr; grid-template-rows: 1.35fr 1fr; overflow:hidden; }
+.panel { background: var(--bg-panel); display:flex; flex-direction:column; min-width:0; min-height:0; }
+.panel-head { display:flex; align-items:center; gap: var(--s-3); height: 30px; padding-inline: var(--s-3) var(--s-3);
+  background: var(--bg-head); border-bottom: var(--hair) solid var(--line);
+  border-inline-start: var(--notch) solid var(--lg, var(--line-strong)); }
+.lg-badge { font: 700 var(--fs-2xs)/1 var(--font-num); width:16px; height:16px; display:grid; place-items:center;
+  background: var(--lg); color: var(--tx-inv); border-radius: var(--radius); }
+.panel-title { font-size: var(--fs-sm); font-weight: 600; }
+.panel-tools { margin-inline-start:auto; display:flex; gap: 2px; }
+.tool { background:none; border:0; color: var(--tx-3); height:22px; min-width:22px; border-radius: var(--radius); cursor:pointer; font-size: var(--fs-xs); }
+.tool:hover { color: var(--tx-1); background: var(--bg-hover); }
+.panel-body { flex:1; min-height:0; overflow:auto; position:relative; }
+
+/* ── Lineage strip (امضای محصول) ─────────────────────────── */
+.lineage { display:flex; flex-wrap:wrap; gap: var(--s-2) var(--s-4); padding: 4px var(--s-3);
+  border-top: var(--hair) dashed var(--line-strong); font-size: var(--fs-2xs); color: var(--tx-3); }
+.lineage b { color: var(--tx-2); font-weight: 500; }
+.lineage .num { color: var(--tx-2); }
+
+/* ── Data table ──────────────────────────────────────────── */
+table.dt { border-collapse: separate; border-spacing:0; width:100%; font-size: var(--fs-sm); }
+.dt th { position: sticky; top:0; z-index:1; background: var(--bg-head); color: var(--tx-2); font-weight:500; text-align:start;
+  height: 24px; padding: 0 var(--s-3); border-bottom: var(--hair) solid var(--line-strong); white-space:nowrap; font-size: var(--fs-xs); }
+.dt td { height: var(--row-h); padding: 0 var(--s-3); border-bottom: var(--hair) solid var(--line); white-space:nowrap; }
+.dt tr:hover td { background: var(--bg-hover); }
+.dt tr[aria-selected="true"] td { background: var(--bg-select); }
+.dt td.n, .dt th.n { text-align: end; }
+.dt td.n { font-family: var(--font-num); font-variant-numeric: tabular-nums; direction:ltr; }
+.dt .rank { color: var(--tx-3); width: 28px; }
+.delta::before { content: "▲ "; font-size: .8em; } .delta.down::before { content: "▼ "; }
+
+/* ── Weight bars (cur vs target) ─────────────────────────── */
+.wbar { position:relative; height: 10px; width: 100%; min-width: 120px; background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 25%); }
+.wbar .cur { position:absolute; top:1px; height:3px; background: var(--tx-3); inset-inline-start:0; }
+.wbar .tgt { position:absolute; top:5px; height:4px; background: var(--accent); inset-inline-start:0; }
+
+/* ── KPI strip: خط افقی چگال، نه کارت‌های بزرگ ──────────────── */
+.kpis { display:flex; border-bottom: var(--hair) solid var(--line); }
+.kpi { flex:1; padding: 5px var(--s-3); border-inline-end: var(--hair) solid var(--line); min-width:0; }
+.kpi:last-child { border-inline-end:0; }
+.kpi .k { font-size: var(--fs-2xs); color: var(--tx-3); white-space:nowrap; }
+.kpi .v { font: 500 var(--fs-lg)/1.2 var(--font-num); direction:ltr; text-align:end; }
+.kpi .s { font-size: var(--fs-2xs); text-align:end; }
+
+/* ── Chart ───────────────────────────────────────────────── */
+svg.chart { width:100%; height:100%; display:block; }
+.chart text { font-family: var(--font-num); font-size: 10px; fill: var(--tx-3); }
+.chart .grid { stroke: var(--ch-grid); stroke-width:1; }
+.chart .axis { stroke: var(--line-strong); stroke-width:1; }
+.legend { position:absolute; top:6px; inset-inline-start:10px; display:flex; gap: var(--s-4); font-size: var(--fs-xs); color: var(--tx-2); z-index:1; }
+.legend i { display:inline-block; width:14px; height:0; border-top: 2px solid; margin-inline-end:5px; vertical-align:middle; }
+
+/* ── Status bar ──────────────────────────────────────────── */
+.statusbar { display:flex; align-items:center; gap: var(--s-5); padding: 0 var(--s-4); background: var(--bg-head);
+  border-top: var(--hair) solid var(--line-strong); font-size: var(--fs-2xs); color: var(--tx-3); }
+.synthetic { color: var(--warn); font-weight:600; }
