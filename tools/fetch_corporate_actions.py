@@ -242,6 +242,44 @@ def collect_shares(limit, force, workers):
     print(f"تعداد سهام: {done[0]} نماد، {len(rows_all)} رویداد، خطا={fail[0]} -> {OUT/'share_change.csv'}")
 
 
+# ── اطلاعات ابزار (تعداد سهام فعلی، گروه صنعت…) ─────────────────────────────
+def collect_info(limit, force, workers):
+    st = load_stocks()[:limit] if limit else load_stocks()
+    OUT.mkdir(parents=True, exist_ok=True)
+    rows_all, lock, done, fail = [], threading.Lock(), [0], [0]
+
+    def one(r):
+        code = r["ins_code"]
+        cache = RAW / f"info_{code}.json"
+        try:
+            if cache.exists() and not force:
+                j = json.loads(cache.read_text(encoding="utf-8"))
+            else:
+                raw = get(f"{API}Instrument/GetInstrumentInfo/{code}")
+                save_raw(f"info_{code}.json", raw)
+                j = json.loads(raw.decode("utf-8"))
+            i = j.get("instrumentInfo") or {}
+            sec = i.get("sector") or {}
+            with lock:
+                rows_all.append({"ins_code": code, "symbol": r["symbol"], "zTitad": i.get("zTitad"),
+                                 "baseVol": i.get("baseVol"), "cIsin": i.get("cIsin"),
+                                 "sector_code": (sec.get("cSecVal") or "").strip(), "sector_name": sec.get("lSecVal"),
+                                 "flow": i.get("flow"), "board": i.get("cgrValCotTitle"),
+                                 "yVal": i.get("yVal"), "faraDesc": i.get("faraDesc")})
+                done[0] += 1
+                if done[0] % 50 == 0:
+                    print(f"  info [{done[0]}/{len(st)}]")
+        except Exception as e:  # noqa: BLE001
+            with lock:
+                fail[0] += 1
+            print(f"  خطا {r['symbol']}: {e}", file=sys.stderr)
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        list(ex.map(one, st))
+    write_csv(OUT / "instrument_info.csv", rows_all)
+    print(f"اطلاعات ابزار: {done[0]} نماد، خطا={fail[0]} -> {OUT/'instrument_info.csv'}")
+
+
 # ── DPS ───────────────────────────────────────────────────────────────────
 DPS_COLS = ["publish_date", "meeting_date", "fiscal_year", "profit_after_tax",
             "distributable_profit", "accumulated_profit", "cash_eps"]
@@ -373,11 +411,12 @@ def main() -> int:
     ap.add_argument("--collect-adjust", action="store_true")
     ap.add_argument("--collect-dps", action="store_true")
     ap.add_argument("--collect-shares", action="store_true")
+    ap.add_argument("--collect-info", action="store_true", help="تعداد سهام فعلی (zTitad) و گروه صنعت برای همهٔ نمادها")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--workers", type=int, default=3)
     a = ap.parse_args()
-    if not (a.probe or a.flow or a.collect_adjust or a.collect_dps or a.collect_shares):
+    if not (a.probe or a.flow or a.collect_adjust or a.collect_dps or a.collect_shares or a.collect_info):
         ap.print_help()
         return 1
     for s in (sys.stdout, sys.stderr):
@@ -393,6 +432,8 @@ def main() -> int:
         collect_dps(a.limit, a.force, a.workers)
     if a.collect_shares:
         collect_shares(a.limit, a.force, a.workers)
+    if a.collect_info:
+        collect_info(a.limit, a.force, a.workers)
     return 0
 
 
