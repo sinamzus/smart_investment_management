@@ -72,8 +72,38 @@ def daily_returns(P: pd.DataFrame, markets=("bourse",)) -> pd.DataFrame:
     return P[P.r > -0.9]
 
 
+def clean_level(d: pd.Series) -> tuple[pd.Series, list]:
+    """رفع جهش‌های ×۱۰ / ÷۱۰ در سطح شاخص رسمی (خطای دادهٔ منبع).
+
+    - جفتِ «افت ~÷۱۰ و بازگشت ~×۱۰» ظرف ۳ ردیف = ردیف‌های وسط خطای تک‌روزه‌اند → حذف.
+    - افت ÷۱۰ بدون بازگشت = تغییر مقیاس دائمی → بقیهٔ سری ×۱۰ می‌شود (و برعکس).
+    """
+    d = d.copy()
+    events = []
+    i = 1
+    while i < len(d):
+        r = d.iloc[i] / d.iloc[i - 1]
+        if 0.07 <= r <= 0.13 or 7.5 <= r <= 13.0:
+            f = 10.0 if r < 1 else 0.1
+            back = None
+            for k in range(i + 1, min(i + 4, len(d))):
+                rr = d.iloc[k] / d.iloc[k - 1]
+                if (r < 1 and 7.5 <= rr <= 13.0) or (r > 1 and 0.07 <= rr <= 0.13):
+                    back = k
+                    break
+            if back is not None:
+                events.append((d.index[i], "glitch", back - i))
+                d = d.drop(d.index[i:back])
+                continue
+            events.append((d.index[i], "rescale", f))
+            d.iloc[i:] = d.iloc[i:] * f
+        i += 1
+    return d, events
+
+
 def official(code: str) -> pd.Series:
     d = pd.read_csv(ROOT / f"data/indices/index_{code}.csv", parse_dates=["date"]).set_index("date").close
+    d, _ = clean_level(d)
     return d.pct_change().dropna()
 
 
