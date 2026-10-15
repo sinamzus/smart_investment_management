@@ -32,7 +32,11 @@ def load_panel() -> pd.DataFrame:
     extra_p = ROOT / "data/instruments_extra.csv"
     if extra_p.exists():  # سهام خارج از MarketWatch (fetch_stock_daily.py --search)
         ex = pd.read_csv(extra_p, dtype={"ins_code": str})
-        ex = ex[~ex.ins_code.isin(inst.ins_code)].assign(market="bourse", type="stock", base_volume=0)
+        ex = ex[~ex.ins_code.isin(inst.ins_code) & ~ex.name.str.startswith("آتی")].assign(market="bourse", type="stock", base_volume=0)
+        info_p = ROOT / "data/corporate_actions/instrument_info.csv"
+        if info_p.exists():  # بازار واقعی از flow (۱ = بورس، ۲ = فرابورس)
+            fl = pd.read_csv(info_p, dtype={"ins_code": str}).set_index("ins_code").flow
+            ex["market"] = ex.ins_code.map(fl).map({1: "bourse", 2: "farabourse"}).fillna("bourse")
         inst = pd.concat([inst, ex[["ins_code", "symbol", "name", "market", "type", "base_volume"]]], ignore_index=True)
     cols = ["dEven", "pClosing", "priceYesterday", "zTotTran"]
     frames = []
