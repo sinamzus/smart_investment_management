@@ -46,7 +46,16 @@ def load_panel() -> pd.DataFrame:
         frames.append(d)
     P = pd.concat(frames, ignore_index=True)
     P["date"] = pd.to_datetime(P["dEven"].astype(int).astype(str), format="%Y%m%d")
-    return P.merge(inst[["ins_code", "symbol", "market", "type"]], on="ins_code", how="left")
+    P = P.merge(inst[["ins_code", "symbol", "market", "type", "name"]], on="ins_code", how="left")
+    # تصحیح طبقه‌بندی با فهرست رسمی اعضای «شاخص كل» (data/index_constituents.csv):
+    # شرکت‌هایی مثل «وصندوق» (سرمایه‌گذاری صندوق بازنشستگی) و «بورس» به‌خطا صندوق/اوراق شمرده می‌شدند.
+    cons_p = ROOT / "data/index_constituents.csv"
+    if cons_p.exists():
+        cons = pd.read_csv(cons_p, dtype={"ins_code": str})
+        kmem = set(cons[cons.index_code == "32097828799138957"].ins_code)
+        P.loc[P.ins_code.isin(kmem) & (P.type != "stock"), ["market", "type"]] = ["bourse", "stock"]
+    P.loc[P.name.fillna("").str.startswith("ص ") & ~P.ins_code.isin(kmem if cons_p.exists() else set()), "type"] = "fund"
+    return P
 
 
 def daily_returns(P: pd.DataFrame, markets=("bourse",)) -> pd.DataFrame:

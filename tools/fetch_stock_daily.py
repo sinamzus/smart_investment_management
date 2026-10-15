@@ -118,9 +118,9 @@ def classify(symbol: str, name: str) -> str:
         return "future"
     if "اختیار" in n or s[:1] in ("ض", "ط"):
         return "option"
-    if any(k in n for k in ("خزانه", "صکوک", "مشارکت", "اجاره", "مرابحه", "سلف", "اوراق", "گام", "رهنی", "منفعت")):
+    if any(k in n for k in ("خزانه", "صکوک", "مشارکت", "اجاره", "مرابحه", "سلف", "اوراق", "گام", "رهنی", "منفعت")) and "بورس اوراق بهادار" not in n:
         return "bond"
-    if "صندوق" in n:
+    if "صندوق" in n or n.startswith("ص "):
         return "fund"
     if "حق تقدم" in n or (s.endswith("ح") and len(s) > 1):
         return "right"

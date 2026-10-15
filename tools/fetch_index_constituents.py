@@ -26,9 +26,13 @@ DATA = ROOT / "data"
 
 
 def walk(o, found):
-    """هر دیکشنری دارای insCode را پیدا می‌کند."""
+    """ساختار واقعی: هر عضو {instrument: {insCode, lVal18AFC, lVal30, …}, …}؛ دیکشنری instrument اولویت دارد."""
     if isinstance(o, dict):
-        if "insCode" in o and o.get("insCode"):
+        inst = o.get("instrument")
+        if isinstance(inst, dict) and inst.get("insCode"):
+            found.append(inst)
+            return
+        if "insCode" in o and o.get("insCode") and (o.get("lVal18AFC") or o.get("lVal30")):
             found.append(o)
         for v in o.values():
             walk(v, found)

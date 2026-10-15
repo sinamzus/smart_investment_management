@@ -105,8 +105,7 @@ def main():
 
     # ── ترکیب فعلی ──
     last = R.date.max()
-    L = R[R.date == last].merge(info[["ins_code", "sector_name"]], on="ins_code", how="left").merge(
-        inst[["ins_code", "name"]], on="ins_code", how="left")
+    L = R[R.date == last].merge(info[["ins_code", "sector_name"]], on="ins_code", how="left")
     L["w_cw"] = L.wt
     L["w_ew"] = 1.0 / len(L)
     L = L.sort_values("w_cw", ascending=False)
@@ -130,7 +129,7 @@ def main():
     data = {
         "meta": {
             "built": datetime.now().strftime("%Y-%m-%d %H:%M"), "asof": str(dates[-1].date()), "start": START,
-            "n_instruments": int(len(inst)), "n_stocks_bourse": int(P.ins_code.nunique()),
+            "n_instruments": int(panel.ins_code.nunique()), "n_stocks_bourse": int(P.ins_code.nunique()),
             "n_price_rows": int(len(panel)), "n_adjust_events": int(len(adj)), "n_share_events": int(len(sc)),
             "n_universe_last": int(len(L)), "universe": "بورس · سهام · بدون نمادهای فنی رقم‌دار",
         },
