@@ -36,7 +36,8 @@ def load_panel() -> pd.DataFrame:
         info_p = ROOT / "data/corporate_actions/instrument_info.csv"
         if info_p.exists():  # بازار واقعی از flow (۱ = بورس، ۲ = فرابورس)
             fl = pd.read_csv(info_p, dtype={"ins_code": str}).set_index("ins_code").flow
-            ex["market"] = ex.ins_code.map(fl).map({1: "bourse", 2: "farabourse"}).fillna("bourse")
+            # flow: ۱ بورس، ۲ فرابورس، ۴/۵ پایهٔ فرابورس، ۶ انرژی، ۷ کالا (مثل «نخود…(پ)») — فقط ۱ بورس است؛ بدون info = بورس
+            ex["market"] = ex.ins_code.map(fl).map(lambda v: "bourse" if v == 1 else "other").where(ex.ins_code.isin(fl.dropna().index), "bourse")
         inst = pd.concat([inst, ex[["ins_code", "symbol", "name", "market", "type", "base_volume"]]], ignore_index=True)
     cols = ["dEven", "pClosing", "priceYesterday", "zTotTran"]
     frames = []

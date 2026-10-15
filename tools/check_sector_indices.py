@@ -53,27 +53,29 @@ def main():
             continue
         off = ew.official(code)
         members = set(con[con.index_code == code].ins_code)
-        S = R[R.ins_code.isin(members)] if members else R[R.sec == sec.lstrip("0")]
         n_miss = len(members - set(R.ins_code))
-        if S.empty:
-            rows.append((sec, 0, n_miss, np.nan, np.nan, np.nan, ""))
-            continue
-        den = S.groupby("date").w.sum()
-        best = None
-        for col in ("r_tr", "r_pr"):
-            x = (S[col] * S.w).groupby(S.date).sum() / den
-            j = pd.concat([x, off], axis=1, join="inner").dropna()
-            j.columns = ["m", "o"]
-            j = j[j.index >= "2014-03-20"]
-            if len(j) < 200:
-                continue
-            d = j.m - j.o
-            r = (j.m.corr(j.o), d.std() * np.sqrt(252) * 100, (1 + j.m).prod() / (1 + j.o).prod())
-            if best is None or r[1] < best[1]:
-                best = (*r, col)
-        n = S.groupby("date").ins_code.nunique().iloc[-1]
-        rows.append((sec, int(n), n_miss, *(best if best else (np.nan, np.nan, np.nan, ""))))
-    df = pd.DataFrame(rows, columns=["sector", "n_last", "n_miss", "corr", "te_pct", "cum_ratio", "best"]).sort_values("te_pct", ascending=False)
+        res = {}
+        for lab, S in (("m", R[R.ins_code.isin(members)] if members else R.iloc[0:0]),
+                       ("s", R[R.sec == sec.lstrip("0")])):          # m = اعضای فعلی رسمی؛ s = همهٔ سهام بورسی صنعت (با حذف‌شده‌ها)
+            best = None
+            if not S.empty:
+                den = S.groupby("date").w.sum()
+                for col in ("r_tr", "r_pr"):
+                    x = (S[col] * S.w).groupby(S.date).sum() / den
+                    j = pd.concat([x, off], axis=1, join="inner").dropna()
+                    j.columns = ["m", "o"]
+                    j = j[j.index >= "2014-03-20"]
+                    if len(j) < 200:
+                        continue
+                    d = j.m - j.o
+                    r = (j.m.corr(j.o), d.std() * np.sqrt(252) * 100, (1 + j.m).prod() / (1 + j.o).prod())
+                    if best is None or r[1] < best[1]:
+                        best = (*r, col)
+            res[lab] = (best, S.groupby("date").ins_code.nunique().iloc[-1] if not S.empty else 0, S.ins_code.nunique())
+        bm, bs = res["m"][0], res["s"][0]
+        nan3 = (np.nan, np.nan, np.nan, "")
+        rows.append((sec, int(res["m"][1]), n_miss, *(bm or nan3), int(res["s"][2]), *(bs[:2] if bs else (np.nan, np.nan))))
+    df = pd.DataFrame(rows, columns=["sector", "n_last", "n_miss", "corr", "te_pct", "cum_ratio", "best", "n_all", "corr_all", "te_all"]).sort_values("te_pct", ascending=False)
     pd.set_option("display.width", 140)
     print(df.round(3).to_string(index=False))
 
