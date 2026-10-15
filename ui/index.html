@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIM · Index Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="mark"><i></i>SIM</div>
+    <nav class="nav" aria-label="بخش‌ها">
+      <a href="#" aria-current="page">Index Lab<kbd>1</kbd></a>
+      <a href="#" aria-disabled="true" title="هنوز ساخته نشده">Factor Lab<kbd>2</kbd></a>
+      <a href="#" aria-disabled="true" title="هنوز ساخته نشده">Rebalance<kbd>3</kbd></a>
+      <a href="#" aria-disabled="true" title="هنوز ساخته نشده">Reports<kbd>4</kbd></a>
+      <a href="#" aria-disabled="true" title="هنوز ساخته نشده">Data QA<kbd>5</kbd></a>
+    </nav>
+    <label class="cmd">
+      <span class="prompt">›</span>
+      <input id="cmd" placeholder="فرمان…   IDX K   IDX EW   WIN 2016   THEME   HELP" aria-label="نوار فرمان" autocomplete="off" spellcheck="false">
+      <kbd>/</kbd>
+    </label>
+    <span class="spacer"></span>
+    <span class="chip info" id="asof-chip"></span>
+    <button class="tool" id="theme" title="تغییر تم" aria-label="تغییر تم">◐</button>
+  </header>
+
+  <main class="workspace">
+
+    <section class="panel" style="--lg:var(--lg-a)" aria-label="بازسازی در برابر رسمی">
+      <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title" id="a-title"></span>
+        <span class="chip info">TR · بازده کل</span>
+        <div class="seg" id="idx-seg" role="group" aria-label="شاخص"><button data-k="K" aria-pressed="true">كل (ارزش‌وزن)</button><button data-k="EW" aria-pressed="false">هم‌وزن</button></div>
+        <div class="seg" id="win-seg" role="group" aria-label="بازه"><button data-w="all" aria-pressed="true">از ۲۰۱۴</button><button data-w="y2016" aria-pressed="false">از ۲۰۱۶</button></div>
+        <div class="panel-tools"><button class="tool" id="csv-a" title="خروجی CSV سری‌ها">CSV</button></div></div>
+      <div class="kpis" id="kpis"></div>
+      <div class="panel-body">
+        <div class="legend"><span><i id="lg-off" style="color:var(--ch-2)"></i><span id="lg-off-t"></span></span><span><i style="color:var(--ch-1)"></i><span id="lg-mine-t"></span></span><span><i style="color:var(--ch-3);border-top-style:dashed"></i>تفاوت تجمعی (bp)</span><span class="readout" id="readout"></span></div>
+        <svg class="chart" id="chart" dir="ltr"></svg>
+      </div>
+      <div class="lineage" id="a-lineage"></div>
+    </section>
+
+    <section class="panel" style="--lg:var(--lg-b)" aria-label="آمار ردیابی">
+      <div class="panel-head"><span class="lg-badge">B</span><span class="panel-title">آمار ردیابی در برابر سری رسمی</span>
+        <div class="panel-tools"><button class="tool" id="csv-b">CSV</button></div></div>
+      <div class="panel-body">
+        <table class="dt" id="trk"></table>
+        <div class="sub" id="per-sub"></div>
+        <table class="dt" id="per"></table>
+      </div>
+      <div class="lineage" id="b-lineage"></div>
+    </section>
+
+    <section class="panel" style="--lg:var(--lg-a)" aria-label="روزهای بیشترین انحراف">
+      <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title" id="c-title"></span>
+        <span class="chip" id="c-chip"></span>
+        <div class="panel-tools"><button class="tool" id="csv-c">CSV</button></div></div>
+      <div class="panel-body"><table class="dt" id="dev"></table></div>
+      <div class="lineage" id="c-lineage"></div>
+    </section>
+
+    <section class="panel" style="--lg:var(--lg-c)" aria-label="ترکیب فعلی">
+      <div class="panel-head"><span class="lg-badge">C</span><span class="panel-title">ترکیب فعلی · ارزش‌وزن ↔ هم‌وزن</span>
+        <span class="chip" id="d-chip"></span>
+        <div class="panel-tools"><button class="tool" id="csv-d">CSV</button></div></div>
+      <div class="kpis" id="d-kpis"></div>
+      <div class="panel-body"><table class="dt" id="comp"></table><div class="sub">گروه‌های صنعت (وزن ارزش‌وزن)</div><table class="dt" id="sec"></table></div>
+      <div class="lineage" id="d-lineage"></div>
+    </section>
+
+  </main>
+
+  <footer class="statusbar" id="status"></footer>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="data/data.js"></script>
+<script>
+const D = window.SIM_DATA;
+if (!D) { document.body.innerHTML = '<p style="padding:24px">ui/data/data.js پیدا نشد. ابتدا <code>python tools/build_ui_data.py</code> را اجرا کنید.</p>'; throw new Error('no data'); }
+
+/* ── قالب‌بندی ─────────────────────────────────────────── */
+const fmt = (x, d = 2) => x == null ? '—' : Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const sgn = (x, d = 2) => x == null ? '—' : (x >= 0 ? '+' : '−') + fmt(Math.abs(x), d);
+const jf = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year: 'numeric', month: '2-digit', day: '2-digit' });
+const jfm = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year: 'numeric', month: '2-digit' });
+const jd = iso => jf.format(new Date(iso + 'T00:00:00Z'));
+const $ = id => document.getElementById(id);
+const th = a => `<thead><tr>${a.map(([t, c]) => `<th class="${c || ''}">${t}</th>`).join('')}</tr></thead>`;
+
+const state = { k: 'K', w: 'all' };
+const S = D.series, N = S.dates.length;
+
+/* ── نوار وضعیت و عنوان‌ها ─────────────────────────────── */
+$('asof-chip').textContent = 'داده تا ' + jd(D.meta.asof);
+$('status').innerHTML = `<span>داده تا <span class="num">${D.meta.asof}</span></span>
+  <span>ساخته‌شده <span class="num">${D.meta.built}</span></span>
+  <span>${fmt(D.meta.n_price_rows, 0)} ردیف قیمت · ${fmt(D.meta.n_adjust_events, 0)} تعدیل · ${fmt(D.meta.n_share_events, 0)} تغییر سرمایه</span>
+  <span>جهان: ${D.meta.universe} (<span class="num">${D.meta.n_universe_last}</span> نماد امروز)</span>
+  <span class="spacer"></span><span><span class="num">/</span> فرمان · <span class="num">HELP</span></span>`;
+
+/* ── نمودار ────────────────────────────────────────────── */
+let hoverI = null;
+function td() { const o = S[state.k + '_off'], m = S[state.k + '_mine']; return m.map((v, i) => (v / o[i] - 1) * 1e4); }
+function drawChart() {
+  const svg = $('chart'), W = svg.clientWidth || 800, H = svg.clientHeight || 300;
+  const off = S[state.k + '_off'], mine = S[state.k + '_mine'], tdv = td();
+  const m = { l: 8, r: 56, t: 30, b: 20 }, split = .70, h1 = (H - m.t - m.b) * split, h2 = (H - m.t - m.b) * (1 - split) - 8;
+  const x = i => m.l + (W - m.l - m.r) * i / (N - 1);
+  const lo = Math.log(Math.min(...off, ...mine)), hi = Math.log(Math.max(...off, ...mine));
+  const y1 = v => m.t + h1 * (1 - (Math.log(v) - lo) / (hi - lo));
+  const dm = Math.max(10, Math.max(...tdv.map(Math.abs)) * 1.1), y2 = v => m.t + h1 + 8 + h2 * (1 - (v + dm) / (2 * dm));
+  const path = (a, y) => a.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join('');
+  let g = '';
+  const ticks = []; for (let v = 100; v <= Math.exp(hi) * 1.01; v *= 2) if (Math.log(v) >= lo * 0.999) ticks.push(v);
+  ticks.forEach(v => { const yy = y1(v); g += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}"/><text x="${W - m.r + 6}" y="${yy + 3}">${fmt(v, 0)}</text>`; });
+  let last = -1, tk = '';
+  const jyear = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year: 'numeric' });
+  S.dates.forEach((d, i) => { const key = jyear.format(new Date(d + 'T00:00:00Z')); if (key !== last) { last = key; const xx = x(i); if (xx > m.l + 24) tk += `<line class="axis" x1="${xx}" x2="${xx}" y1="${m.t + h1 + 8 + h2}" y2="${m.t + h1 + 12 + h2}"/><text x="${xx}" y="${H - 5}" text-anchor="middle">${key}</text>`; } });
+  const zero = y2(0);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  let hv = '';
+  if (hoverI != null) { const xx = x(hoverI); hv = `<line class="axis" x1="${xx}" x2="${xx}" y1="${m.t}" y2="${H - m.b}" stroke-dasharray="2 2"/>`; }
+  svg.innerHTML = g + tk + `<line class="axis" x1="${m.l}" x2="${W - m.r}" y1="${m.t + h1 + 4}" y2="${m.t + h1 + 4}"/>
+    <line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${zero}" y2="${zero}"/><text x="${W - m.r + 6}" y="${zero + 3}">0 bp</text>
+    <text x="${W - m.r + 6}" y="${y2(dm * .8) + 3}">+${fmt(dm * .8, 0)}</text><text x="${W - m.r + 6}" y="${y2(-dm * .8) + 3}">−${fmt(dm * .8, 0)}</text>
+    <path d="${path(tdv, y2)}" fill="none" stroke="var(--ch-3)" stroke-width="1.2" stroke-dasharray="3 2"/>
+    <path d="${path(off, y1)}" fill="none" stroke="var(--ch-2)" stroke-width="1.6"/>
+    <path d="${path(mine, y1)}" fill="none" stroke="var(--ch-1)" stroke-width="1.1"/>` + hv;
+  svg._x = x; svg._m = m; svg._W = W;
+}
+$('chart').addEventListener('mousemove', e => {
+  const svg = $('chart'), r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * (svg._W / r.width), m = svg._m;
+  const i = Math.max(0, Math.min(N - 1, Math.round((px - m.l) / (svg._W - m.l - m.r) * (N - 1))));
+  if (i !== hoverI) { hoverI = i; drawChart(); showReadout(); }
+});
+$('chart').addEventListener('mouseleave', () => { hoverI = null; drawChart(); showReadout(); });
+function showReadout() {
+  const el = $('readout'); if (hoverI == null) { el.innerHTML = ''; return; }
+  const o = S[state.k + '_off'][hoverI], mi = S[state.k + '_mine'][hoverI];
+  el.innerHTML = `<b>${S.dates[hoverI]}</b> · ${jd(S.dates[hoverI])} &nbsp; رسمی <b>${fmt(o, 1)}</b> &nbsp; بازسازی <b>${fmt(mi, 1)}</b> &nbsp; TD <b>${sgn((mi / o - 1) * 1e4, 0)} bp</b>`;
+}
+new ResizeObserver(drawChart).observe($('chart'));
+
+/* ── پنل‌ها ────────────────────────────────────────────── */
+function render() {
+  const L = D.labels[state.k], st = D.stats[state.k][state.w], pr = D.periods[state.k];
+  $('a-title').textContent = L.title + ' · بازسازی در برابر رسمی';
+  $('lg-off-t').textContent = L.off; $('lg-mine-t').textContent = L.mine;
+  document.querySelectorAll('#idx-seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === state.k));
+  document.querySelectorAll('#win-seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.w === state.w));
+  $('kpis').innerHTML = [
+    ['همبستگی بازده روزانه', fmt(st.corr, 4), ''], ['خطای ردیابی (سالانه)', fmt(st.te) + '%', ''],
+    ['تفاوت ردیابی تجمعی', sgn(st.td_bp, 0) + ' bp', st.td_bp >= 0 ? 'up' : 'down'], ['میانگین |انحراف| روزانه', fmt(st.mad_bp, 1) + ' bp', ''],
+    ['روز با |انحراف| > ۵۰bp', st.days50 + ' از ' + fmt(st.n, 0), '']
+  ].map(([k, v, c]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
+  $('a-lineage').innerHTML = `<span><b>بازه</b> <span class="num">${st.from}</span> → <span class="num">${st.to}</span></span><span><b>روش</b> ${L.method}</span><span><b>جهان</b> ${D.meta.universe}</span><span><b>قواعد</b> روز اول معامله حذف · ردیف معیوب حذف · <span class="num">${fmt(D.qa.rule7_fixed, 0)}</span> افزایش سرمایهٔ تعدیل‌نشده اصلاح</span><span><b>روش‌شناسی</b> فصل ۰۲ §۲.۴ · فصل ۰۳ §۳.۴</span>`;
+
+  // B: آمار هر دو شاخص
+  const rows = [['K', 'all'], ['K', 'y2016'], ['EW', 'all'], ['EW', 'y2016']];
+  $('trk').innerHTML = th([['شاخص'], ['بازه'], ['همبستگی', 'n'], ['TE %', 'n'], ['MAD bp', 'n'], ['TD bp', 'n'], ['نسبت سطح', 'n'], ['روز>50bp', 'n']]) + '<tbody>' + rows.map(([k, w]) => {
+    const s = D.stats[k][w], sel = k === state.k && w === state.w;
+    return `<tr ${sel ? 'aria-selected="true"' : ''}><td>${D.labels[k].title}</td><td class="num">${w === 'all' ? '۲۰۱۴' : '۲۰۱۶'}→</td><td class="n">${fmt(s.corr, 4)}</td><td class="n">${fmt(s.te)}</td><td class="n">${fmt(s.mad_bp, 1)}</td><td class="n ${s.td_bp >= 0 ? 'up' : 'down'}">${sgn(s.td_bp, 0)}</td><td class="n">${fmt(s.cum_ratio, 3)}</td><td class="n">${s.days50}</td></tr>`;
+  }).join('') + '</tbody>';
+  $('per-sub').textContent = 'بازدهی دوره‌ای — ' + L.title;
+  $('per').innerHTML = th([['دوره'], ['رسمی %', 'n'], ['بازسازی %', 'n'], ['تفاوت bp', 'n']]) + '<tbody>' + pr.map(p => `<tr><td>${p.label}</td><td class="n ${p.off >= 0 ? 'up' : 'down'}">${sgn(p.off)}</td><td class="n ${p.mine >= 0 ? 'up' : 'down'}">${sgn(p.mine)}</td><td class="n">${sgn(p.diff_bp, 0)}</td></tr>`).join('') + '</tbody>';
+  $('b-lineage').innerHTML = `<span><b>TE</b> انحراف معیار تفاضل روزانه × √۲۵۲</span><span><b>TD</b> نسبت سطوح تجمعی − ۱</span><span><b>مرجع</b> سری رسمی TSETMC (کد <span class="num">${state.k === 'K' ? '32097…' : '67130…'}</span>)</span>`;
+
+  // C: روزهای انحراف
+  const dv = D.devdays[state.k];
+  $('c-title').textContent = 'بیشترین انحراف روزانه از سری رسمی · ' + L.title;
+  $('c-chip').textContent = dv.filter(d => Math.abs(d.diff_bp) > 50).length + ' روز > ۵۰bp';
+  $('c-chip').className = 'chip ' + (dv.some(d => Math.abs(d.diff_bp) > 50) ? 'warn' : '');
+  $('dev').innerHTML = th([['تاریخ'], ['بازسازی %', 'n'], ['رسمی %', 'n'], ['انحراف bp', 'n'], ['بیشترین مشارکت (bp)']]) + '<tbody>' + dv.map(d => {
+    const a = Math.abs(d.diff_bp), cl = a > 50 ? 'bad' : a > 25 ? 'warn' : 'info';
+    return `<tr><td class="num" title="${jd(d.date)}">${d.date}</td><td class="n">${sgn(d.mine)}</td><td class="n">${sgn(d.off)}</td><td class="n"><span class="chip ${cl}">${sgn(d.diff_bp, 0)}</span></td><td>${d.top.map(t => `${t.sym} <span class="num ${t.bp >= 0 ? 'up' : 'down'}">${sgn(t.bp, 0)}</span>`).join(' · ')}</td></tr>`;
+  }).join('') + '</tbody>';
+  $('c-lineage').innerHTML = `<span><b>مشارکت</b> ${state.k === 'K' ? 'وزن × بازده نماد' : 'بازده نماد ÷ تعداد نماد (تقریبی؛ وزن‌ها رانش دارند)'}</span><span><b>خوانش</b> انحراف بزرگ معمولاً از یک نمادِ دارای رویداد سرمایه‌ای است</span>`;
+}
+function renderComp() {
+  const c = D.comp;
+  $('d-chip').textContent = jd(c.asof) + ' · ' + c.n + ' نماد';
+  $('d-kpis').innerHTML = [['وزن بزرگ‌ترین', fmt(c.top1) + '%'], ['۵ نماد برتر', fmt(c.top5, 1) + '%'], ['۱۰ نماد برتر', fmt(c.top10, 1) + '%'], ['تعداد مؤثر (1/Σw²)', fmt(c.eff_n, 1)], ['وزن هم‌وزن هر نماد', fmt(c.w_ew, 3) + '%']]
+    .map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  const mx = Math.max(...c.top.map(t => t.w_cw));
+  $('comp').innerHTML = th([['#'], ['نماد'], ['صنعت'], ['ارزش‌وزن %', 'n'], ['هم‌وزن %', 'n'], ['']]) + '<tbody>' + c.top.map((t, i) => `<tr><td class="rank">${i + 1}</td><td title="${t.name}">${t.sym}</td><td class="mute">${t.sector || ''}</td><td class="n">${fmt(t.w_cw)}</td><td class="n">${fmt(t.w_ew, 3)}</td><td style="width:22%"><div class="wbar"><div class="cur" style="width:${t.w_ew / mx * 100 * 4}%"></div><div class="tgt" style="width:${t.w_cw / mx * 100}%"></div></div></td></tr>`).join('') + '</tbody>';
+  $('sec').innerHTML = th([['صنعت'], ['نماد', 'n'], ['وزن %', 'n']]) + '<tbody>' + c.sectors.map(s => `<tr><td>${s.name}</td><td class="n">${s.n}</td><td class="n">${fmt(s.w_cw, 1)}</td></tr>`).join('') + '</tbody>';
+  $('d-lineage').innerHTML = `<span><b>وزن</b> قیمت مبنا × تعداد سهام همان روز (کل، نه شناور)</span><span><b>داده</b> <span class="num">${c.asof}</span></span><span><b>خط آبی</b> ارزش‌وزن · <b>خط خاکستری</b> هم‌وزن (۴× بزرگ‌نمایی)</span>`;
+}
+
+/* ── CSV ───────────────────────────────────────────────── */
+function download(name, rows) {
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = name; a.click();
+}
+$('csv-a').onclick = () => download(`series_${state.k}.csv`, [['date', 'official', 'rebuilt', 'td_bp'], ...S.dates.map((d, i) => [d, S[state.k + '_off'][i], S[state.k + '_mine'][i], ((S[state.k + '_mine'][i] / S[state.k + '_off'][i] - 1) * 1e4).toFixed(1)])]);
+$('csv-b').onclick = () => download('tracking_stats.csv', [['index', 'window', 'corr', 'te_pct', 'mad_bp', 'td_bp', 'cum_ratio', 'days_gt50bp'], ...['K', 'EW'].flatMap(k => ['all', 'y2016'].map(w => { const s = D.stats[k][w]; return [k, w, s.corr, s.te, s.mad_bp, s.td_bp, s.cum_ratio, s.days50]; }))]);
+$('csv-c').onclick = () => download(`dev_days_${state.k}.csv`, [['date', 'rebuilt_pct', 'official_pct', 'diff_bp', 'top_contributors'], ...D.devdays[state.k].map(d => [d.date, d.mine, d.off, d.diff_bp, d.top.map(t => t.sym + ':' + t.bp).join(' ')])]);
+$('csv-d').onclick = () => download('composition_top15.csv', [['symbol', 'name', 'sector', 'w_cw_pct', 'w_ew_pct'], ...D.comp.top.map(t => [t.sym, t.name, t.sector, t.w_cw, t.w_ew])]);
+
+/* ── کنترل‌ها و فرمان ─────────────────────────────────── */
+function setState(p) { Object.assign(state, p); hoverI = null; render(); drawChart(); showReadout(); }
+document.querySelectorAll('#idx-seg button').forEach(b => b.onclick = () => setState({ k: b.dataset.k }));
+document.querySelectorAll('#win-seg button').forEach(b => b.onclick = () => setState({ w: b.dataset.w }));
+let tt; function toast(t) { const e = $('toast'); e.textContent = t; e.hidden = false; clearTimeout(tt); tt = setTimeout(() => e.hidden = true, 3200); }
+function run(cmd) {
+  const [c, a] = cmd.trim().toUpperCase().split(/\s+/);
+  if (c === 'IDX' && (a === 'K' || a === 'EW')) { setState({ k: a }); toast('شاخص: ' + D.labels[a].title); }
+  else if (c === 'WIN' && (a === '2014' || a === '2016')) { setState({ w: a === '2014' ? 'all' : 'y2016' }); toast('بازه: از ' + a); }
+  else if (c === 'THEME') { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; drawChart(); }
+  else if (c === 'HELP') toast('IDX K · IDX EW · WIN 2014 · WIN 2016 · THEME');
+  else if (c) toast('فرمان ناشناخته: ' + cmd + ' (HELP)');
+}
+$('cmd').addEventListener('keydown', e => { if (e.key === 'Enter') { run(e.target.value); e.target.value = ''; e.target.blur(); } if (e.key === 'Escape') e.target.blur(); });
+$('theme').onclick = () => run('THEME');
+addEventListener('keydown', e => { const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName); if ((e.key === '/' && !typing) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) { e.preventDefault(); $('cmd').focus(); } });
+
+render(); renderComp(); drawChart();
+</script>
+</body>
+</html>
