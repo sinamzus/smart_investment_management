@@ -19,7 +19,6 @@
     python tools/fetch_stock_daily.py --collect --limit 20     # فقط ۲۰ نماد (آزمایش)
     python tools/fetch_stock_daily.py --summary                # گزارش آنچه جمع شده
     python tools/fetch_stock_daily.py --search پالایش          # سهام خارج از MarketWatch → data/instruments_extra.csv
-    python tools/fetch_stock_daily.py --sweep                  # کشف همهٔ سهام جاافتاده با جست‌وجوی تطبیقی (چند دقیقه)
 
 خروجی
 -----
@@ -199,44 +198,6 @@ def load_instruments() -> list[dict]:
     return rows + [r for r in load_extra() if r["ins_code"] not in known]
 
 
-def sweep(max_queries: int = 4000, cap: int = 25) -> None:
-    """کشف سهام جاافتاده از MarketWatch با جست‌وجوی تطبیقی: از حروف تکی شروع می‌کند و هر جا تعداد نتایج به سقف
-    (cap) نزدیک شد، یک حرف دیگر اضافه می‌کند (تا ۳ حرف). فقط سهام خارج از MarketWatch به instruments_extra.csv
-    اضافه می‌شود (آتی/اختیار/اوراق/صندوق حذف). سقف واقعی نتایج API را نمی‌دانم؛ cap=۲۵ فرض است."""
-    letters = list("ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی") + list("0123456789")
-    known = {r["ins_code"] for r in csv.DictReader(INSTR.open(encoding="utf-8"))} if INSTR.exists() else set()
-    old = list(csv.DictReader(EXTRA.open(encoding="utf-8"))) if EXTRA.exists() else []
-    found = {r["ins_code"]: r for r in old}
-    queue, done, maxlen = list(letters), set(), 0
-    nq = 0
-    while queue and nq < max_queries:
-        q = queue.pop(0)
-        if q in done:
-            continue
-        done.add(q)
-        nq += 1
-        try:
-            items = (get_json(f"{CDN}/Instrument/GetInstrumentSearch/{quote(q)}").get("instrumentSearch") or [])
-        except Exception as e:  # noqa: BLE001
-            print("  خطا", q, e, file=sys.stderr)
-            continue
-        maxlen = max(maxlen, len(items))
-        for i in items:
-            code, sym, name = str(i.get("insCode", "")), normalize(i.get("lVal18AFC", "")), normalize(i.get("lVal30", ""))
-            if code and code not in known and code not in found and classify(sym, name) == "stock":
-                found[code] = {"ins_code": code, "symbol": sym, "name": name}
-        if len(items) >= cap and len(q) < 3:
-            queue += [q + c for c in letters[:32]]
-        if nq % 50 == 0:
-            print(f"  [{nq} پرس‌وجو] صف={len(queue)} جدید={len(found)-len(old)} بیشترین طول نتیجه={maxlen}")
-    DATA.mkdir(parents=True, exist_ok=True)
-    with EXTRA.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["ins_code", "symbol", "name"])
-        w.writeheader()
-        w.writerows(found.values())
-    print(f"sweep: {nq} پرس‌وجو؛ {len(found)-len(old)} سهم جدید؛ جمعاً {len(found)} در {EXTRA.name}؛ بیشترین طول نتیجه={maxlen}")
-
-
 def search(term: str) -> None:
     """GetInstrumentSearch: نماد/نام را در همهٔ ابزارها (حتی خارج از MarketWatch) جست‌وجو و در instruments_extra.csv ذخیره می‌کند."""
     d = get_json(f"{CDN}/Instrument/GetInstrumentSearch/{quote(term)}")
@@ -369,7 +330,6 @@ def main() -> int:
     ap.add_argument("--probe", metavar="SYMBOL")
     ap.add_argument("--collect", action="store_true")
     ap.add_argument("--summary", action="store_true")
-    ap.add_argument("--sweep", action="store_true", help="کشف همهٔ سهام خارج از MarketWatch با جست‌وجوی تطبیقی (چند دقیقه)")
     ap.add_argument("--search", action="append", metavar="TERM", help="جست‌وجوی نماد/نام و افزودن سهام خارج از MarketWatch (قابل تکرار)")
     ap.add_argument("--types", default="stock", help="مثلاً stock,fund,right (پیش‌فرض stock)")
     ap.add_argument("--days", type=int, default=9999, help="حداکثر تعداد روز برای هر نماد")
@@ -378,7 +338,7 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--codes-file", help="فایل متنی ins_code اضافه (مثلاً نمادهای حذف‌شده)")
     a = ap.parse_args()
-    if not (a.discover or a.probe or a.collect or a.summary or a.search or a.sweep):
+    if not (a.discover or a.probe or a.collect or a.summary or a.search):
         ap.print_help()
         return 1
     for s in (sys.stdout, sys.stderr):
@@ -386,8 +346,6 @@ def main() -> int:
             s.reconfigure(encoding="utf-8")
     if a.discover:
         save_instruments(discover())
-    if a.sweep:
-        sweep()
     for t in a.search or []:
         search(t)
     if a.probe:
