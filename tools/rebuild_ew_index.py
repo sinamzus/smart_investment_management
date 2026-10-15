@@ -69,7 +69,56 @@ def daily_returns(P: pd.DataFrame, markets=("bourse",)) -> pd.DataFrame:
     P = P[P.date > P.first_trade]                      # قاعدهٔ ۳
     P = P[(P.priceYesterday > 0) & (P.pClosing > 1)]    # قاعدهٔ ۵
     P["r"] = P.pClosing / P.priceYesterday - 1          # قاعدهٔ ۱
+    P = fix_unapplied_adjustments(P)                    # قاعدهٔ ۸
     return P[P.r > -0.9]
+
+
+def fix_unapplied_adjustments(P: pd.DataFrame, window_days: int = 7, max_abs: float = 0.25) -> pd.DataFrame:
+    """قاعدهٔ ۸: تعدیل قیمتِ اعمال‌نشده در مبنا.
+
+    فهرست تعدیل (price_adjust.csv) برای هر رویداد قیمت تعدیل‌شده A و تعدیل‌نشده U را می‌دهد. در برخی ردیف‌ها
+    (عمدتاً ۲۰۱۴–۲۰۱۸) مبنای روز (priceYesterday) هنوز U است نه A:
+      • روز بدون معامله که pClosing را به A برده ولی مبنا U مانده ⇒ بازدهٔ خام −۱۵٪ی کاذب (افت سود/سرمایه)؛
+      • روز معامله با مبنای U ⇒ بازده باید C/A − 1 باشد.
+    در هر دو حالت r = C/A − 1 (حالت اول صفر می‌شود). ستون‌های adjA/adjU برای طبقه‌بندی سود/سرمایه نگه داشته می‌شوند.
+    """
+    pa_p = ROOT / "data/corporate_actions/price_adjust.csv"
+    P["adjA"] = np.nan
+    P["adjU"] = np.nan
+    if not pa_p.exists():
+        return P
+    pa = pd.read_csv(pa_p, dtype={"ins_code": str}, usecols=["ins_code", "dEven", "pClosing", "pClosingNotAdjusted"])
+    pa = pa.dropna()
+    pa["D"] = pd.to_datetime(pa.dEven.astype(int).astype(str), format="%Y%m%d", errors="coerce")
+    pa = pa[(pa.pClosing > 1) & (pa.pClosingNotAdjusted > 1) & ((pa.pClosing - pa.pClosingNotAdjusted).abs() > 0.5)].dropna(subset=["D"])
+    idx = {c: g for c, g in P.groupby("ins_code")}
+    n = 0
+    for code, ev in pa.groupby("ins_code"):
+        g = idx.get(code)
+        if g is None:
+            continue
+        for D, A, U in zip(ev.D, ev.pClosing, ev.pClosingNotAdjusted):
+            if not 0.1 <= A / U < 1:
+                continue
+            base_unadj = ((g.priceYesterday - U).abs() <= 0.5) & ((g.priceYesterday - A).abs() > 0.5)
+            in_win = (g.date >= D - pd.Timedelta(days=window_days)) & (g.date <= D + pd.Timedelta(days=window_days))
+            adj_day = (g.zTotTran == 0) & ((g.pClosing - A).abs() <= 0.5)     # روز بدون معاملهٔ تعدیل
+            first_trade = (g.zTotTran > 0) & (g.date >= D)                    # اولین معاملهٔ بعد از استحقاق
+            m = g[base_unadj & in_win & (adj_day | first_trade)]
+            if len(m) > 1 and (m.zTotTran > 0).any():   # فقط اولین ردیف معاملهٔ پس از D
+                m = pd.concat([m[m.zTotTran == 0], m[m.zTotTran > 0].sort_values("date").head(1)])
+            if m.empty:
+                continue
+            r_new = P.loc[m.index, "pClosing"] / A - 1
+            m = m[r_new.abs() <= max_abs]          # رویدادهای متناقض/برگشتی در فهرست (مثل قثابت ۲۰۱۴) رد می‌شوند
+            if m.empty:
+                continue
+            P.loc[m.index, "r"] = r_new[m.index]
+            P.loc[m.index, "adjA"] = A
+            P.loc[m.index, "adjU"] = U
+            n += len(m)
+    print(f"قاعدهٔ ۸: {n} ردیف با مبنای تعدیل‌نشده (تعدیل A در فهرست) اصلاح شد")
+    return P
 
 
 def clean_level(d: pd.Series) -> tuple[pd.Series, list]:
@@ -78,7 +127,7 @@ def clean_level(d: pd.Series) -> tuple[pd.Series, list]:
     - جفتِ «افت ~÷۱۰ و بازگشت ~×۱۰» ظرف ۳ ردیف = ردیف‌های وسط خطای تک‌روزه‌اند → حذف.
     - افت ÷۱۰ بدون بازگشت = تغییر مقیاس دائمی → بقیهٔ سری ×۱۰ می‌شود (و برعکس).
     """
-    d = d.copy()
+    d = d[d > 0].copy()                      # سطح صفر = شاخص بدون عضو (روزهای قبل از شروع)
     events = []
     i = 1
     while i < len(d):
@@ -97,6 +146,17 @@ def clean_level(d: pd.Series) -> tuple[pd.Series, list]:
                 continue
             events.append((d.index[i], "rescale", f))
             d.iloc[i:] = d.iloc[i:] * f
+        i += 1
+    # تیغهٔ تک‌روزه: جهش > ۷٪ که فردا کامل برمی‌گردد (سطح فردا ≈ سطح دیروز) — سقف نوسان روزانه ۵٪ چنین شاخصی را ممکن نمی‌کند
+    # مگر در صنعت‌های بسیار کم‌عضو؛ نمونه: صنعت ۵۴ در ۲۰۱۶-۱۰-۲۵ (۲۴۳۷ ← ۲۸۰۵ ← ۲۴۷۴)
+    i = 1
+    while i < len(d) - 1:
+        r = d.iloc[i] / d.iloc[i - 1] - 1
+        back = d.iloc[i + 1] / d.iloc[i - 1] - 1
+        if abs(r) > 0.07 and abs(back) < 0.3 * abs(r):
+            events.append((d.index[i], "spike", r))
+            d = d.drop(d.index[i])
+            continue
         i += 1
     return d, events
 

@@ -195,7 +195,15 @@ def load_instruments() -> list[dict]:
         raise SystemExit("ابتدا --discover را اجرا کنید.")
     rows = list(csv.DictReader(INSTR.open(encoding="utf-8")))
     known = {r["ins_code"] for r in rows}
-    return rows + [r for r in load_extra() if r["ins_code"] not in known]
+    rows = rows + [r for r in load_extra() if r["ins_code"] not in known]
+    # اعضای رسمی «شاخص كل» همیشه سهم‌اند (طبقه‌بندی خودکار «وصندوق» را صندوق و «بورس» را اوراق می‌دید)
+    cons_p = DATA / "index_constituents.csv"
+    if cons_p.exists():
+        kmem = {r["ins_code"] for r in csv.DictReader(cons_p.open(encoding="utf-8")) if r["index_code"] == "32097828799138957"}
+        for r in rows:
+            if r["ins_code"] in kmem:
+                r["type"], r["market"] = "stock", "bourse"
+    return rows
 
 
 def search(term: str) -> None:

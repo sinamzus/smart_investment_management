@@ -161,6 +161,14 @@ def load_stocks():
     if extra_p.exists():  # سهام اضافه‌شده با fetch_stock_daily.py --search
         rows += [{"ins_code": r["ins_code"], "symbol": r["symbol"], "name": r["name"], "market": "bourse", "type": "stock"}
                  for r in csv.DictReader(extra_p.open(encoding="utf-8")) if r["ins_code"] not in known]
+    # اعضای رسمی «شاخص كل» همیشه سهم‌اند (مثل «وصندوق» و «بورس» که طبقه‌بندی خودکار آن‌ها را صندوق/اوراق می‌دید)
+    cons_p = DATA / "index_constituents.csv"
+    kmem = set()
+    if cons_p.exists():
+        kmem = {r["ins_code"] for r in csv.DictReader(cons_p.open(encoding="utf-8")) if r["index_code"] == "32097828799138957"}
+    for r in rows:
+        if r["ins_code"] in kmem:
+            r["type"], r["market"] = "stock", "bourse"
     return [r for r in rows if r["type"] == "stock" and r["market"] in ("bourse", "farabourse")]
 
 

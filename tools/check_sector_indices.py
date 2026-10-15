@@ -7,6 +7,10 @@
 برای هر شاخص صنعت رسمی (نام «NN-...» در data/indices)، شاخص ارزش‌وزن همان صنعت را از
 جهان خودمان (بورس + extras) می‌سازد و همبستگی/TE/نسبت سطح را می‌دهد. صنعتی که خطایش بزرگ است
 احتمالاً نمادهای جاافتاده (خارج از MarketWatch) دارد: --search نام شرکت‌ها را اجرا کنید.
+
+اعضا از فهرست رسمی اعضای همان شاخص (data/index_constituents.csv) می‌آیند، نه از sector_code نمادها
+(sector_code برای برخی صنایع مثل ۶۵ خالی بود). ستون n_off تعداد اعضای رسمی فعلی و n_miss تعدادی است
+که قیمتشان در جهان من نیست. سری رسمی از ew.official() (با صافی خطای مقیاس ×۱۰ و تیغهٔ تک‌روزه) خوانده می‌شود.
 """
 import numpy as np
 import pandas as pd
@@ -41,15 +45,18 @@ def main():
     R = R.dropna(subset=["shares"]).merge(info[["ins_code", "sector_code"]], on="ins_code", how="left")
     R["sec"] = R.sector_code.astype(str).str.strip().str.lstrip("0")
     R["w"] = R.priceYesterday * R.shares
+    con = pd.read_csv(ROOT / "data/index_constituents.csv", dtype=str)
     rows = []
     for code, sec in SECTORS.items():
         f = ROOT / f"data/indices/index_{code}.csv"
         if not f.exists():
             continue
         off = ew.official(code)
-        S = R[R.sec == sec.lstrip("0")]
+        members = set(con[con.index_code == code].ins_code)
+        S = R[R.ins_code.isin(members)] if members else R[R.sec == sec.lstrip("0")]
+        n_miss = len(members - set(R.ins_code))
         if S.empty:
-            rows.append((sec, 0, np.nan, np.nan, np.nan, ""))
+            rows.append((sec, 0, n_miss, np.nan, np.nan, np.nan, ""))
             continue
         den = S.groupby("date").w.sum()
         best = None
@@ -65,8 +72,8 @@ def main():
             if best is None or r[1] < best[1]:
                 best = (*r, col)
         n = S.groupby("date").ins_code.nunique().iloc[-1]
-        rows.append((sec, int(n), *(best if best else (np.nan, np.nan, np.nan, ""))))
-    df = pd.DataFrame(rows, columns=["sector", "n_last", "corr", "te_pct", "cum_ratio", "best"]).sort_values("te_pct", ascending=False)
+        rows.append((sec, int(n), n_miss, *(best if best else (np.nan, np.nan, np.nan, ""))))
+    df = pd.DataFrame(rows, columns=["sector", "n_last", "n_miss", "corr", "te_pct", "cum_ratio", "best"]).sort_values("te_pct", ascending=False)
     pd.set_option("display.width", 140)
     print(df.round(3).to_string(index=False))
 
