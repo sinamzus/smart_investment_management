@@ -2,7 +2,7 @@
    داده: window.SIM_EXTRA (tools/build_ui_extra.py) و window.SIM_DATA. هیچ عدد ثابتی در این فایل نیست مگر متن توضیحی. */
 (function () {
 const X = window.SIM_EXTRA;
-const VIEWS = { index: 'v-index', div: 'v-div', fac: 'v-fac', reb: 'v-reb', qa: 'v-qa', rep: 'v-rep' };
+const VIEWS = { index: 'v-index', div: 'v-div', fac: 'v-fac', reb: 'v-reb', qa: 'v-qa', rep: 'v-rep', sym: 'v-sym', pf: 'v-pf', risk: 'v-risk' };
 const JM = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
 const inited = {}, redraws = {};
 const jyear = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year: 'numeric' });
@@ -10,12 +10,12 @@ const cls = v => v == null ? '' : v >= 0 ? 'up' : 'down';
 const chipTE = t => t == null ? '' : t < 1 ? 'ok' : t < 3 ? 'warn' : 'bad';
 
 if (!X) {
-  ['v-div', 'v-fac', 'v-reb', 'v-qa', 'v-rep'].forEach(id => { $(id).innerHTML = '<p style="padding:24px">ui/data/extra.js پیدا نشد. اجرا کنید: <code>python tools/build_ui_extra.py</code></p>'; });
+  ['v-div', 'v-fac', 'v-reb', 'v-qa', 'v-rep', 'v-pf', 'v-risk'].forEach(id => { $(id).innerHTML = '<p style="padding:24px">ui/data/extra.js پیدا نشد. اجرا کنید: <code>python tools/build_ui_extra.py</code></p>'; });
 }
 
 /* ── نمودار چندپنلی ───────────────────────────────────── */
 function paneChart(svg, dates, panes, st) {
-  const W = svg.clientWidth || 800, H = svg.clientHeight || 300, m = { l: 8, r: 58, t: 30, b: 20 }, gap = 8;
+  const W = svg.clientWidth || 800, H = svg.clientHeight || 300, m = { l: 8, r: 58, t: 30, b: 20 }, gap = 18;
   const N = dates.length, avail = H - m.t - m.b - gap * (panes.length - 1);
   const x = i => m.l + (W - m.l - m.r) * i / (N - 1);
   let out = '', top = m.t;
@@ -27,8 +27,8 @@ function paneChart(svg, dates, panes, st) {
     const a = T(lo), b = T(hi), pad = (b - a) * .06 || 1;
     const y = v => top + h * (1 - (T(v) - (a - pad)) / ((b - a) + 2 * pad));
     let tv = [];
-    if (p.log) { for (let e = Math.floor(Math.log10(lo)) - 1; e <= Math.ceil(Math.log10(hi)) + 1; e++) [1, 2, 5].forEach(mu => { const v = mu * 10 ** e; if (v >= lo * 0.97 && v <= hi * 1.03) tv.push(v); }); if (tv.length > 6) tv = tv.filter((v, i) => i % 2 === 0); }
-    else for (let k = 0; k <= 3; k++) tv.push(Math.exp ? ((a - pad) + ((b - a) + 2 * pad) * k / 3) : 0);
+    if (p.log) { for (let e = Math.floor(Math.log10(lo)) - 1; e <= Math.ceil(Math.log10(hi)) + 1; e++) [1, 2, 5].forEach(mu => { const v = mu * 10 ** e; if (v >= lo * 0.97 && v <= hi * 1.03) tv.push(v); }); if (tv.length > 6) tv = tv.filter(v => Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9); }
+    else { const raw = (hi - lo) / 4 || 1, p10 = 10 ** Math.floor(Math.log10(raw)), step = [1, 2, 2.5, 5, 10].map(q => q * p10).find(q => q >= raw); for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) tv.push(Math.abs(v) < 1e-9 ? 0 : v); }
     tv.forEach(v => { const yy = y(v); out += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}"/><text x="${W - m.r + 6}" y="${yy + 3}">${p.fmt ? p.fmt(v) : fmt(v, 1)}</text>`; });
     if (p.zero) { const z = y(0); out += `<line class="axis" x1="${m.l}" x2="${W - m.r}" y1="${z}" y2="${z}"/>`; }
     p.series.forEach(s => {
@@ -132,16 +132,38 @@ function initDiv() {
 }
 
 /* ══════════ Factor Lab ══════════ */
+const facState = { i: null, sig: 'mom' };
 function initFac() {
-  const F = X.factor, c = F.curve, N = c.dates.length;
+  document.querySelectorAll('#fc-sig button').forEach(b => b.onclick = () => { facState.sig = b.dataset.s; facState.i = null; renderFacSig(); });
+  renderFacSig();
+}
+function renderFacSig() {
+  document.querySelectorAll('#fc-sig button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === facState.sig));
+  if (facState.sig === 'quality') {
+    $('fc-title').textContent = 'کیفیت · ساخته نشده';
+    $('fc-kpis').innerHTML = ''; $('fc-legend').innerHTML = ''; $('fc-chart').innerHTML = ''; $('fc-bars').innerHTML = ''; $('fc-year').innerHTML = ''; redraws.fac = null;
+    $('fc-method').innerHTML = `<div class="note">فاکتور کیفیت (سودآوری، اهرم، ثبات سود — مطابق MSCI Quality، فصل ۱۱) به دادهٔ صورت‌های مالی نیاز دارد که در مخزن نیست. منبعش همان کدال است (صورت‌های مالی ن-۱۰ با فیلدهای ساختاریافته، مثل EarningsPerShare که در نامه‌های مجمع دیدیم) و با همان روش محتاطانهٔ جمع‌آوری (فاصلهٔ ۸ ثانیه، قابل‌ادامه) گرفتنی است. تا آن موقع این نما عمداً عددی نشان نمی‌دهد.</div>`;
+    $('fc-lineage').innerHTML = ''; $('fc-lin-b').innerHTML = '';
+    return;
+  }
+  const F = facState.sig === 'mom' ? X.factor : X.factor_lowvol;
+  $('fc-title').textContent = facState.sig === 'mom' ? 'مومنتوم ۱۲−۱ · پنج‌گانه‌ها' : 'کم‌نوسان (۲۵۲ روز) · پنج‌گانه‌ها';
+  renderFac(F);
+  if (facState.sig === 'lowvol') {
+    $('fc-method').innerHTML = `<div class="note">پیش‌نمایش پژوهشی؛ بدون هزینه و آزمون معناداری؛ با سوگیری بقای باقی‌مانده.</div><ol><li><b>سیگنال:</b> انحراف معیار بازده روزانهٔ TR در ۲۵۲ روز معاملاتی پیش از آخرین روز هر ماه شمسی؛ <b>پنجک ۵ = کم‌نوسان‌ترین</b>.</li><li>همان قواعد واجد شرایط، هم‌وزن، ریبالانس ماهانه، بازهٔ ارزیابی از ۱۳۹۵ (مثل مومنتوم).</li><li>نوسان سالانهٔ هر پنجک: ${['Q1','Q3','Q5','ALL'].map(q => q + ' ' + fmt(F.vol_ann[q], 1) + '٪').join(' · ')}.</li></ol><b>خوانش:</b> پنجک ۵ نسبت به همه ${sgn(F.q5_excess_ann_pct, 1)}٪ در سال. در بازار ایران روزهای بدون معامله (صف، توقف) نوسانِ اندازه‌گیری‌شده را مصنوعی کم می‌کند؛ پنجک ۵ ممکن است بیشتر «کم‌معامله» باشد تا «کم‌ریسک» — آزموده نشده. نسخهٔ مرجع (MSCI Min Vol) بهینه‌سازی کوواریانس است نه مرتب‌سازی ساده (فصل ۱۱).`;
+  }
+}
+function renderFac(F) {
+  const c = F.curve, N = c.dates.length;
   const col = { Q1: 'var(--down)', Q3: 'var(--ch-3)', Q5: 'var(--up)', ALL: 'var(--ch-2)' }, lab = { Q1: 'پنجک ۱ (ضعیف‌ترین)', Q3: 'پنجک ۳', Q5: 'پنجک ۵ (قوی‌ترین)', ALL: 'همهٔ واجدان شرایط (هم‌وزن)' };
   $('fc-kpis').innerHTML = [['پنجک ۵ − پنجک ۱ (سالانه)', sgn(F.ls_ann_pct, 1) + '%', cls(F.ls_ann_pct)], ['پنجک ۵ نسبت به همه', sgn(F.q5_excess_ann_pct, 1) + '%', cls(F.q5_excess_ann_pct)], ['TE پنجک ۵ به همه', fmt(F.q5_minus_all_te, 1) + '%', ''], ['گردش ماهانهٔ پنجک ۵', fmt(F.q5_monthly_turnover_pct, 0) + '%', ''], ['ماه ریبالانس', F.n_months, '']]
     .map(([k, v, cl]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cl}">${v}</div></div>`).join('');
   $('fc-legend').innerHTML = ['Q1', 'Q3', 'Q5', 'ALL'].map(q => `<span><i style="color:${col[q]}"></i>${lab[q]}</span>`).join('') + '<span class="readout" id="fc-readout"></span>';
-  const st = { i: null };
+  const st = facState;
   const draw = () => { paneChart($('fc-chart'), c.dates, [{ frac: 1, log: true, series: ['Q1', 'Q3', 'Q5', 'ALL'].map(q => ({ v: c[q], color: col[q], w: q === 'ALL' ? 1.6 : 1.2 })), fmt: v => fmt(v, 0) }], st);
     $('fc-readout').innerHTML = st.i == null ? '' : `<b>${c.dates[st.i]}</b> &nbsp; Q1 <b>${fmt(c.Q1[st.i], 0)}</b> &nbsp; Q5 <b>${fmt(c.Q5[st.i], 0)}</b> &nbsp; همه <b>${fmt(c.ALL[st.i], 0)}</b>`; };
-  attachHover($('fc-chart'), draw, i => { st.i = i; draw(); }); redraws.fac = draw; draw();
+  if (!$('fc-chart')._hov) { $('fc-chart')._hov = true; attachHover($('fc-chart'), null, i => { facState.i = i; redraws.fac && redraws.fac(); }); }
+  redraws.fac = draw; draw();
   $('fc-lineage').innerHTML = `<span><b>بازه</b> <span class="num">${F.from}</span> → <span class="num">${F.to}</span></span><span><b>بازده</b> TR (سود با استحقاق سرمایه‌گذاری مجدد)</span><span><b>بدون</b> هزینه معامله، بدون محدودیت نقدشوندگی</span><span><b>مبنا</b> فصل ۰۴ · ۰۵</span>`;
   const q = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL'];
   bars($('fc-bars'), ['۱', '۲', '۳', '۴', '۵', 'همه'], q.map(k => F.ann[k]), v => fmt(v, 1), (i) => i === 5);
@@ -219,30 +241,174 @@ function initRep() {
   $('rp-csv').onclick = () => download('changelog.csv', [['date', 'title', 'chapters'], ...log.map(r => [r.date, r.title, r.chapters])]);
 }
 
+
+/* ══════════ Symbol ══════════ */
+const sy = { s: null, ser: 'tr', i: null };
+function loadSymbols(cb) {
+  if (window.SIM_SYMBOLS) return cb();
+  const sc = document.createElement('script'); sc.src = 'data/symbols.js';
+  sc.onload = cb; sc.onerror = () => { $('sy-hint').textContent = 'ui/data/symbols.js پیدا نشد: python tools/build_ui_symbols.py'; };
+  document.head.appendChild(sc);
+}
+window.openSym = function (s) { location.hash = '#sym'; show('sym'); loadSymbols(() => setSym(s)); };
+function initSym() {
+  $('sy-hint').textContent = 'در حال بارگذاری فهرست نمادها…';
+  loadSymbols(() => {
+    const S = window.SIM_SYMBOLS;
+    $('sy-list').innerHTML = Object.keys(S.symbols).sort().map(k => `<option value="${k}">${S.symbols[k].name}</option>`).join('');
+    $('sy-hint').textContent = `${S.n} نماد · داده تا ${S.asof} · یا روی نماد در جدول‌های دیگر کلیک کنید`;
+    $('sy-q').onchange = e => setSym(e.target.value.trim());
+    document.querySelectorAll('#sy-ser button').forEach(b => b.onclick = () => { sy.ser = b.dataset.s; drawSym(); });
+    attachHover($('sy-chart'), null, i => { sy.i = i; drawSym(); });
+    $('sy-csv').onclick = () => { const d = S.symbols[sy.s]; if (d) download(`symbol_${sy.s}.csv`, [['date', 'tr_level', 'pr_level'], ...d.d.map((x, i) => [x, d.tr[i], d.pr[i]])]); };
+    redraws.sym = drawSym;
+    if (!sy.s) setSym(Object.entries(S.symbols).filter(([, v]) => v.w_k != null).sort((a, b) => b[1].w_k - a[1].w_k)[0][0]);
+  });
+}
+function setSym(s) {
+  const S = window.SIM_SYMBOLS; if (!S) return; const d = S.symbols[s];
+  if (!d) { toast('نماد پیدا نشد: ' + s); return; }
+  sy.s = s; sy.i = null; $('sy-q').value = s;
+  $('sy-title').textContent = `${s} · ${d.name}`;
+  $('sy-chip').textContent = d.alive ? 'عضو «شاخص كل»' : 'حذف‌شده/غیرفعال تا ' + d.last; $('sy-chip').className = 'chip ' + (d.alive ? 'ok' : 'warn');
+  $('sy-kpis').innerHTML = [['بازده ۱ سال', sgn(d.ret1y, 1) + '%', cls(d.ret1y)], ['بازده سالانهٔ ۳ سال', d.ret3y_ann == null ? '—' : sgn(d.ret3y_ann, 1) + '%', cls(d.ret3y_ann)], ['نوسان ۱ سال', fmt(d.vol1y, 1) + '%', ''], ['افت از اوج (از ۲۰۱۴)', fmt(d.mdd, 1) + '%', 'down'], ['بتا به «شاخص كل»', d.beta1y == null ? '—' : fmt(d.beta1y, 2), '']]
+    .map(([k, v, c]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
+  const divs = d.events.filter(e => e[1] === 'div').length, caps = d.events.length - divs;
+  $('sy-ev-chip').textContent = `${divs} سود · ${caps} سرمایه`;
+  $('sy-ev').innerHTML = th([['تاریخ'], ['نوع'], ['قیمت قبل (U)', 'n'], ['بعد از تعدیل (A)', 'n'], ['سود هر سهم / نسبت', 'n'], ['بازده سود ٪', 'n']]) + '<tbody>' + d.events.slice().reverse().map(e => {
+    const [dt, t, A, U] = e, isDiv = t === 'div';
+    return `<tr><td class="num" title="${jd(dt)}">${dt}</td><td><span class="tag ${t}">${isDiv ? 'سود نقدی' : 'سرمایه'}</span></td><td class="n">${fmt(U, 0)}</td><td class="n">${fmt(A, 0)}</td><td class="n">${isDiv ? fmt(U - A, 0) : '×' + fmt(A / U, 3)}</td><td class="n">${isDiv ? fmt((U - A) / U * 100, 1) : '—'}</td></tr>`;
+  }).join('') + '</tbody>';
+  $('sy-info').innerHTML = '<tbody>' + [['نام', d.name], ['صنعت', d.sector], ['کد (insCode)', `<span class="num">${d.code}</span>`], ['داده', `<span class="num">${d.first} → ${d.last}</span>`], ['قیمت پایانی', fmt(d.price, 0) + ' ریال'],
+    ['ارزش بازار', fmt(d.mcap / 1e9, 0) + ' میلیارد ریال'], ['وزن در «شاخص كل» (بازسازی)', d.w_k == null ? '—' : fmt(d.w_k, 3) + '%'], ['وزن در هم‌وزن', d.w_ew == null ? '—' : fmt(d.w_ew, 3) + '%'], ['روزهای بدون معامله (۱ سال)', d.nontraded1y == null ? '—' : fmt(d.nontraded1y, 0) + '%']]
+    .map(([k, v]) => `<tr><td class="mute">${k}</td><td>${v}</td></tr>`).join('') + '</tbody>';
+  $('sy-agm').innerHTML = d.agm.length ? th([['سال مالی منتهی به'], ['تاریخ مجمع'], ['سود مصوب هر سهم (ریال)', 'n']]) + '<tbody>' + d.agm.slice().sort((a, b) => a[0] < b[0] ? 1 : -1).map(a => `<tr><td class="num">${a[0]}</td><td class="num">${a[1]}</td><td class="n">${a[2] ?? '—'}</td></tr>`).join('') + '</tbody>'
+    : `<tbody><tr><td class="mute" style="white-space:normal">برای این نماد دادهٔ کدال جمع‌آوری نشده (فقط ۳۰ نماد بزرگ).</td></tr></tbody>`;
+  $('sy-cap').innerHTML = th([['تاریخ'], ['سهام قبل', 'n'], ['سهام بعد', 'n'], ['تغییر ٪', 'n']]) + '<tbody>' + d.capchg.slice().reverse().map(c => `<tr><td class="num">${c[0]}</td><td class="n">${fmt(c[1], 0)}</td><td class="n">${fmt(c[2], 0)}</td><td class="n">${sgn((c[2] / c[1] - 1) * 100, 0)}</td></tr>`).join('') + '</tbody>';
+  $('sy-lin').innerHTML = `<span><b>بازده کل</b> سود با استحقاق سرمایه‌گذاری مجدد (TR، همان قواعد بازسازی شاخص)</span><span><b>قیمت تعدیل‌شده</b> بدون سود نقدی (PR)</span><span><b>نمونه</b> هفتگی از ۲۰۱۴</span><span><b>روش</b> فصل ۰۲ §۲٫۴</span>`;
+  drawSym();
+}
+function drawSym() {
+  const S = window.SIM_SYMBOLS; if (!S || !sy.s) return; const d = S.symbols[sy.s];
+  document.querySelectorAll('#sy-ser button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === sy.ser));
+  const k = window.SIM_DATA.series, kd = k.dates;  // «شاخص كل» رسمی بر همان تاریخ‌ها برای مقایسه
+  let p = 0; const kv = d.d.map(x => { while (p < kd.length - 1 && kd[p + 1] <= x) p++; return kd[p] <= x ? k.K_off[p] : null; });
+  const k0 = kv.find(v => v != null), t0 = d.tr[kv.indexOf(k0)] || d.tr[0];
+  const kRel = kv.map(v => v == null ? null : v / k0 * t0);
+  const ser = [{ v: kRel, color: 'var(--ch-3)', w: 1, dash: true }];
+  if (sy.ser !== 'pr') ser.push({ v: d.tr, color: 'var(--ch-2)', w: 1.6 });
+  if (sy.ser !== 'tr') ser.push({ v: d.pr, color: 'var(--ch-1)', w: 1.2 });
+  paneChart($('sy-chart'), d.d, [{ frac: 1, log: true, series: ser, fmt: v => fmt(v, v < 10 ? 1 : 0) }], sy);
+  $('sy-legend').innerHTML = `<span><i style="color:var(--ch-2)"></i>بازده کل</span><span><i style="color:var(--ch-1)"></i>قیمت تعدیل‌شده</span><span><i style="color:var(--ch-3);border-top-style:dashed"></i>«شاخص كل» رسمی (هم‌مبدأ)</span><span class="readout">${sy.i == null ? '' : `<b>${d.d[sy.i]}</b> · ${jd(d.d[sy.i])} &nbsp; TR <b>${fmt(d.tr[sy.i], 2)}</b> &nbsp; PR <b>${fmt(d.pr[sy.i], 2)}</b>`}</span>`;
+}
+
+/* ══════════ Fund ══════════ */
+const pf = { k: 'K' };
+function pfRows() {
+  const F = X.fund, c = F.cols, nav = (+$('pf-nav').value || 0) * 1e9, part = (+$('pf-part').value || 10) / 100, advk = $('pf-adv').value;
+  const n = F.rows.length;
+  return F.rows.map(r => { const o = Object.fromEntries(c.map((k, i) => [k, r[i]])); const w = pf.k === 'K' ? o.w_k : 1 / n; const val = nav * w, adv = o[advk] || 0;
+    return { ...o, w, val, sh: o.price ? Math.floor(val / o.price) : 0, days: adv > 0 ? val / (part * adv) : Infinity }; }).sort((a, b) => b.w - a.w);
+}
+function renderPf() {
+  const rows = pfRows(), F = X.fund;
+  document.querySelectorAll('#pf-idx button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === pf.k));
+  $('pf-chip').textContent = `${F.n} نماد · قیمت‌ها ${F.asof}`;
+  const tot = rows.reduce((a, r) => a + r.val, 0), within = d => rows.reduce((a, r) => a + Math.min(r.val, r.val / Math.max(r.days, 1e-9) * d), 0) / tot * 100;
+  const wd = rows.reduce((a, r) => a + r.w * Math.min(r.days, 999), 0), over20 = rows.filter(r => r.days > 20).length, dead = rows.filter(r => !isFinite(r.days)).length;
+  $('pf-kpis').innerHTML = [['ساخته‌شده در ۱ روز', fmt(within(1), 1) + '%'], ['در ۵ روز', fmt(within(5), 1) + '%'], ['در ۲۰ روز', fmt(within(20), 1) + '%'], ['میانگین وزنی روز', fmt(wd, 1)], ['نماد > ۲۰ روز', over20 + (dead ? ` (+${dead} بی‌معامله)` : '')]]
+    .map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  $('pf-tab').innerHTML = th([['#'], ['نماد'], ['صنعت'], ['وزن %', 'n'], ['مبلغ (م.ر)', 'n'], ['تعداد سهم', 'n'], ['ارزش معاملهٔ روزانه (م.ر)', 'n'], ['روز لازم', 'n'], ['روز معامله‌شده ۶۰ر', 'n']]) + '<tbody>' + rows.map((r, i) => {
+    const dc = !isFinite(r.days) ? 'bad' : r.days > 20 ? 'bad' : r.days > 5 ? 'warn' : 'ok';
+    return `<tr><td class="rank">${i + 1}</td><td><a class="symlink" data-sym="${r.sym}">${r.sym}</a></td><td class="mute">${r.sector}</td><td class="n">${fmt(r.w * 100, 3)}</td><td class="n">${fmt(r.val / 1e9, 1)}</td><td class="n">${fmt(r.sh, 0)}</td><td class="n">${fmt((r[$('pf-adv').value] || 0) / 1e9, 1)}</td><td class="n"><span class="chip ${dc}">${isFinite(r.days) ? fmt(r.days, 1) : '∞'}</span></td><td class="n">${r.traded_frac60 == null ? '—' : fmt(r.traded_frac60 * 100, 0) + '%'}</td></tr>`;
+  }).join('') + '</tbody>';
+  $('pf-lin').innerHTML = `<span><b>وزن</b> ${pf.k === 'K' ? 'ارزش بازار کل (بازسازی «شاخص كل»)' : 'برابر (۱/n)'}، روز ${F.asof}</span><span><b>روز لازم</b> مبلغ ÷ (مشارکت × ارزش معاملهٔ روزانه)</span><span><b>م.ر</b> میلیارد ریال</span><span><b>بی‌معامله</b> بدون معامله در ۶۰ روز (صف/توقف)</span>`;
+  const bk = [1, 2, 5, 10, 20, 60, 120];
+  bars($('pf-bars'), bk.map(d => d + 'روز'), bk.map(d => within(d)), v => fmt(v, 0) + '%', (i) => bk[i] === 20);
+  $('pf-lin-b').innerHTML = `<span><b>فرض</b> هر روز حداکثر «مشارکت × ارزش معاملهٔ روزانه» از هر نماد خریده می‌شود؛ همهٔ نمادها موازی</span><span><b>مرجع</b> فصل ۰۶ (اجرا و هزینه)</span>`;
+  const big = rows.filter(r => r.days > 20).slice(0, 6).map(r => `${r.sym} (${isFinite(r.days) ? fmt(r.days, 0) : '∞'} روز)`).join('، ');
+  $('pf-read').innerHTML = `<b>این نما چه می‌گوید.</b> برای صندوقی به اندازهٔ ${fmt(+$('pf-nav').value, 0)} میلیارد ریال که ${pf.k === 'K' ? '«شاخص كل» را با وزن ارزش بازار' : 'هم‌وزن را'} کامل بازتولید کند، با مشارکت ${$('pf-part').value}٪ از ارزش معاملهٔ روزانهٔ هر نماد، ${fmt(within(5), 0)}٪ سبد در ۵ روز و ${fmt(within(20), 0)}٪ در ۲۰ روز ساخته می‌شود.
+  <br><b>گلوگاه‌ها:</b> ${big || 'هیچ نمادی بیش از ۲۰ روز لازم ندارد.'}
+  <br><b>آنچه مدل نشده:</b> صف خرید/فروش و سقف نوسان روزانه (اجرا در روزهای صف ممکن نیست)، اثر قیمتیِ خود سفارش، کارمزد و مالیات، و تغییر وزن‌ها در طول دورهٔ ساخت. «بدون محدودیت سرمایه» (تصمیم فصل ۳ §۳٫۵) برای خود شاخص است؛ این نما نشان می‌دهد اجرای واقعی در چه اندازه‌ای اصطکاک دارد.
+  <br><b>دکمهٔ CSV:</b> فهرست سفارش‌های ساخت سبد از نقد (نماد، وزن، مبلغ، تعداد سهم، روز لازم).`;
+}
+function initPf() {
+  document.querySelectorAll('#pf-idx button').forEach(b => b.onclick = () => { pf.k = b.dataset.k; renderPf(); });
+  ['pf-nav', 'pf-part', 'pf-adv'].forEach(id => $(id).oninput = renderPf);
+  $('pf-csv').onclick = () => download(`fund_orders_${pf.k}.csv`, [['symbol', 'sector', 'weight_pct', 'amount_rial', 'shares', 'price', 'adv_rial', 'days_needed'], ...pfRows().map(r => [r.sym, r.sector, (r.w * 100).toFixed(4), Math.round(r.val), r.sh, r.price, r[$('pf-adv').value], isFinite(r.days) ? r.days.toFixed(2) : 'inf'])]);
+  renderPf();
+}
+
+/* ══════════ Risk ══════════ */
+const rk = { k: 'K', i: null };
+function drawRisk() {
+  const R = X.risk[rk.k];
+  paneChart($('rk-chart'), R.dates, [{ frac: .55, zero: true, series: [{ v: R.dd, color: 'var(--down)', w: 1.3 }], fmt: v => fmt(v, 0) + '%' }, { frac: .45, zero: true, series: [{ v: R.vol, color: 'var(--ch-2)', w: 1.2 }], fmt: v => fmt(v, 0) + '%' }], rk);
+  $('rk-readout').innerHTML = rk.i == null ? '' : `<b>${R.dates[rk.i]}</b> · ${jd(R.dates[rk.i])} &nbsp; افت <b>${fmt(R.dd[rk.i], 1)}%</b> &nbsp; نوسان <b>${fmt(R.vol[rk.i], 1)}%</b>`;
+}
+function renderRisk() {
+  const R = X.risk[rk.k];
+  document.querySelectorAll('#rk-idx button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === rk.k));
+  $('rk-kpis').innerHTML = [['بازده سالانه (TR)', sgn(R.ann, 1) + '%', cls(R.ann)], ['نوسان سالانه', fmt(R.vol_all, 1) + '%', ''], ['نوسان ۱ سال اخیر', fmt(R.vol_1y, 1) + '%', ''], ['بیشترین افت از اوج', fmt(R.max_dd, 1) + '%', 'down'], ['اوج → کف', jd(R.peak) + ' → ' + jd(R.trough), '']]
+    .map(([k, v, c]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}" style="${k === 'اوج → کف' ? 'font-size:12px' : ''}">${v}</div></div>`).join('');
+  $('rk-lin').innerHTML = `<span><b>سری</b> ${rk.k === 'K' ? '«شاخص كل»' : '«كل (هم وزن)»'} رسمی TR، پس از صافی مقیاس</span><span><b>بازگشت به اوج</b> ${R.recovered ? jd(R.recovered) : 'هنوز نه'}</span><span><b>نوسان</b> انحراف معیار ۶۳ روزه × √۲۵۲</span><span><b>توجه</b> بازده اسمی ریالی؛ تورم کسر نشده</span>`;
+  $('rk-year').innerHTML = th([['سال'], ['بازده %', 'n'], ['نوسان %', 'n'], ['افت درون‌سال %', 'n'], ['روز', 'n']]) + '<tbody>' + R.yearly.map(y => `<tr><td class="num">${y.jy}</td><td class="n ${cls(y.ret)}">${sgn(y.ret, 1)}</td><td class="n">${fmt(y.vol, 1)}</td><td class="n down">${fmt(y.mdd, 1)}</td><td class="n mute">${y.days}</td></tr>`).join('') + '</tbody>';
+  drawRisk();
+}
+function initRisk() {
+  document.querySelectorAll('#rk-idx button').forEach(b => b.onclick = () => { rk.k = b.dataset.k; rk.i = null; renderRisk(); });
+  attachHover($('rk-chart'), null, i => { rk.i = i; drawRisk(); });
+  const C = X.risk.sector_corr;
+  $('rk-cchip').textContent = C.months + ' ماه';
+  const col = v => `background:color-mix(in srgb, var(--accent) ${Math.round(Math.max(0, v) * 85)}%, var(--bg-panel));color:${v > .6 ? 'var(--tx-1)' : 'var(--tx-2)'}`;
+  $('rk-corr').innerHTML = `<table class="heat"><tr><th></th>${C.names.map((n, i) => `<th title="${n}">${i + 1}</th>`).join('')}</tr>` + C.m.map((row, i) => `<tr><th class="r" title="${n(C.names[i])}">${i + 1}. ${C.names[i].slice(0, 22)} <span class="num dim">${fmt(C.w[i], 0)}%</span></th>${row.map(v => `<td style="${col(v)}">${fmt(v, 2)}</td>`).join('')}</tr>`).join('') + '</table>';
+  function n(x) { return x; }
+  $('rk-csv').onclick = () => { const R = X.risk[rk.k]; download(`risk_${rk.k}.csv`, [['date', 'drawdown_pct', 'vol63_pct'], ...R.dates.map((d, i) => [d, R.dd[i], R.vol[i]])]); };
+  redraws.risk = drawRisk; renderRisk();
+}
+
+/* ══════════ تراکم، حافظهٔ تنظیمات، تاریخچهٔ فرمان، کلیک روی نماد ══════════ */
+const LS = { get: k => { try { return localStorage.getItem('sim.' + k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem('sim.' + k, v); } catch (e) { /* بی‌اهمیت */ } } };
+const DENS = ['compact', 'default', 'comfortable'];
+function setDensity(d) { if (d === 'compact') delete document.documentElement.dataset.density; else document.documentElement.dataset.density = d; LS.set('density', d); }
+$('density').onclick = () => { const cur = document.documentElement.dataset.density || 'compact'; const nx = DENS[(DENS.indexOf(cur) + 1) % 3]; setDensity(nx); toast('تراکم: ' + nx); };
+if (LS.get('density')) setDensity(LS.get('density'));
+if (LS.get('theme')) document.documentElement.dataset.theme = LS.get('theme');
+document.addEventListener('click', e => { const a = e.target.closest('.symlink'); if (a) { e.preventDefault(); window.openSym(a.dataset.sym); } });
+const hist = JSON.parse(LS.get('hist') || '[]'); let hi = hist.length;
+$('cmd').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.value.trim()) { hist.push(e.target.value.trim()); while (hist.length > 30) hist.shift(); LS.set('hist', JSON.stringify(hist)); hi = hist.length; }
+  if (e.key === 'ArrowUp' && hist.length) { hi = Math.max(0, hi - 1); e.target.value = hist[hi]; e.preventDefault(); }
+  if (e.key === 'ArrowDown' && hist.length) { hi = Math.min(hist.length, hi + 1); e.target.value = hist[hi] || ''; e.preventDefault(); }
+}, true);
+
 /* ══════════ Router ══════════ */
-const INIT = { div: initDiv, fac: initFac, reb: initReb, qa: initQA, rep: initRep };
+const INIT = { div: initDiv, fac: initFac, reb: initReb, qa: initQA, rep: initRep, sym: initSym, pf: initPf, risk: initRisk };
 function show(name) {
   if (!VIEWS[name]) return;
   Object.entries(VIEWS).forEach(([k, id]) => { $(id).hidden = k !== name; });
   document.querySelectorAll('#nav a').forEach(a => { if (a.dataset.view === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   if (X && INIT[name] && !inited[name]) { inited[name] = true; INIT[name](); }
   requestAnimationFrame(() => { if (name === 'index') drawChart(); else if (redraws[name]) redraws[name](); });
-  history.replaceState(null, '', '#' + name);
+  history.replaceState(null, '', '#' + name); LS.set('view', name);
 }
 document.querySelectorAll('#nav a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); show(a.dataset.view); }));
 addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || e.ctrlKey || e.metaKey) return;
-  const n = '123456'.indexOf(e.key); if (n >= 0) show(Object.keys(VIEWS)[n]);
+  const n = '123456789'.indexOf(e.key); if (n >= 0) show(Object.keys(VIEWS)[n]);
 });
 const _run = window.run;
 window.run = function (cmd) {
   const [c, a] = cmd.trim().toLowerCase().split(/\s+/);
   if (c === 'go' || c === 'view') { if (VIEWS[a]) { show(a); toast('نما: ' + a); } else toast('نما: ' + Object.keys(VIEWS).join(' · ')); return; }
-  if (c === 'help') { toast('GO INDEX|DIV|FAC|REB|QA|REP · IDX K|EW · WIN 2014|2016 · THEME'); return; }
+  if (c === 'help') { toast('GO INDEX|DIV|FAC|REB|QA|REP|SYM|PF|RISK · SYM <نماد> · IDX K|EW · WIN 2014|2016 · THEME · DENSITY · ↑↓ تاریخچه'); return; }
+  if (c === 'sym' && a) { window.openSym(cmd.trim().split(/\s+/)[1]); return; }
+  if (c === 'density') { $('density').click(); return; }
   if (c === 'idx' || c === 'win') show('index');
   _run(cmd);
-  if (c === 'theme') { const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v && redraws[v]) redraws[v](); }
+  if (c === 'theme') { LS.set('theme', document.documentElement.dataset.theme); const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v && redraws[v]) redraws[v](); }
 };
 new ResizeObserver(() => { const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v && redraws[v]) redraws[v](); }).observe(document.body);
-show((location.hash || '#index').slice(1) in VIEWS ? (location.hash || '#index').slice(1) : 'index');
+const want = (location.hash || '').slice(1) || LS.get('view') || 'index';
+show(want in VIEWS ? want : 'index');
 })();
