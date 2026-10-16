@@ -204,6 +204,62 @@ def probe(sym: str, pages: int, letters: int) -> None:
         time.sleep(1.0)
 
 
+class Tee:
+    """چاپ هم‌زمان روی کنسول و فایل UTF-8 (جلوگیری از خراب‌شدن حروف فارسی در redirect/pipe پاورشل)."""
+    def __init__(self, path):
+        self.f = open(path, "w", encoding="utf-8")
+        self.o = sys.stdout
+
+    def write(self, t):
+        self.o.write(t)
+        self.f.write(t)
+
+    def flush(self):
+        self.o.flush()
+        self.f.flush()
+
+
+LT_PAY = 30   # LetterType «زمان‌بندی پرداخت سود» (ن-۱۳)؛ از خروجی --scan-types خوانده شد
+LT_AGM = 20   # «تصمیمات مجمع عمومی عادی سالیانه» (ن-۵۲)
+
+
+def payments(sym: str, letter_type: int, nl: int) -> None:
+    """همهٔ نامه‌های یک LetterType را برای نماد می‌خواند؛ فهرست (تاریخ، عنوان، Url، پرچم‌ها) را چاپ و چند نامه را دانلود می‌کند."""
+    RAW.mkdir(parents=True, exist_ok=True)
+    print(f"\n══ {sym}: LetterType={letter_type} ══")
+    items = []
+    for p in range(1, 6):
+        url = SEARCH.format(page=p, sym=quote(sym)).replace("LetterType=-1", f"LetterType={letter_type}")
+        r = fetch(url)
+        d = r.json()
+        got = d.get("Letters") or []
+        (RAW / f"type{letter_type}_{sym}_p{p}.json").write_bytes(r.content)
+        items += got
+        if len(items) >= d.get("Total", 0) or not got:
+            break
+        time.sleep(0.8)
+    print(f"{len(items)} نامه")
+    for it in items:
+        print(f"  {it.get('PublishDateTime')} | {it.get('TracingNo')} | {it.get('Title','')[:70]} | html={it.get('HasHtml')} att={it.get('HasAttachment')} xl={it.get('HasExcel')} pdf={it.get('HasPdf')} | {it.get('Url')}")
+    done = 0
+    for it in items:
+        if done >= nl or not it.get("Url"):
+            continue
+        full = it["Url"] if it["Url"].startswith("http") else "https://codal.ir" + it["Url"]
+        try:
+            r = fetch(full)
+        except Exception as e:  # noqa: BLE001
+            print("  دریافت ناموفق:", str(e)[:120])
+            continue
+        tn = it.get("TracingNo")
+        (RAW / f"pay_{tn}.html").write_bytes(r.content)
+        links = sorted(set(re.findall(r'href="([^"]+\.(?:pdf|xls|xlsx|doc|docx|zip)[^"]*)"', r.text, re.I)) | set(re.findall(r'href="([^"]*Attachment[^"]*)"', r.text, re.I)))[:8]
+        print(f"\n  ── {tn} طول متن {len(text_of(r.text))}؛ پیوندها: {links}")
+        print("  ", text_of(r.text)[:700])
+        done += 1
+        time.sleep(0.8)
+
+
 def sample_symbols(n: int) -> list:
     """n نمادِ بزرگ (تعداد سهام) از اعضای «شاخص كل» که در instrument_info.csv هست."""
     import csv
@@ -221,10 +277,23 @@ def main():
     ap.add_argument("--diag", action="store_true", help="فقط اتصال را عیب‌یابی کن (DNS و چند نشانی کدال/TSETMC)")
     ap.add_argument("--diag2", action="store_true", help="عیب‌یابی دوم کدال: هدرها، هاست اصلی، صفحهٔ قدیمی، curl")
     ap.add_argument("--scan-types", metavar="SYMBOL", help="پویش LetterType و Category (۱ تا ۹۹) برای یک نماد؛ نوع «پرداخت سود» را پیدا می‌کند")
+    ap.add_argument("--payments", action="append", metavar="SYMBOL", help="نامه‌های «زمان‌بندی پرداخت سود» (LetterType=30) این نماد را فهرست و چند نمونه را دانلود کن")
+    ap.add_argument("--agm", action="append", metavar="SYMBOL", help="نامه‌های «تصمیمات مجمع» (LetterType=20) این نماد را فهرست و چند نمونه را دانلود کن")
+    ap.add_argument("--log", metavar="FILE", help="خروجی را (UTF-8) در فایل هم بنویس")
     ap.add_argument("--sample", type=int, metavar="N", help="N نمادِ بزرگِ شاخص كل را probe کن (بدون تایپ نام فارسی)")
     ap.add_argument("--pages", type=int, default=3, help="حداکثر صفحهٔ نتیجه برای هر نماد (پیش‌فرض ۳)")
-    ap.add_argument("--letters", type=int, default=2, help="چند نامهٔ نمونه دانلود شود (پیش‌فرض ۲)")
+    ap.add_argument("--letters", type=int, default=2, help="چند نامهٔ نمونه دانلود شود (پیش‌فرض ۲؛ برای --payments/--agm مثلاً ۴)")
     a = ap.parse_args()
+    if a.log:
+        sys.stdout = Tee(a.log)
+    for lt, lst in ((LT_PAY, a.payments), (LT_AGM, a.agm)):
+        for sy in lst or []:
+            try:
+                payments(sy, lt, a.letters)
+            except Exception as e:  # noqa: BLE001
+                print(f"  ✗ {sy}: {type(e).__name__}: {str(e)[:200]}")
+    if a.payments or a.agm:
+        return
     if a.diag:
         diag()
         return
