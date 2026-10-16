@@ -42,7 +42,7 @@ SEARCH = ("https://search.codal.ir/api/search/v2/q?&Audited=true&AuditorRef=-1&C
 KEYS = ("پرداخت سود", "تقسیم سود", "سود نقدی", "تصمیمات مجمع", "مجمع عمومی")
 
 
-def fetch(url: str, retries: int = 2, timeout: int = 25) -> requests.Response:
+def fetch(url: str, retries: int = 5, timeout: int = 40) -> requests.Response:
     last = None
     for k in range(retries):
         try:
@@ -52,8 +52,9 @@ def fetch(url: str, retries: int = 2, timeout: int = 25) -> requests.Response:
             last = f"HTTP {r.status_code}"
         except Exception as e:  # noqa: BLE001
             last = repr(e)
-        time.sleep(2 ** (k + 1))
-    raise RuntimeError(f"{url} -> {last}")
+        print(f"    … تلاش {k+1}/{retries} ناموفق: {str(last)[:90]}")
+        time.sleep(3 * (k + 1))
+    raise RuntimeError(f"{url[-60:]} -> {last}")
 
 
 DIAG_URLS = [
@@ -291,7 +292,7 @@ def main():
             try:
                 payments(sy, lt, a.letters)
             except Exception as e:  # noqa: BLE001
-                print(f"  ✗ {sy}: {type(e).__name__}: {str(e)[:200]}")
+                print(f"  ✗ {sy}: {type(e).__name__}: {str(e)[-220:]}")
     if a.payments or a.agm:
         return
     if a.diag:
