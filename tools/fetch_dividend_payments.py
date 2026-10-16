@@ -81,6 +81,47 @@ def diag() -> None:
             print(f"[{lab}] خطا بعد از {time.time()-t0:.1f}s: {type(e).__name__}: {str(e)[:150]}")
 
 
+def diag2() -> None:
+    """کدال: codal.ir کار می‌کند ولی search.codal.ir تا timeout می‌رود. چند شکل درخواست/هدر و curl.exe را امتحان می‌کند."""
+    import shutil
+    import subprocess
+    sym = "%D8%AE%D9%88%D8%AF%D8%B1%D9%88"
+    q_full = SEARCH.format(page=1, sym=sym)
+    UA = HEADERS["User-Agent"]
+    browser = {
+        "User-Agent": UA, "Accept": "application/json, text/plain, */*", "Accept-Language": "fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br", "Origin": "https://codal.ir", "Referer": "https://codal.ir/",
+        "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"', "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"',
+        "Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "same-site",
+    }
+    tests = [
+        ("search.codal، فقط UA", q_full, {"User-Agent": UA}),
+        ("search.codal، هدرهای کامل مرورگر", q_full, browser),
+        ("search.codal، کامل، Referer=www.codal.ir", q_full, {**browser, "Origin": "https://www.codal.ir", "Referer": "https://www.codal.ir/"}),
+        ("codal.ir/api/search/v2/q (همان API روی هاست اصلی)", q_full.replace("https://search.codal.ir", "https://codal.ir"), browser),
+        ("codal.ir/ReportList.aspx (صفحهٔ قدیمی)", "https://codal.ir/ReportList.aspx?search&Symbol=" + sym + "&LetterType=-1&Category=-1&PageNumber=1", browser),
+    ]
+    for lab, url, hd in tests:
+        t0 = time.time()
+        try:
+            r = requests.get(url, headers=hd, timeout=12)
+            print(f"[{lab}] HTTP {r.status_code} در {time.time()-t0:.1f}s، {len(r.content)} بایت\n    {r.text[:160]!r}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[{lab}] خطا بعد از {time.time()-t0:.1f}s: {type(e).__name__}")
+    curl = shutil.which("curl.exe") or shutil.which("curl")
+    if not curl:
+        print("curl پیدا نشد")
+        return
+    for lab, url in (("curl search.codal", q_full), ("curl search.codal --http1.1", q_full)):
+        cmd = [curl, "-s", "-m", "15", "-o", "-", "-w", "\n[curl http=%{http_code} t=%{time_total}s]", "-H", "Origin: https://codal.ir", "-H", "Referer: https://codal.ir/",
+               "-H", "Accept: application/json, text/plain, */*", "-A", UA] + (["--http1.1"] if "1.1" in lab else []) + [url]
+        try:
+            out = subprocess.run(cmd, capture_output=True, timeout=25).stdout.decode("utf-8", "replace")
+            print(f"[{lab}] {out[:260]!r}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[{lab}] خطا: {type(e).__name__}")
+
+
 def text_of(html: str) -> str:
     t = re.sub(r"(?is)<(script|style).*?</\1>", " ", html)
     t = re.sub(r"(?s)<[^>]+>", " ", t)
@@ -153,12 +194,16 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--probe", action="append", metavar="SYMBOL", help="نماد (قابل تکرار)")
     ap.add_argument("--diag", action="store_true", help="فقط اتصال را عیب‌یابی کن (DNS و چند نشانی کدال/TSETMC)")
+    ap.add_argument("--diag2", action="store_true", help="عیب‌یابی دوم کدال: هدرها، هاست اصلی، صفحهٔ قدیمی، curl")
     ap.add_argument("--sample", type=int, metavar="N", help="N نمادِ بزرگِ شاخص كل را probe کن (بدون تایپ نام فارسی)")
     ap.add_argument("--pages", type=int, default=3, help="حداکثر صفحهٔ نتیجه برای هر نماد (پیش‌فرض ۳)")
     ap.add_argument("--letters", type=int, default=2, help="چند نامهٔ نمونه دانلود شود (پیش‌فرض ۲)")
     a = ap.parse_args()
     if a.diag:
         diag()
+        return
+    if a.diag2:
+        diag2()
         return
     syms = list(a.probe or []) + (sample_symbols(a.sample) if a.sample else [])
     if not syms:
