@@ -125,6 +125,28 @@ def diag2() -> None:
             print(f"[{lab}] خطا: {type(e).__name__}")
 
 
+def scan_types(sym: str, lo: int, hi: int) -> None:
+    """برای یک نماد، هر LetterType (و سپس Category) را جدا می‌پرسد؛ Total و نمونهٔ عنوان را چاپ می‌کند تا
+    نوعِ «اطلاعیهٔ پرداخت سود» / «تصمیمات مجمع» پیدا شود (کد نوع از حافظه نیست؛ از خروجی خوانده می‌شود)."""
+    base = SEARCH.format(page=1, sym=quote(sym))
+    for param, rng in (("LetterType", range(lo, hi + 1)), ("Category", range(lo, min(hi, 30) + 1))):
+        print(f"\n══ {sym}: پویش {param} ═══")
+        for v in rng:
+            url = base.replace(f"{param}=-1", f"{param}={v}")
+            try:
+                r = requests.get(url, headers=HEADERS, timeout=20)
+                d = r.json()
+            except Exception as e:  # noqa: BLE001
+                print(f"  {param}={v}: خطا {type(e).__name__}")
+                continue
+            tot, lt = d.get("Total", 0), d.get("Letters") or []
+            if tot:
+                titles = "؛ ".join(sorted({(x.get("Title") or "")[:48] for x in lt})[:3])
+                codes = ",".join(sorted({str(x.get("LetterCode")) for x in lt}))
+                print(f"  {param}={v:3d} Total={tot:5d} کد={codes:12s} {titles}")
+            time.sleep(0.4)
+
+
 def text_of(html: str) -> str:
     t = re.sub(r"(?is)<(script|style).*?</\1>", " ", html)
     t = re.sub(r"(?s)<[^>]+>", " ", t)
@@ -198,6 +220,7 @@ def main():
     ap.add_argument("--probe", action="append", metavar="SYMBOL", help="نماد (قابل تکرار)")
     ap.add_argument("--diag", action="store_true", help="فقط اتصال را عیب‌یابی کن (DNS و چند نشانی کدال/TSETMC)")
     ap.add_argument("--diag2", action="store_true", help="عیب‌یابی دوم کدال: هدرها، هاست اصلی، صفحهٔ قدیمی، curl")
+    ap.add_argument("--scan-types", metavar="SYMBOL", help="پویش LetterType و Category (۱ تا ۹۹) برای یک نماد؛ نوع «پرداخت سود» را پیدا می‌کند")
     ap.add_argument("--sample", type=int, metavar="N", help="N نمادِ بزرگِ شاخص كل را probe کن (بدون تایپ نام فارسی)")
     ap.add_argument("--pages", type=int, default=3, help="حداکثر صفحهٔ نتیجه برای هر نماد (پیش‌فرض ۳)")
     ap.add_argument("--letters", type=int, default=2, help="چند نامهٔ نمونه دانلود شود (پیش‌فرض ۲)")
@@ -207,6 +230,9 @@ def main():
         return
     if a.diag2:
         diag2()
+        return
+    if a.scan_types:
+        scan_types(a.scan_types, 1, 99)
         return
     syms = list(a.probe or []) + (sample_symbols(a.sample) if a.sample else [])
     if not syms:
