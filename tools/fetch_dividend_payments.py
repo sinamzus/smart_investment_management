@@ -322,6 +322,47 @@ def list_letters(sym: str, lt: int) -> list:
     return items
 
 
+def attachment_links(page: str) -> list:
+    """پیوست‌های صفحهٔ Attachment.aspx: onclick="window.open('DownloadFile.aspx?id=…')" (نسبی به /Reports/)."""
+    import html as H
+    u = H.unescape(page)
+    ids = re.findall(r"DownloadFile\.aspx\?id=([^'\"&\s)]+)", u)
+    return ["/Reports/DownloadFile.aspx?id=" + i for i in dict.fromkeys(ids)]
+
+
+def save_attachment(r: requests.Response, stem: Path) -> Path:
+    """پسوند از Content-Disposition یا Content-Type یا امضای فایل."""
+    cd = r.headers.get("Content-Disposition", "")
+    m = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", cd, re.I)
+    ext = Path(m.group(1)).suffix.lower().lstrip(".") if m and Path(m.group(1)).suffix else ""
+    if not ext:
+        b = r.content[:8]
+        ext = "pdf" if b.startswith(b"%PDF") else "zip" if b.startswith(b"PK") else "xls" if b.startswith(b"\xd0\xcf") else "html" if b.lstrip().startswith(b"<") else "bin"
+    out = stem.with_name(stem.name + "." + ext)
+    out.write_bytes(r.content)
+    return out
+
+
+def attachments() -> None:
+    """برای هر صفحهٔ پیوستِ «زمان‌بندی پرداخت سود» (30_*.html) که فایلش هنوز دانلود نشده، فایل پیوست را بگیر."""
+    PATIENT[0] = False
+    pages = sorted((RAW / "collect").glob("*/30_*.html"))
+    todo = [f for f in pages if not re.search(r"_att\d", f.name) and not list(f.parent.glob(f.stem + "_att*"))]
+    print(f"{len(pages)} صفحه؛ {len(todo)} پیوست مانده؛ فاصله {MIN_GAP:.0f}s ⇒ ≈ {len(todo) * MIN_GAP / 60:.0f} دقیقه")
+    t0 = time.time()
+    try:
+        for i, f in enumerate(todo, 1):
+            links = attachment_links(f.read_text(encoding="utf-8", errors="replace"))
+            for k, lk in enumerate(links[:2]):
+                out = save_attachment(fetch("https://codal.ir" + lk), f.with_name(f.stem + f"_att{k}"))
+            if i % 10 == 0 or i == len(todo):
+                print(f"[{i}/{len(todo)}] آخرین: {f.parent.name}/{f.name} → {out.name if links else 'بدون پیوست'}؛ {(time.time()-t0)/60:.1f} دقیقه")
+    except Blocked as e:
+        print(f"\n■ کدال محدود کرد ({e}). ذخیره شد؛ چند ساعت بعد همان دستور ادامه می‌دهد.")
+        return
+    print("\n✓ پیوست‌ها تمام شد.")
+
+
 def collect(symbols: list, years: int) -> None:
     """برای هر نماد: فهرست «زمان‌بندی پرداخت سود» (۳۰) و «تصمیمات مجمع» (۲۰) و دانلود نامه‌های years سال اخیر.
     هر فایل یک بار دانلود می‌شود (اجرای دوباره از همان‌جا ادامه می‌دهد). روی 429 فوراً متوقف می‌شود."""
@@ -354,7 +395,7 @@ def collect(symbols: list, years: int) -> None:
                     out.write_bytes(r.content)
                     got += 1
                     if "Attachment.aspx" in url:      # پیوست‌ها (PDF/Excel) را هم بگیر
-                        links = re.findall(r'href="([^"]*(?:DownloadFile|\.pdf|\.xlsx?|\.docx?)[^"]*)"', r.text, re.I)
+                        links = attachment_links(r.text)
                         for k, lk in enumerate(dict.fromkeys(links)):
                             if k >= 2:
                                 break
@@ -364,8 +405,7 @@ def collect(symbols: list, years: int) -> None:
                                 full = "https://codal.ir" + lk
                             else:
                                 full = "https://codal.ir/Reports/" + lk
-                            ext = (re.search(r"\.(pdf|xlsx?|docx?)", lk, re.I) or [None, "bin"])[1].lower()
-                            (d / f"{lt}_{it.get('TracingNo')}_att{k}.{ext}").write_bytes(fetch(full).content)
+                            save_attachment(fetch(full), d / f"{lt}_{it.get('TracingNo')}_att{k}")
                             got += 1
             print(f"[{i}/{len(symbols)}] {sym}: {got} فایل تازه؛ کل درخواست‌ها {NREQ[0]}؛ {(time.time()-t0)/60:.1f} دقیقه")
     except Blocked as e:
@@ -393,7 +433,9 @@ def parse() -> None:
         if name.startswith("20_") or (name.startswith("letter_") and "تصمیمات مجمع" in x[:300]):
             if "سالیانه" not in x[:400]:
                 continue
-            sd = re.findall(r"<SessionDate>([^<]*)</SessionDate>", u)
+            # تاریخ مجمع از متن «زمان و محل برگزاری … مورخ YYYY/MM/DD» (فیلد پنهان SessionDate مال مجمع دیگری است)
+            seg = fa2en(x[x.find("زمان و محل برگزاری"):][:700]) if "زمان و محل برگزاری" in x else ""
+            sd = re.findall(r"مورخ\s*(1[34]\d{2}/\d{1,2}/\d{1,2})", seg) or re.findall(r"(1[34]\d{2}/\d{1,2}/\d{1,2})", seg)[-1:]
             dps = re.search(r"DividendPerShare\s+سود نقدی هر سهم \(ریال\)\s+([\d۰-۹,٬]+)", x)
             agm.append({"symbol": sym, "tracing": tn, "period_end_j": period, "session_date_j": fa2en(sd[0]) if sd else "",
                         "dps_rial": fa2en(dps.group(1)).replace(",", "").replace("٬", "") if dps else ""})
@@ -438,6 +480,7 @@ def main():
     ap.add_argument("--collect", type=int, metavar="N", help="جمع‌آوری محتاطانه برای N نمادِ بزرگِ شاخص كل (قابل‌ادامه؛ روی 429 توقف)")
     ap.add_argument("--years", type=int, default=5, help="فقط نامه‌های این تعداد سال شمسی اخیر (پیش‌فرض ۵)")
     ap.add_argument("--gap", type=float, help="ثانیه بین درخواست‌ها (پیش‌فرض: ۲؛ برای --collect ۸)")
+    ap.add_argument("--attachments", action="store_true", help="فایل‌های پیوستِ نامه‌های «زمان‌بندی پرداخت سود» را بگیر (قابل‌ادامه)")
     ap.add_argument("--parse", action="store_true", help="نامه‌های دانلودشده را به data/corporate_actions/codal_*.csv تبدیل کن")
     ap.add_argument("--log", metavar="FILE", help="خروجی را (UTF-8) در فایل هم بنویس")
     ap.add_argument("--sample", type=int, metavar="N", help="N نمادِ بزرگِ شاخص كل را probe کن (بدون تایپ نام فارسی)")
@@ -451,6 +494,11 @@ def main():
         MIN_GAP = a.gap
     if a.parse:
         parse()
+        return
+    if a.attachments:
+        if not a.gap:
+            MIN_GAP = 8.0
+        attachments()
         return
     if a.collect:
         if not a.gap:
