@@ -42,18 +42,36 @@ SEARCH = ("https://search.codal.ir/api/search/v2/q?&Audited=true&AuditorRef=-1&C
 KEYS = ("پرداخت سود", "تقسیم سود", "سود نقدی", "تصمیمات مجمع", "مجمع عمومی")
 
 
-def fetch(url: str, retries: int = 5, timeout: int = 40) -> requests.Response:
+_LAST = [0.0]
+MIN_GAP = 2.0          # ثانیه بین دو درخواست (کدال با ~۱ درخواست/ثانیه 429 می‌دهد)
+SESSION = requests.Session()
+
+
+def fetch(url: str, retries: int = 6, timeout: int = 40) -> requests.Response:
+    """GET با فاصلهٔ حداقل MIN_GAP، و احترام به 429: صبر به‌اندازهٔ Retry-After (یا ۶۰، ۱۲۰، … ثانیه)."""
+    import random
     last = None
     for k in range(retries):
+        wait = _LAST[0] + MIN_GAP + random.uniform(0, 0.6) - time.time()
+        if wait > 0:
+            time.sleep(wait)
         try:
-            r = requests.get(url, headers=HEADERS, timeout=timeout)
+            r = SESSION.get(url, headers=HEADERS, timeout=timeout)
+            _LAST[0] = time.time()
             if r.status_code == 200:
                 return r
             last = f"HTTP {r.status_code}"
+            if r.status_code == 429:
+                ra = r.headers.get("Retry-After", "")
+                pause = int(ra) if ra.isdigit() else 60 * (k + 1)
+                print(f"    … 429 (محدودیت نرخ کدال)؛ {pause} ثانیه صبر")
+                time.sleep(pause)
+                continue
         except Exception as e:  # noqa: BLE001
+            _LAST[0] = time.time()
             last = repr(e)
         print(f"    … تلاش {k+1}/{retries} ناموفق: {str(last)[:90]}")
-        time.sleep(3 * (k + 1))
+        time.sleep(5 * (k + 1))
     raise RuntimeError(f"{url[-60:]} -> {last}")
 
 
@@ -135,8 +153,7 @@ def scan_types(sym: str, lo: int, hi: int) -> None:
         for v in rng:
             url = base.replace(f"{param}=-1", f"{param}={v}")
             try:
-                r = requests.get(url, headers=HEADERS, timeout=20)
-                d = r.json()
+                d = fetch(url).json()
             except Exception as e:  # noqa: BLE001
                 print(f"  {param}={v}: خطا {type(e).__name__}")
                 continue
@@ -145,7 +162,6 @@ def scan_types(sym: str, lo: int, hi: int) -> None:
                 titles = "؛ ".join(sorted({(x.get("Title") or "")[:48] for x in lt})[:3])
                 codes = ",".join(sorted({str(x.get("LetterCode")) for x in lt}))
                 print(f"  {param}={v:3d} Total={tot:5d} کد={codes:12s} {titles}")
-            time.sleep(0.4)
 
 
 def text_of(html: str) -> str:
