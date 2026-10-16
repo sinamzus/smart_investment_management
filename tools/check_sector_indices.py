@@ -36,7 +36,7 @@ SECTORS = {
 }
 
 
-def main():
+def compute(R=None):
     sc = pd.read_csv(ROOT / "data/corporate_actions/share_change.csv", dtype={"ins_code": str})
     sc["date"] = pd.to_datetime(sc.dEven.astype(str), format="%Y%m%d")
     info = pd.read_csv(ROOT / "data/corporate_actions/instrument_info.csv", dtype={"ins_code": str})
@@ -83,6 +83,11 @@ def main():
         nan3 = (np.nan, np.nan, np.nan, "")
         rows.append((sec, int(res["m"][1]), n_miss, *(bm or nan3), int(res["s"][2]), *(bs[:2] if bs else (np.nan, np.nan))))
     df = pd.DataFrame(rows, columns=["sector", "n_last", "n_miss", "corr", "te_pct", "cum_ratio", "best", "n_all", "corr_all", "te_all"]).sort_values("te_pct", ascending=False)
+    return df
+
+
+def main():
+    df = compute()
     pd.set_option("display.width", 140)
     print(df.round(3).to_string(index=False))
 

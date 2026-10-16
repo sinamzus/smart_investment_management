@@ -69,9 +69,43 @@ def daily_returns(P: pd.DataFrame, markets=("bourse",)) -> pd.DataFrame:
     P = P.merge(first, on="ins_code", how="left")
     P = P[P.date > P.first_trade]                      # قاعدهٔ ۳
     P = P[(P.priceYesterday > 0) & (P.pClosing > 1)]    # قاعدهٔ ۵
+    P = fill_gaps(P)                                    # قاعدهٔ ۹
     P["r"] = P.pClosing / P.priceYesterday - 1          # قاعدهٔ ۱
     P = fix_unapplied_adjustments(P)                    # قاعدهٔ ۸
     return P[P.r > -0.9]
+
+
+def fill_gaps(P: pd.DataFrame, start: str = "2014-03-19") -> pd.DataFrame:
+    """قاعدهٔ ۹: روز بدون ردیف برای نمادی که زنده است = روز بدون معامله با بازده صفر.
+
+    در روزهایی مثل ۲۰۲۴-۰۸-۰۷ (۲۵۸ از ۳۸۴ نماد ردیف ندارند) و ۲۰۲۳-۰۳-۲۷ (۱۱۳ نماد) خوراک ناقص است. بدون پر کردن،
+    نمادِ بدون ردیف از وزن‌های رانش‌یافتهٔ هم‌وزن تا ریبالانس بعد حذف می‌شد. فقط از `start` به بعد و فقط بین اولین و
+    آخرین ردیف هر نماد (قبل از ۲۰۱۴ ردیف روزهای بدون معامله اصلاً ثبت نشده و مقایسه‌ای نداریم).
+    """
+    Q = P[P.date >= start]
+    dates = np.sort(Q.date.unique())
+    if len(dates) == 0:
+        return P
+    key = Q.groupby("ins_code").date.agg(["min", "max", "count"])
+    cand = key[(np.searchsorted(dates, key["max"].values, side="right") - np.searchsorted(dates, key["min"].values, side="left")) > key["count"].values]
+    if cand.empty:
+        return P
+    have = set(zip(Q.ins_code, Q.date))
+    miss = []
+    for code, row in cand.iterrows():
+        lo, hi = np.searchsorted(dates, row["min"], side="left"), np.searchsorted(dates, row["max"], side="right")
+        miss += [(code, d) for d in dates[lo:hi] if (code, d) not in have]
+    if not miss:
+        return P
+    F = pd.DataFrame(miss, columns=["ins_code", "date"]).sort_values("date")
+    base = P.sort_values("date")
+    F = pd.merge_asof(F, base, on="date", by="ins_code", direction="backward")
+    F["priceYesterday"] = F.pClosing
+    F["zTotTran"] = 0.0
+    F["dEven"] = F.date.dt.strftime("%Y%m%d").astype(float)
+    out = pd.concat([P, F[P.columns]], ignore_index=True)
+    print(f"قاعدهٔ ۹: {len(F)} ردیف روز-بدون-ردیف (نماد زنده) با بازده صفر پر شد")
+    return out
 
 
 def fix_unapplied_adjustments(P: pd.DataFrame, window_days: int = 7, max_abs: float = 0.25) -> pd.DataFrame:

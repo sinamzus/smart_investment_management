@@ -113,3 +113,32 @@ svg.chart { width:100%; height:100%; display:block; }
 .readout b { color: var(--tx-1); font-weight:500; }
 .toast { position:fixed; bottom: 30px; inset-inline-start: 50%; transform: translateX(-50%); background: var(--bg-head); border: var(--hair) solid var(--line-strong); padding: 4px 10px; font-size: var(--fs-xs); border-radius: var(--radius); z-index:5; }
 .sub { padding: 4px var(--s-3) 2px; color: var(--tx-3); font-size: var(--fs-2xs); background: var(--bg-head); border-bottom: var(--hair) solid var(--line); position: sticky; top: 24px; z-index:1; }
+
+/* ── Views (Index Lab ‖ Dividend Lab ‖ Factor Lab ‖ Rebalance ‖ Data QA ‖ Reports) ── */
+.workspace[hidden] { display:none; }
+.workspace.v-div { grid-template-columns: 1.5fr 1fr; grid-template-rows: 1.35fr 1fr; }
+.workspace.v-fac { grid-template-columns: 1.5fr 1fr; grid-template-rows: 1.2fr 1fr; }
+.workspace.v-reb { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.workspace.v-qa  { grid-template-columns: 1.3fr 1fr; grid-template-rows: 1.5fr 1fr; }
+.workspace.v-rep { grid-template-columns: 1.2fr 1fr; grid-template-rows: 1.2fr 1fr; }
+.workspace .span-r { grid-row: span 2; }
+.ctl { display:flex; align-items:center; gap: var(--s-3); padding: 4px var(--s-3); border-bottom: var(--hair) solid var(--line); font-size: var(--fs-xs); color: var(--tx-2); flex-wrap: wrap; }
+.ctl label { display:flex; align-items:center; gap: var(--s-2); white-space:nowrap; }
+.ctl output { font-family: var(--font-num); color: var(--tx-1); min-width: 3ch; direction:ltr; display:inline-block; text-align:end; }
+.ctl input[type=range] { accent-color: var(--accent); width: 120px; height: 14px; }
+.ctl input[type=number] { width: 64px; height: 20px; background: var(--bg-app); border: var(--hair) solid var(--line-strong); border-radius: var(--radius); color: var(--tx-1); font-family: var(--font-num); padding: 0 4px; }
+.note { margin: var(--s-3); padding: var(--s-3) var(--s-4); border: var(--hair) solid color-mix(in srgb, var(--warn) 45%, transparent); background: var(--warn-bg); color: var(--tx-1); font-size: var(--fs-xs); line-height: 1.7; border-radius: var(--radius); }
+.note.info { border-color: var(--accent-dim); background: var(--info-bg); }
+.prose { padding: var(--s-3) var(--s-4); font-size: var(--fs-sm); line-height: 1.85; color: var(--tx-2); }
+.prose b { color: var(--tx-1); font-weight: 600; }
+.prose code { font-family: var(--font-num); font-size: var(--fs-xs); background: var(--bg-head); border: var(--hair) solid var(--line); padding: 0 4px; border-radius: var(--radius); direction:ltr; unicode-bidi: isolate; }
+.prose ol, .prose ul { margin: 4px 0; padding-inline-start: 22px; }
+.bars { display:flex; align-items:flex-end; gap: 6px; height: 100%; padding: var(--s-4) var(--s-4) 20px; position:relative; }
+.bars .b { flex:1; background: var(--accent); min-height:1px; position:relative; }
+.bars .b span { position:absolute; bottom:-16px; left:0; right:0; text-align:center; font-size: var(--fs-2xs); color: var(--tx-3); }
+.bars .b em { position:absolute; top:-14px; left:0; right:0; text-align:center; font: 500 var(--fs-2xs) var(--font-num); color: var(--tx-2); font-style: normal; }
+.cmdline { font-family: var(--font-num); direction:ltr; text-align:left; background: var(--bg-app); border: var(--hair) solid var(--line-strong); padding: 4px 8px; margin: 4px 0; font-size: var(--fs-xs); color: var(--tx-1); user-select: all; border-radius: var(--radius); white-space: pre-wrap; }
+.scroll { overflow:auto; }
+@media print { .topbar,.statusbar,.ctl,.panel-tools{display:none!important} body{overflow:visible} .app{display:block;height:auto} .workspace{display:block!important;height:auto} .panel{break-inside:avoid;margin-bottom:12px} }
+
+.chart text { direction: ltr; unicode-bidi: isolate; }
