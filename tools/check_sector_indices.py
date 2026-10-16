@@ -46,6 +46,9 @@ def main():
     R["sec"] = R.sector_code.astype(str).str.strip().str.lstrip("0")
     R["w"] = R.priceYesterday * R.shares
     con = pd.read_csv(ROOT / "data/index_constituents.csv", dtype=str)
+    R = R.merge(info[["ins_code", "symbol"]].rename(columns={"symbol": "sym"}), on="ins_code", how="left")
+    adj_p = ROOT / "data/derived/sector_history_adjustments.csv"
+    adj = pd.read_csv(adj_p, dtype={"sector": str}) if adj_p.exists() else pd.DataFrame(columns=["sector", "symbol", "from", "to", "mode"])
     rows = []
     for code, sec in SECTORS.items():
         f = ROOT / f"data/indices/index_{code}.csv"
@@ -55,8 +58,12 @@ def main():
         members = set(con[con.index_code == code].ins_code)
         n_miss = len(members - set(R.ins_code))
         res = {}
+        S_all = R[R.sec == sec.lstrip("0")]
+        for _, a in adj[adj.sector.astype(str) == sec.lstrip("0")].iterrows():   # شرکت‌هایی که صنعتشان در گذشته فرق داشته (fit_sector_history.py)
+            rng = (R.sym == a.symbol) & (R.date >= pd.Timestamp(a["from"])) & (R.date < pd.Timestamp(a["to"]))
+            S_all = pd.concat([S_all, R[rng]]) if a["mode"] == "in" else S_all[~((S_all.sym == a.symbol) & (S_all.date >= pd.Timestamp(a["from"])) & (S_all.date < pd.Timestamp(a["to"])))]
         for lab, S in (("m", R[R.ins_code.isin(members)] if members else R.iloc[0:0]),
-                       ("s", R[R.sec == sec.lstrip("0")])):          # m = اعضای فعلی رسمی؛ s = همهٔ سهام بورسی صنعت (با حذف‌شده‌ها)
+                       ("s", S_all)):          # m = اعضای فعلی رسمی؛ s = همهٔ سهام بورسی صنعت (با حذف‌شده‌ها)
             best = None
             if not S.empty:
                 den = S.groupby("date").w.sum()
