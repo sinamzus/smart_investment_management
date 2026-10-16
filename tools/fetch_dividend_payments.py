@@ -18,6 +18,7 @@ data/raw/codal/ ذخیره می‌کند و خلاصه چاپ می‌کند تا
 import argparse
 import json
 import re
+import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -26,6 +27,8 @@ from urllib.parse import quote
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent
+if hasattr(sys.stdout, "reconfigure"):   # خروجی فارسی هنگام pipe/redirect در ویندوز (cp1252) خطا ندهد
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 RAW = ROOT / "data" / "raw" / "codal"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
