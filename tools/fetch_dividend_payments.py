@@ -39,11 +39,11 @@ SEARCH = ("https://search.codal.ir/api/search/v2/q?&Audited=true&AuditorRef=-1&C
 KEYS = ("پرداخت سود", "تقسیم سود", "سود نقدی", "تصمیمات مجمع", "مجمع عمومی")
 
 
-def fetch(url: str, retries: int = 3) -> requests.Response:
+def fetch(url: str, retries: int = 2, timeout: int = 25) -> requests.Response:
     last = None
     for k in range(retries):
         try:
-            r = requests.get(url, headers=HEADERS, timeout=40)
+            r = requests.get(url, headers=HEADERS, timeout=timeout)
             if r.status_code == 200:
                 return r
             last = f"HTTP {r.status_code}"
@@ -51,6 +51,34 @@ def fetch(url: str, retries: int = 3) -> requests.Response:
             last = repr(e)
         time.sleep(2 ** (k + 1))
     raise RuntimeError(f"{url} -> {last}")
+
+
+DIAG_URLS = [
+    ("tsetmc (مرجع: باید کار کند)", "https://cdn.tsetmc.com/api/Instrument/GetInstrumentInfo/60523145697836739"),
+    ("codal صفحهٔ اصلی", "https://www.codal.ir/"),
+    ("codal بدون www", "https://codal.ir/"),
+    ("search.codal ریشه", "https://search.codal.ir/"),
+    ("search.codal حداقل", "https://search.codal.ir/api/search/v2/q?Symbol=%D8%AE%D9%88%D8%AF%D8%B1%D9%88&PageNumber=1&search=true"),
+    ("search.codal کامل", SEARCH.format(page=1, sym="%D8%AE%D9%88%D8%AF%D8%B1%D9%88")),
+    ("search.codal با Length=20", SEARCH.format(page=1, sym="%D8%AE%D9%88%D8%AF%D8%B1%D9%88").replace("Length=-1", "Length=20")),
+]
+
+
+def diag() -> None:
+    """هر نشانی را یک بار با timeout کوتاه امتحان می‌کند؛ کد وضعیت، زمان و ابتدای پاسخ را چاپ می‌کند."""
+    import socket
+    for host in ("cdn.tsetmc.com", "codal.ir", "search.codal.ir"):
+        try:
+            print(f"DNS {host} -> {socket.gethostbyname(host)}")
+        except Exception as e:  # noqa: BLE001
+            print(f"DNS {host} ناموفق: {e!r}")
+    for lab, url in DIAG_URLS:
+        t0 = time.time()
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=15)
+            print(f"[{lab}] HTTP {r.status_code} در {time.time()-t0:.1f}s، {len(r.content)} بایت؛ {r.headers.get('content-type','')}\n    {r.text[:160]!r}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[{lab}] خطا بعد از {time.time()-t0:.1f}s: {type(e).__name__}: {str(e)[:150]}")
 
 
 def text_of(html: str) -> str:
@@ -124,16 +152,23 @@ def sample_symbols(n: int) -> list:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--probe", action="append", metavar="SYMBOL", help="نماد (قابل تکرار)")
+    ap.add_argument("--diag", action="store_true", help="فقط اتصال را عیب‌یابی کن (DNS و چند نشانی کدال/TSETMC)")
     ap.add_argument("--sample", type=int, metavar="N", help="N نمادِ بزرگِ شاخص كل را probe کن (بدون تایپ نام فارسی)")
     ap.add_argument("--pages", type=int, default=3, help="حداکثر صفحهٔ نتیجه برای هر نماد (پیش‌فرض ۳)")
     ap.add_argument("--letters", type=int, default=2, help="چند نامهٔ نمونه دانلود شود (پیش‌فرض ۲)")
     a = ap.parse_args()
+    if a.diag:
+        diag()
+        return
     syms = list(a.probe or []) + (sample_symbols(a.sample) if a.sample else [])
     if not syms:
         ap.print_help()
         return
     for s in syms:
-        probe(s, a.pages, a.letters)
+        try:
+            probe(s, a.pages, a.letters)
+        except Exception as e:  # noqa: BLE001
+            print(f"  ✗ {s}: {type(e).__name__}: {str(e)[:200]}\n    ← اگر timeout است: python tools/fetch_dividend_payments.py --diag را اجرا و خروجی را بفرستید")
 
 
 if __name__ == "__main__":
