@@ -1,0 +1,9 @@
+
+══ خودرو: LetterType=30 ══
+  ✗ خودرو: RuntimeError: https://search.codal.ir/api/search/v2/q?&Audited=true&AuditorRef=-1&Category=-1&Childs=true&CompanyState=-1&CompanyType=-1&Consolidatable=true&IsNotAudited=false&Length=-1&LetterType=30&Mains=true&Not
+
+══ وبملت: LetterType=30 ══
+  ✗ وبملت: RuntimeError: https://search.codal.ir/api/search/v2/q?&Audited=true&AuditorRef=-1&Category=-1&Childs=true&CompanyState=-1&CompanyType=-1&Consolidatable=true&IsNotAudited=false&Length=-1&LetterType=30&Mains=true&Not
+
+══ خودرو: LetterType=20 ══
+  ✗ خودرو: RuntimeError: https://search.codal.ir/api/search/v2/q?&Audited=true&AuditorRef=-1&Category=-1&Childs=true&CompanyState=-1&CompanyType=-1&Consolidatable=true&IsNotAudited=false&Length=-1&LetterType=20&Mains=true&Not
