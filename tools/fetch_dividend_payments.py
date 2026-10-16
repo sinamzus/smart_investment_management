@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""جمع‌آوری تاریخ واقعی پرداخت سود نقدی (مرحلهٔ ۱: probe).
+"""جمع‌آوری تاریخ واقعی پرداخت سود نقدی از کدال.
+
+مرحلهٔ ۲ (اصلی):
+    python tools/fetch_dividend_payments.py --collect 30 --years 5 --log collect.txt   # قابل‌ادامه؛ روی 429 می‌ایستد
+    python tools/fetch_dividend_payments.py --parse                                   # ← data/corporate_actions/codal_*.csv
+محدودیت کدال: با ~۱۳۰ درخواست در ۰٫۴ ثانیه IP برای ساعت‌ها 429 گرفت؛ --collect پیش‌فرض ۸ ثانیه فاصله و توقف فوری دارد.
+
+مرحلهٔ ۱ (probe، قدیمی):
 
 محیط ابری Claude به TSETMC/کدال دسترسی ندارد (کد ۰۰۰/۴۰۳)؛ این اسکریپت باید روی سیستم شما اجرا شود.
 ساختار پاسخ کدال از حافظه نوشته شده و تست نشده است، پس اول فقط «probe» می‌کنیم: پاسخ خام را در
@@ -43,33 +50,46 @@ KEYS = ("پرداخت سود", "تقسیم سود", "سود نقدی", "تصمی
 
 
 _LAST = [0.0]
-MIN_GAP = 2.0          # ثانیه بین دو درخواست (کدال با ~۱ درخواست/ثانیه 429 می‌دهد)
+MIN_GAP = 2.0          # ثانیه بین دو درخواست؛ --gap آن را عوض می‌کند (برای --collect پیش‌فرض ۸)
+PATIENT = [True]       # True: روی 429 صبر و تکرار؛ False (پیش‌فرض --collect): فوراً توقف
+NREQ = [0]
 SESSION = requests.Session()
 
 
+class Blocked(Exception):
+    """کدال درخواست‌ها را محدود کرده (429 یا قطع اتصال)؛ ادامه دادن فقط مسدودی را طولانی‌تر می‌کند."""
+
+
 def fetch(url: str, retries: int = 6, timeout: int = 40) -> requests.Response:
-    """GET با فاصلهٔ حداقل MIN_GAP، و احترام به 429: صبر به‌اندازهٔ Retry-After (یا ۶۰، ۱۲۰، … ثانیه)."""
+    """GET با فاصلهٔ حداقل MIN_GAP. روی 429 / قطع اتصال: در حالت عادی فوراً Blocked؛ با PATIENT صبر فزاینده."""
     import random
     last = None
     for k in range(retries):
-        wait = _LAST[0] + MIN_GAP + random.uniform(0, 0.6) - time.time()
+        wait = _LAST[0] + MIN_GAP + random.uniform(0, 0.25 * MIN_GAP) - time.time()
         if wait > 0:
             time.sleep(wait)
         try:
+            NREQ[0] += 1
             r = SESSION.get(url, headers=HEADERS, timeout=timeout)
             _LAST[0] = time.time()
             if r.status_code == 200:
                 return r
             last = f"HTTP {r.status_code}"
             if r.status_code == 429:
+                if not PATIENT[0]:
+                    raise Blocked("429")
                 ra = r.headers.get("Retry-After", "")
                 pause = int(ra) if ra.isdigit() else 60 * (k + 1)
                 print(f"    … 429 (محدودیت نرخ کدال)؛ {pause} ثانیه صبر")
                 time.sleep(pause)
                 continue
+        except Blocked:
+            raise
         except Exception as e:  # noqa: BLE001
             _LAST[0] = time.time()
             last = repr(e)
+            if ("ConnectionReset" in last or "Connection aborted" in last) and not PATIENT[0]:
+                raise Blocked("connection reset") from None
         print(f"    … تلاش {k+1}/{retries} ناموفق: {str(last)[:90]}")
         time.sleep(5 * (k + 1))
     raise RuntimeError(f"{url[-60:]} -> {last}")
@@ -277,6 +297,125 @@ def payments(sym: str, letter_type: int, nl: int) -> None:
         time.sleep(0.8)
 
 
+# ── مرحلهٔ ۲: جمع‌آوری محتاطانه و قابل‌ادامه ─────────────────────────────────
+FA = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def fa2en(t: str) -> str:
+    return (t or "").translate(FA)
+
+
+def jyear(dt: str) -> int:
+    m = re.match(r"(\d{4})", fa2en(dt))
+    return int(m.group(1)) if m else 0
+
+
+def list_letters(sym: str, lt: int) -> list:
+    items = []
+    for p in range(1, 20):
+        url = SEARCH.format(page=p, sym=quote(sym)).replace("LetterType=-1", f"LetterType={lt}")
+        d = fetch(url).json()
+        got = d.get("Letters") or []
+        items += got
+        if len(items) >= d.get("Total", 0) or not got:
+            break
+    return items
+
+
+def collect(symbols: list, years: int) -> None:
+    """برای هر نماد: فهرست «زمان‌بندی پرداخت سود» (۳۰) و «تصمیمات مجمع» (۲۰) و دانلود نامه‌های years سال اخیر.
+    هر فایل یک بار دانلود می‌شود (اجرای دوباره از همان‌جا ادامه می‌دهد). روی 429 فوراً متوقف می‌شود."""
+    PATIENT[0] = False
+    base = RAW / "collect"
+    min_year = 1405 - years + 1
+    t0 = time.time()
+    try:
+        for i, sym in enumerate(symbols, 1):
+            d = base / sym
+            d.mkdir(parents=True, exist_ok=True)
+            got = 0
+            for lt in (LT_PAY, LT_AGM):
+                lf = d / f"list_{lt}.json"
+                if lf.exists():
+                    items = json.loads(lf.read_text(encoding="utf-8"))
+                else:
+                    items = list_letters(sym, lt)
+                    lf.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+                for it in items:
+                    if jyear(it.get("PublishDateTime")) < min_year or not it.get("Url"):
+                        continue
+                    if lt == LT_AGM and "سالیانه" not in (it.get("Title") or ""):
+                        continue
+                    out = d / f"{lt}_{it.get('TracingNo')}.html"
+                    if out.exists():
+                        continue
+                    url = it["Url"] if it["Url"].startswith("http") else "https://codal.ir" + it["Url"]
+                    r = fetch(url)
+                    out.write_bytes(r.content)
+                    got += 1
+                    if "Attachment.aspx" in url:      # پیوست‌ها (PDF/Excel) را هم بگیر
+                        links = re.findall(r'href="([^"]*(?:DownloadFile|\.pdf|\.xlsx?|\.docx?)[^"]*)"', r.text, re.I)
+                        for k, lk in enumerate(dict.fromkeys(links)):
+                            if k >= 2:
+                                break
+                            if lk.startswith("http"):
+                                full = lk
+                            elif lk.startswith("/"):
+                                full = "https://codal.ir" + lk
+                            else:
+                                full = "https://codal.ir/Reports/" + lk
+                            ext = (re.search(r"\.(pdf|xlsx?|docx?)", lk, re.I) or [None, "bin"])[1].lower()
+                            (d / f"{lt}_{it.get('TracingNo')}_att{k}.{ext}").write_bytes(fetch(full).content)
+                            got += 1
+            print(f"[{i}/{len(symbols)}] {sym}: {got} فایل تازه؛ کل درخواست‌ها {NREQ[0]}؛ {(time.time()-t0)/60:.1f} دقیقه")
+    except Blocked as e:
+        print(f"\n■ کدال محدود کرد ({e}). کار ذخیره شد؛ چند ساعت بعد همان دستور را دوباره اجرا کنید تا ادامه دهد.")
+        return
+    print("\n✓ تمام شد. حالا:  python tools/fetch_dividend_payments.py --parse")
+
+
+def parse() -> None:
+    """نامه‌های دانلودشده ← دو جدول: تصمیمات مجمع (تاریخ مجمع، DPS) و زمان‌بندی پرداخت (همهٔ تاریخ‌های متن)."""
+    import csv
+    import html as H
+
+    def txt(path):
+        u = H.unescape(path.read_text(encoding="utf-8", errors="replace"))
+        return u, re.sub(r"\s+", " ", re.sub(r"(?s)<[^>]+>", " ", re.sub(r"(?is)<(script|style).*?</\1>", " ", u)))
+
+    agm, pay = [], []
+    for f in sorted(RAW.glob("**/*.html")):
+        name = f.name
+        u, x = txt(f)
+        sym = f.parent.name if f.parent.parent.name == "collect" else (re.search(r"نماد:\s*(\S+)", x) or [None, ""])[1]
+        tn = re.sub(r"\D", "", name.split("_")[1]) if "_" in name else ""
+        period = fa2en((re.search(r"منتهی به\s+([۰-۹0-9]{4}/[۰-۹0-9]{2}/[۰-۹0-9]{2})", x) or [None, ""])[1])
+        if name.startswith("20_") or (name.startswith("letter_") and "تصمیمات مجمع" in x[:300]):
+            if "سالیانه" not in x[:400]:
+                continue
+            sd = re.findall(r"<SessionDate>([^<]*)</SessionDate>", u)
+            dps = re.search(r"DividendPerShare\s+سود نقدی هر سهم \(ریال\)\s+([\d۰-۹,٬]+)", x)
+            agm.append({"symbol": sym, "tracing": tn, "period_end_j": period, "session_date_j": fa2en(sd[0]) if sd else "",
+                        "dps_rial": fa2en(dps.group(1)).replace(",", "").replace("٬", "") if dps else ""})
+        elif name.startswith("30_") and not re.search(r"_att\d", name):
+            dates = sorted(set(re.findall(r"\b(1[34]\d{2}/\d{1,2}/\d{1,2})\b", fa2en(x))))
+            k = x.find("پرداخت")
+            atts = [a.name for a in f.parent.glob(f.stem + "_att*")]
+            pay.append({"symbol": sym, "tracing": tn, "period_end_j": period, "dates_j": ";".join(dates),
+                        "attachments": ";".join(atts), "snippet": x[max(0, k - 80):k + 220] if k >= 0 else x[:200]})
+    out = ROOT / "data" / "corporate_actions"
+    for nm, rows in (("codal_agm.csv", agm), ("codal_payment_schedule_raw.csv", pay)):
+        if not rows:
+            print(f"{nm}: ردیفی نیست")
+            continue
+        with (out / nm).open("w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+        print(f"{nm}: {len(rows)} ردیف")
+
+
+
 def sample_symbols(n: int) -> list:
     """n نمادِ بزرگ (تعداد سهام) از اعضای «شاخص كل» که در instrument_info.csv هست."""
     import csv
@@ -296,13 +435,30 @@ def main():
     ap.add_argument("--scan-types", metavar="SYMBOL", help="پویش LetterType و Category (۱ تا ۹۹) برای یک نماد؛ نوع «پرداخت سود» را پیدا می‌کند")
     ap.add_argument("--payments", action="append", metavar="SYMBOL", help="نامه‌های «زمان‌بندی پرداخت سود» (LetterType=30) این نماد را فهرست و چند نمونه را دانلود کن")
     ap.add_argument("--agm", action="append", metavar="SYMBOL", help="نامه‌های «تصمیمات مجمع» (LetterType=20) این نماد را فهرست و چند نمونه را دانلود کن")
+    ap.add_argument("--collect", type=int, metavar="N", help="جمع‌آوری محتاطانه برای N نمادِ بزرگِ شاخص كل (قابل‌ادامه؛ روی 429 توقف)")
+    ap.add_argument("--years", type=int, default=5, help="فقط نامه‌های این تعداد سال شمسی اخیر (پیش‌فرض ۵)")
+    ap.add_argument("--gap", type=float, help="ثانیه بین درخواست‌ها (پیش‌فرض: ۲؛ برای --collect ۸)")
+    ap.add_argument("--parse", action="store_true", help="نامه‌های دانلودشده را به data/corporate_actions/codal_*.csv تبدیل کن")
     ap.add_argument("--log", metavar="FILE", help="خروجی را (UTF-8) در فایل هم بنویس")
     ap.add_argument("--sample", type=int, metavar="N", help="N نمادِ بزرگِ شاخص كل را probe کن (بدون تایپ نام فارسی)")
     ap.add_argument("--pages", type=int, default=3, help="حداکثر صفحهٔ نتیجه برای هر نماد (پیش‌فرض ۳)")
     ap.add_argument("--letters", type=int, default=2, help="چند نامهٔ نمونه دانلود شود (پیش‌فرض ۲؛ برای --payments/--agm مثلاً ۴)")
     a = ap.parse_args()
+    global MIN_GAP
     if a.log:
         sys.stdout = Tee(a.log)
+    if a.gap:
+        MIN_GAP = a.gap
+    if a.parse:
+        parse()
+        return
+    if a.collect:
+        if not a.gap:
+            MIN_GAP = 8.0
+        syms = sample_symbols(a.collect)
+        print(f"{len(syms)} نماد؛ فاصلهٔ درخواست {MIN_GAP:.0f}s؛ نامه‌های {a.years} سال اخیر: {'، '.join(syms[:12])}{' …' if len(syms) > 12 else ''}")
+        collect(syms, a.years)
+        return
     for lt, lst in ((LT_PAY, a.payments), (LT_AGM, a.agm)):
         for sy in lst or []:
             try:

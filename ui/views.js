@@ -113,11 +113,12 @@ function divRender() {
 }
 function divPayPanel() {
   const p = X.divlab.payment_data, ok = p.available;
-  $('dv-pay-chip').textContent = ok ? p.rows + ' ردیف' : 'جمع‌آوری نشده'; $('dv-pay-chip').className = 'chip ' + (ok ? 'ok' : 'warn');
-  $('dv-pay').innerHTML = ok ? `<div class="prose">جدول <code>data/corporate_actions/dividend_payments.csv</code> موجود است (${p.rows} ردیف). تحلیل توزیع تأخیر هر نماد بعد از ساخت parser در این پنل می‌آید.</div>` :
-    `<div class="note">تاریخ واقعی پرداخت سود هنوز در داده نیست؛ مدل بالا با تأخیر ثابت L کار می‌کند. محیط ابری به کدال/TSETMC دسترسی ندارد، پس جمع‌آوری باید روی سیستم شما اجرا شود.</div>
-    <div class="prose"><b>گام ۱ — نمونه‌برداری (probe):</b><div class="cmdline">git pull\npython tools/fetch_dividend_payments.py --sample 3\ngit add -A; git commit -m "codal probe"; git push -u origin claude/charming-ptolemy-cyehmc</div>
-    خروجی خام در <code>data/raw/codal/</code> ذخیره می‌شود. <b>گام ۲:</b> روی همان نمونه parser و <code>--collect</code> برای همهٔ نمادها نوشته می‌شود؛ بعد در این پنل توزیع تأخیر (میانه، چارک‌ها، به‌تفکیک سال و نماد) و جایگزینی L ثابت با تأخیر واقعی هر نماد می‌آید.</div>`;
+  $('dv-pay-chip').textContent = ok ? p.rows + ' زمان‌بندی · ' + p.agm_rows + ' مجمع' : (p.agm_rows ? p.agm_rows + ' مجمع؛ زمان‌بندی نه' : 'جمع‌آوری نشده');
+  $('dv-pay-chip').className = 'chip ' + (ok ? 'ok' : 'warn');
+  $('dv-pay').innerHTML = `<div class="note">${ok ? 'نامه‌های «زمان‌بندی پرداخت سود» کدال رسیده‌اند؛ استخراج تاریخ پرداخت از آن‌ها (اغلب پیوست) هنوز ساخته نشده.' : 'تاریخ واقعی پرداخت سود هنوز در داده نیست؛ مدل بالا با تأخیر ثابت L کار می‌کند.'}
+    منبع: کدال، نامه‌های «زمان‌بندی پرداخت سود» (ن-۱۳، LetterType=30) و «تصمیمات مجمع عادی سالیانه» (ن-۵۲، LetterType=20؛ تاریخ مجمع و سود هر سهم). کدال نرخ درخواست را محدود می‌کند (429)؛ جمع‌آوری آهسته و قابل‌ادامه است.</div>
+    <div class="prose"><b>جمع‌آوری (روی سیستم شما؛ هر بار قطع شد، همان دستور ادامه می‌دهد):</b><div class="cmdline">python tools/fetch_dividend_payments.py --collect 30 --years 5 --log collect.txt\npython tools/fetch_dividend_payments.py --parse\ngit add -A; git commit -m "codal collect"; git push -u origin claude/charming-ptolemy-cyehmc</div>
+    خروجی: <code>data/corporate_actions/codal_agm.csv</code> (${p.agm_rows} ردیف) و <code>codal_payment_schedule_raw.csv</code> (${p.rows} ردیف).</div>`;
 }
 function initDiv() {
   document.querySelectorAll('#dv-idx button').forEach(b => b.onclick = () => { dv.k = b.dataset.k; divRender(); });

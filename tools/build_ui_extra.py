@@ -48,8 +48,10 @@ def divlab():
                      "pr": [round(float(v), 7) for v in j.pr], "y_ann_pct": r(j.y.sum() / yrs * 100, 2),
                      "month_share": [r(month.get(m, 0) / j.y.sum() * 100, 1) for m in range(1, 13)],
                      "scenarios": scen, "from": str(j.index[0].date()), "to": str(j.index[-1].date())}
-    pay = ROOT / "data/corporate_actions/dividend_payments.csv"
-    out["payment_data"] = {"available": pay.exists(), "rows": int(len(pd.read_csv(pay))) if pay.exists() else 0}
+    ca = ROOT / "data/corporate_actions"
+    n = lambda f: int(len(pd.read_csv(ca / f))) if (ca / f).exists() else 0   # noqa: E731
+    out["payment_data"] = {"available": n("codal_payment_schedule_raw.csv") > 0, "rows": n("codal_payment_schedule_raw.csv"),
+                           "agm_rows": n("codal_agm.csv")}
     return out
 
 
