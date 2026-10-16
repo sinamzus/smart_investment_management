@@ -88,14 +88,14 @@ def simulate(j: pd.DataFrame, lag_days, rb: float | None = None) -> pd.DataFrame
 def stats(nav: pd.Series, tr: pd.Series) -> dict:
     r = nav.pct_change().fillna(nav.iloc[0] - 1)
     d = (r - tr).dropna()
-    yrs = len(d) / 252
+    yrs = (d.index[-1] - d.index[0]).days / 365.25      # سال تقویمی (بازار ایران ~۲۴۰ روز معاملاتی، نه ۲۵۲)
     cum_nav, cum_tr = (1 + r).prod(), (1 + tr).prod()
     gap = (cum_nav / cum_tr) ** (1 / yrs) - 1
     return {"cum_ratio": cum_nav / cum_tr, "gap_pct_yr": gap * 100, "te_pct": d.std() * np.sqrt(252) * 100}
 
 
 def report(name: str, j: pd.DataFrame, lags, rates):
-    yrs = len(j) / 252
+    yrs = (j.index[-1] - j.index[0]).days / 365.25
     y_ann = j.y.sum() / yrs * 100
     print(f"\n── {name}: {j.index[0].date()}..{j.index[-1].date()} ({len(j)} روز)؛ سود نقدی ضمنی ≈ {y_ann:.2f}٪ در سال؛ "
           f"y منفی حذف‌شده: {(-j.y_raw.clip(upper=0)).sum()*100:.2f} واحد درصد در کل دوره")

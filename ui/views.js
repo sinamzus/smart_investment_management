@@ -80,7 +80,7 @@ function divCompute() {
   const trL = new Float64Array(n); let c = 1; for (let t = 0; t < n; t++) { c *= 1 + S.tr[t]; trL[t] = c; }
   const d = []; for (let t = 1; t < n; t++) d.push((nav[t] / nav[t - 1] - 1) - S.tr[t]);
   const mean = d.reduce((a, b) => a + b, 0) / d.length, sd = Math.sqrt(d.reduce((a, b) => a + (b - mean) ** 2, 0) / (d.length - 1));
-  const ratio = nav[n - 1] / trL[n - 1], gap = (Math.pow(ratio, 252 / n) - 1) * 100;
+  const ratio = nav[n - 1] / trL[n - 1], yrs = (Date.parse(S.dates[n - 1]) - Date.parse(S.dates[0])) / 864e5 / 365.25, gap = (Math.pow(ratio, 1 / yrs) - 1) * 100;
   dv.cur = { nav, trL, ratio, gap, te: sd * Math.sqrt(252) * 100, S };
 }
 function divDraw() {
@@ -101,7 +101,7 @@ function divRender() {
   $('dv-kpis').innerHTML = [['تفاوت ردیابی سالانه', sgn(c.gap, 2) + '%', cls(c.gap)], ['نسبت سطح نهایی NAV / TR', fmt(c.ratio, 3), c.ratio >= 1 ? 'up' : 'down'],
     ['خطای ردیابی (TE سالانه)', fmt(c.te, 2) + '%', ''], ['سود نقدی ضمنی سالانه', fmt(S.y_ann_pct, 1) + '%', ''], ['بازه', S.from.slice(0, 4) + '→' + S.to.slice(0, 4), '']]
     .map(([k, v, cl]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cl}">${v}</div></div>`).join('');
-  $('dv-lineage').innerHTML = `<span><b>مدل</b> NAV = ارزش پرتفوی + مطالبات سود − وام؛ سود روز استحقاق = TR − PR رسمی، پرداخت L روز بعد</span><span><b>L = ۰</b> دقیقاً TR رسمی (تأییدکنندهٔ مدل)</span><span><b>فرض</b> تأخیر ثابت و نرخ وام ثابت [راستی‌آزمایی نشده]</span><span><b>روش‌شناسی</b> فصل ۰۳ §۳٫۵</span>`;
+  $('dv-lineage').innerHTML = `<span><b>مدل</b> NAV = ارزش پرتفوی + مطالبات سود − وام؛ سود روز استحقاق = TR − PR رسمی، پرداخت L روز بعد</span><span><b>L = ۰</b> دقیقاً TR رسمی (تأییدکنندهٔ مدل)</span><span><b>فرض</b> تأخیر یکسان L برای همهٔ شرکت‌ها و نرخ وام ثابت در کل دوره</span><span><b>روش‌شناسی</b> فصل ۰۳ §۳٫۵</span>`;
   // سناریوهای ثابت
   const near = S.scenarios.reduce((b, r) => Math.abs(r.lag - dv.lag) < Math.abs(b.lag - dv.lag) ? r : b);
   $('dv-scen').innerHTML = th([['L (روز)', 'n'], ['A: بدون وام — فاصله %/سال', 'n'], ['A: TE %', 'n'], ['B ۲۵٪ — فاصله', 'n'], ['B ۲۵٪ — TE', 'n'], ['B ۳۵٪ — فاصله', 'n'], ['B ۳۵٪ — TE', 'n']]) +
@@ -112,12 +112,11 @@ function divRender() {
   divDraw();
 }
 function divPayPanel() {
-  const p = X.divlab.payment_data, ok = p.available;
-  $('dv-pay-chip').textContent = ok ? p.rows + ' زمان‌بندی · ' + p.agm_rows + ' مجمع' : (p.agm_rows ? p.agm_rows + ' مجمع؛ زمان‌بندی نه' : 'جمع‌آوری نشده');
-  $('dv-pay-chip').className = 'chip ' + (ok ? 'ok' : 'warn');
-  $('dv-pay').innerHTML = `<div class="note">${ok ? 'نامه‌های «زمان‌بندی پرداخت سود» کدال رسیده‌اند؛ استخراج تاریخ پرداخت از آن‌ها (اغلب پیوست) هنوز ساخته نشده.' : 'تاریخ واقعی پرداخت سود هنوز در داده نیست؛ مدل بالا با تأخیر ثابت L کار می‌کند.'}
-    منبع: کدال، نامه‌های «زمان‌بندی پرداخت سود» (ن-۱۳، LetterType=30) و «تصمیمات مجمع عادی سالیانه» (ن-۵۲، LetterType=20؛ تاریخ مجمع و سود هر سهم). کدال نرخ درخواست را محدود می‌کند (429)؛ جمع‌آوری آهسته و قابل‌ادامه است.</div>
-    <div class="prose"><b>جمع‌آوری (روی سیستم شما؛ هر بار قطع شد، همان دستور ادامه می‌دهد):</b><div class="cmdline">python tools/fetch_dividend_payments.py --collect 30 --years 5 --log collect.txt\npython tools/fetch_dividend_payments.py --parse\ngit add -A; git commit -m "codal collect"; git push -u origin claude/charming-ptolemy-cyehmc</div>
+  const p = X.divlab.payment_data;
+  $('dv-pay-chip').textContent = p.rows + ' زمان‌بندی · ' + p.agm_rows + ' مجمع';
+  $('dv-pay').innerHTML = `<div class="note">تاریخ مجمع و سود هر سهم از ${p.agm_rows} مصوبهٔ مجمع کدال خوانده شده و با تعدیل قیمت TSETMC تطبیق کامل دارد. تاریخ پرداخت در نامه‌های «زمان‌بندی پرداخت سود» (${p.rows} نامه) به‌صورت پیوست تصویری منتشر می‌شود و در این نسخه به داده تبدیل نشده است؛ بنابراین مدل بالا تأخیر یکسان L را برای همهٔ شرکت‌ها به کار می‌برد.
+    منبع: کدال، «زمان‌بندی پرداخت سود» (ن-۱۳) و «تصمیمات مجمع عادی سالیانه» (ن-۵۲).</div>
+    <div class="prose"><b>به‌روزرسانی داده (روی سیستم شما؛ قابل‌ادامه پس از قطع):</b><div class="cmdline">python tools/fetch_dividend_payments.py --collect 30 --years 5 --log collect.txt\npython tools/fetch_dividend_payments.py --parse\ngit add -A; git commit -m "codal collect"; git push -u origin claude/charming-ptolemy-cyehmc</div>
     خروجی: <code>data/corporate_actions/codal_agm.csv</code> (${p.agm_rows} ردیف) و <code>codal_payment_schedule_raw.csv</code> (${p.rows} ردیف).</div>`;
 }
 function initDiv() {
@@ -132,58 +131,93 @@ function initDiv() {
 }
 
 /* ══════════ Factor Lab ══════════ */
-const facState = { i: null, sig: 'mom' };
+const facState = { i: null, sig: 'mom', cost: 100 };
+const FAC_LAB = {
+  mom: { title: 'مومنتوم ۱۲−۱ · پنج‌گانه‌ها', Q1: 'پنجک ۱ (ضعیف‌ترین مومنتوم)', Q5: 'پنجک ۵ (قوی‌ترین مومنتوم)', file: 'momentum' },
+  lowvol: { title: 'کم‌نوسان ۲۵۲ روزه · پنج‌گانه‌ها', Q1: 'پنجک ۱ (پرنوسان‌ترین)', Q5: 'پنجک ۵ (کم‌نوسان‌ترین)', file: 'lowvol' }
+};
 function initFac() {
   document.querySelectorAll('#fc-sig button').forEach(b => b.onclick = () => { facState.sig = b.dataset.s; facState.i = null; renderFacSig(); });
+  $('fc-cost').oninput = e => { facState.cost = Math.max(0, +e.target.value || 0); renderFacSig(); };
   renderFacSig();
+}
+/* آمار یک سری ماهانه (اعشاری) */
+function mstats(x) {
+  const n = x.length, mu = x.reduce((a, b) => a + b, 0) / n, e = x.map(v => v - mu);
+  const sd = Math.sqrt(e.reduce((a, b) => a + b * b, 0) / (n - 1));
+  let v = e.reduce((a, b) => a + b * b, 0) / n;                      // نیوی‌وست، ۳ وقفه
+  for (let l = 1; l <= 3; l++) { let g = 0; for (let t = l; t < n; t++) g += e[t] * e[t - l]; v += 2 * (1 - l / 4) * g / n; }
+  let c = 1, pk = 1, mdd = 0; x.forEach(r => { c *= 1 + r; pk = Math.max(pk, c); mdd = Math.min(mdd, c / pk - 1); });
+  return { mu, sd, ann: (Math.pow(c, 12 / n) - 1) * 100, vol: sd * Math.sqrt(12) * 100, t: mu / Math.sqrt(v / n), ir: mu / sd * Math.sqrt(12), hit: x.filter(r => r > 0).length / n * 100, mdd: mdd * 100 };
+}
+function facNet(F, bp = facState.cost) {
+  const M = F.monthly, c = bp / 1e4, Q = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL'], net = {}, to = {};
+  Q.forEach(q => { net[q] = M[q].map((g, i) => g / 100 - (M.to[q][i] || 0) / 100 * c); to[q] = M.to[q].reduce((a, b) => a + (b || 0), 0); });
+  const yrs = (Date.parse(M.end[M.end.length - 1]) - Date.parse(M.end[0])) / 864e5 / 365.25 + 1 / 12;
+  return { net, yrs, toAnn: Object.fromEntries(Q.map(q => [q, to[q] / yrs])), ex: net.Q5.map((v, i) => v - net.ALL[i]), ls: net.Q5.map((v, i) => v - net.Q1[i]) };
 }
 function renderFacSig() {
   document.querySelectorAll('#fc-sig button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === facState.sig));
-  if (facState.sig === 'quality') {
-    $('fc-title').textContent = 'کیفیت · ساخته نشده';
-    $('fc-kpis').innerHTML = ''; $('fc-legend').innerHTML = ''; $('fc-chart').innerHTML = ''; $('fc-bars').innerHTML = ''; $('fc-year').innerHTML = ''; redraws.fac = null;
-    $('fc-method').innerHTML = `<div class="note">فاکتور کیفیت (سودآوری، اهرم، ثبات سود — مطابق MSCI Quality، فصل ۱۱) به دادهٔ صورت‌های مالی نیاز دارد که در مخزن نیست. منبعش همان کدال است (صورت‌های مالی ن-۱۰ با فیلدهای ساختاریافته، مثل EarningsPerShare که در نامه‌های مجمع دیدیم) و با همان روش محتاطانهٔ جمع‌آوری (فاصلهٔ ۸ ثانیه، قابل‌ادامه) گرفتنی است. تا آن موقع این نما عمداً عددی نشان نمی‌دهد.</div>`;
-    $('fc-lineage').innerHTML = ''; $('fc-lin-b').innerHTML = '';
+  const qual = facState.sig === 'quality';
+  $('fc-ctl').hidden = qual;
+  if (qual) {
+    $('fc-title').textContent = 'کیفیت'; $('fc-chip').textContent = 'دادهٔ بنیادی لازم است';
+    ['fc-kpis', 'fc-legend', 'fc-chart', 'fc-bars', 'fc-year', 'fc-stats', 'fc-lineage', 'fc-lin-b'].forEach(k => $(k).innerHTML = ''); redraws.fac = null;
+    $('fc-method').innerHTML = `<p><b>وضعیت:</b> فاکتور کیفیت (سودآوری، اهرم، ثبات سود — مطابق روش MSCI Quality، فصل ۱۱) بر صورت‌های مالی بنا می‌شود. منبع آن صورت‌های مالی میاندوره‌ای و سالانهٔ کدال (ن-۱۰) است که هنوز در مخزن نیست؛ به همین دلیل این نما عددی نشان نمی‌دهد.</p>
+    <p><b>تعریف هدف:</b> امتیاز Z ترکیبی از بازده حقوق صاحبان سهام (ROE)، نسبت بدهی به حقوق صاحبان سهام (کمتر بهتر) و انحراف معیار رشد سود هر سهم در ۵ سال (کمتر بهتر)؛ پنج‌گانه‌ها و آزمون‌ها مثل مومنتوم و کم‌نوسان.</p>`;
     return;
   }
-  const F = facState.sig === 'mom' ? X.factor : X.factor_lowvol;
-  $('fc-title').textContent = facState.sig === 'mom' ? 'مومنتوم ۱۲−۱ · پنج‌گانه‌ها' : 'کم‌نوسان (۲۵۲ روز) · پنج‌گانه‌ها';
-  renderFac(F);
-  if (facState.sig === 'lowvol') {
-    $('fc-method').innerHTML = `<div class="note">پیش‌نمایش پژوهشی؛ بدون هزینه و آزمون معناداری؛ با سوگیری بقای باقی‌مانده.</div><ol><li><b>سیگنال:</b> انحراف معیار بازده روزانهٔ TR در ۲۵۲ روز معاملاتی پیش از آخرین روز هر ماه شمسی؛ <b>پنجک ۵ = کم‌نوسان‌ترین</b>.</li><li>همان قواعد واجد شرایط، هم‌وزن، ریبالانس ماهانه، بازهٔ ارزیابی از ۱۳۹۵ (مثل مومنتوم).</li><li>نوسان سالانهٔ هر پنجک: ${['Q1','Q3','Q5','ALL'].map(q => q + ' ' + fmt(F.vol_ann[q], 1) + '٪').join(' · ')}.</li></ol><b>خوانش:</b> پنجک ۵ نسبت به همه ${sgn(F.q5_excess_ann_pct, 1)}٪ در سال. در بازار ایران روزهای بدون معامله (صف، توقف) نوسانِ اندازه‌گیری‌شده را مصنوعی کم می‌کند؛ پنجک ۵ ممکن است بیشتر «کم‌معامله» باشد تا «کم‌ریسک» — آزموده نشده. نسخهٔ مرجع (MSCI Min Vol) بهینه‌سازی کوواریانس است نه مرتب‌سازی ساده (فصل ۱۱).`;
-  }
+  const F = facState.sig === 'mom' ? X.factor : X.factor_lowvol, L = FAC_LAB[facState.sig];
+  $('fc-title').textContent = L.title;
+  $('fc-chip').textContent = `بک‌تست ماهانه · ${F.n_months} ماه · خالص هزینه`;
+  renderFac(F, L);
 }
-function renderFac(F) {
-  const c = F.curve, N = c.dates.length;
-  const col = { Q1: 'var(--down)', Q3: 'var(--ch-3)', Q5: 'var(--up)', ALL: 'var(--ch-2)' }, lab = { Q1: 'پنجک ۱ (ضعیف‌ترین)', Q3: 'پنجک ۳', Q5: 'پنجک ۵ (قوی‌ترین)', ALL: 'همهٔ واجدان شرایط (هم‌وزن)' };
-  $('fc-kpis').innerHTML = [['پنجک ۵ − پنجک ۱ (سالانه)', sgn(F.ls_ann_pct, 1) + '%', cls(F.ls_ann_pct)], ['پنجک ۵ نسبت به همه', sgn(F.q5_excess_ann_pct, 1) + '%', cls(F.q5_excess_ann_pct)], ['TE پنجک ۵ به همه', fmt(F.q5_minus_all_te, 1) + '%', ''], ['گردش ماهانهٔ پنجک ۵', fmt(F.q5_monthly_turnover_pct, 0) + '%', ''], ['ماه ریبالانس', F.n_months, '']]
+function renderFac(F, L) {
+  const N = facNet(F), M = F.monthly, S = { Q5ALL: mstats(N.ex), Q5Q1: mstats(N.ls) };
+  const ann = q => mstats(N.net[q]).ann, cost = facState.cost;
+  const col = { Q1: 'var(--down)', Q3: 'var(--ch-3)', Q5: 'var(--up)', ALL: 'var(--ch-2)' }, lab = { Q1: L.Q1, Q3: 'پنجک ۳', Q5: L.Q5, ALL: 'همهٔ واجدان شرایط (هم‌وزن)' };
+  const sig = Math.abs(S.Q5ALL.t) >= 1.96;
+  $('fc-kpis').innerHTML = [['پنجک ۵ نسبت به همه (سالانه)', sgn(ann('Q5') - ann('ALL'), 1) + '%', cls(ann('Q5') - ann('ALL'))], ['آمارهٔ t نیوی‌وست', fmt(S.Q5ALL.t, 2), sig ? cls(S.Q5ALL.t) : ''], ['نسبت اطلاعات (IR)', fmt(S.Q5ALL.ir, 2), ''], ['نرخ برد ماهانه', fmt(S.Q5ALL.hit, 0) + '%', ''], ['گردش سالانهٔ پنجک ۵', fmt(N.toAnn.Q5, 0) + '%', '']]
     .map(([k, v, cl]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cl}">${v}</div></div>`).join('');
   $('fc-legend').innerHTML = ['Q1', 'Q3', 'Q5', 'ALL'].map(q => `<span><i style="color:${col[q]}"></i>${lab[q]}</span>`).join('') + '<span class="readout" id="fc-readout"></span>';
-  const st = facState;
-  const draw = () => { paneChart($('fc-chart'), c.dates, [{ frac: 1, log: true, series: ['Q1', 'Q3', 'Q5', 'ALL'].map(q => ({ v: c[q], color: col[q], w: q === 'ALL' ? 1.6 : 1.2 })), fmt: v => fmt(v, 0) }], st);
-    $('fc-readout').innerHTML = st.i == null ? '' : `<b>${c.dates[st.i]}</b> &nbsp; Q1 <b>${fmt(c.Q1[st.i], 0)}</b> &nbsp; Q5 <b>${fmt(c.Q5[st.i], 0)}</b> &nbsp; همه <b>${fmt(c.ALL[st.i], 0)}</b>`; };
+  const curve = {}; ['Q1', 'Q3', 'Q5', 'ALL'].forEach(q => { let c = 100; curve[q] = [100, ...N.net[q].map(r => (c *= 1 + r))]; });
+  const dates = [F.from, ...M.end], st = facState;
+  const draw = () => { paneChart($('fc-chart'), dates, [{ frac: 1, log: true, series: ['Q1', 'Q3', 'Q5', 'ALL'].map(q => ({ v: curve[q], color: col[q], w: q === 'ALL' ? 1.6 : 1.2 })), fmt: v => fmt(v, 0) }], st);
+    $('fc-readout').innerHTML = st.i == null ? '' : `<b>${dates[st.i]}</b> &nbsp; Q1 <b>${fmt(curve.Q1[st.i], 0)}</b> &nbsp; Q5 <b>${fmt(curve.Q5[st.i], 0)}</b> &nbsp; همه <b>${fmt(curve.ALL[st.i], 0)}</b>`; };
   if (!$('fc-chart')._hov) { $('fc-chart')._hov = true; attachHover($('fc-chart'), null, i => { facState.i = i; redraws.fac && redraws.fac(); }); }
   redraws.fac = draw; draw();
-  $('fc-lineage').innerHTML = `<span><b>بازه</b> <span class="num">${F.from}</span> → <span class="num">${F.to}</span></span><span><b>بازده</b> TR (سود با استحقاق سرمایه‌گذاری مجدد)</span><span><b>بدون</b> هزینه معامله، بدون محدودیت نقدشوندگی</span><span><b>مبنا</b> فصل ۰۴ · ۰۵</span>`;
+  $('fc-lineage').innerHTML = `<span><b>بازه</b> <span class="num">${F.from}</span> → <span class="num">${F.to}</span></span><span><b>بازده</b> TR، خرید و نگهداری در ماه</span><span><b>هزینه</b> ${cost} bp رفت‌وبرگشت × گردش واقعی</span><span><b>مبنا</b> فصل ۰۴ · ۰۵</span>`;
   const q = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL'];
-  bars($('fc-bars'), ['۱', '۲', '۳', '۴', '۵', 'همه'], q.map(k => F.ann[k]), v => fmt(v, 1), (i) => i === 5);
-  $('fc-lin-b').innerHTML = `<span><b>میانگین نماد</b> در هر پنجک ≈ ${F.avg_names.Q1} · کل واجد ≈ ${F.avg_names.ALL}</span><span><b>خوانش</b> الگوی کوهان‌شکل؛ پنجک ۵ ضعیف‌ترین نیست ولی از همه کمتر است</span>`;
-  $('fc-year').innerHTML = th([['سال شمسی'], ['پنجک ۱ %', 'n'], ['پنجک ۵ %', 'n'], ['همه %', 'n'], ['۵−۱', 'n'], ['روز', 'n']]) + '<tbody>' + F.yearly.map(r => `<tr><td class="num">${r.jy}</td><td class="n ${cls(r.Q1)}">${sgn(r.Q1, 1)}</td><td class="n ${cls(r.Q5)}">${sgn(r.Q5, 1)}</td><td class="n ${cls(r.ALL)}">${sgn(r.ALL, 1)}</td><td class="n ${cls(r.ls)}">${sgn(r.ls, 1)}</td><td class="n mute">${r.days}</td></tr>`).join('') + '</tbody>';
-  $('fc-method').innerHTML = `<div class="note">پیش‌نمایش پژوهشی — نه توصیه و نه نتیجهٔ تأییدشده. هیچ آزمون معناداری (t-stat)، بدون هزینه، و با سوگیری بقای باقی‌ماندهٔ جهان (فقط بخشی از نمادهای حذف‌شده را داریم).</div>
-  <ol><li><b>سیگنال:</b> مومنتوم ۱۲−۱؛ بازدهٔ لگاریتمی TR از ۲۵۲ تا ۲۱ روز معاملاتی پیش از آخرین روز هر ماه شمسی (ماه آخر کنار گذاشته می‌شود).</li>
+  bars($('fc-bars'), ['۱', '۲', '۳', '۴', '۵', 'همه'], q.map(ann), v => fmt(v, 1), i => i === 5);
+  $('fc-lin-b').innerHTML = `<span><b>میانگین نماد</b> در هر پنجک ≈ ${F.avg_names.Q1} · کل واجد ≈ ${F.avg_names.ALL}</span><span><b>نوسان سالانه</b> ${['Q1', 'Q5', 'ALL'].map(k => (k === 'ALL' ? 'همه' : k) + ' ' + fmt(mstats(N.net[k]).vol, 1) + '٪').join(' · ')}</span>`;
+  const by = {}; M.end.forEach((d, i) => { const y = jyear.format(new Date(d + 'T00:00:00Z')); (by[y] = by[y] || []).push(i); });
+  const cmp = (arr, ix) => (ix.reduce((c, i) => c * (1 + arr[i]), 1) - 1) * 100;
+  $('fc-year').innerHTML = th([['سال شمسی'], ['پنجک ۱ %', 'n'], ['پنجک ۵ %', 'n'], ['همه %', 'n'], ['۵ − همه', 'n'], ['۵ − ۱', 'n'], ['ماه', 'n']]) + '<tbody>' + Object.entries(by).map(([y, ix]) => {
+    const a = cmp(N.net.Q1, ix), b = cmp(N.net.Q5, ix), c = cmp(N.net.ALL, ix);
+    return `<tr><td class="num">${y}</td><td class="n ${cls(a)}">${sgn(a, 1)}</td><td class="n ${cls(b)}">${sgn(b, 1)}</td><td class="n ${cls(c)}">${sgn(c, 1)}</td><td class="n ${cls(b - c)}">${sgn(b - c, 1)}</td><td class="n ${cls(b - a)}">${sgn(b - a, 1)}</td><td class="n mute">${ix.length}</td></tr>`; }).join('') + '</tbody>';
+  const half = Math.floor(N.ex.length / 2), h1 = mstats(N.ex.slice(0, half)), h2 = mstats(N.ex.slice(half));
+  const row = (k, s) => `<tr><td>${k}</td><td class="n ${cls(s.mu)}">${sgn(s.mu * 100, 2)}</td><td class="n ${cls(s.ann)}">${sgn(s.ann, 1)}</td><td class="n">${fmt(s.vol, 1)}</td><td class="n ${Math.abs(s.t) >= 1.96 ? cls(s.t) : ''}">${fmt(s.t, 2)}</td><td class="n">${fmt(s.ir, 2)}</td><td class="n">${fmt(s.hit, 0)}</td><td class="n down">${fmt(s.mdd, 1)}</td></tr>`;
+  $('fc-stats').innerHTML = th([['سری (خالص)'], ['میانگین ماهانه %', 'n'], ['سالانه %', 'n'], ['نوسان %', 'n'], ['t نیوی‌وست', 'n'], ['IR', 'n'], ['برد %', 'n'], ['بیشترین افت %', 'n']]) + '<tbody>' +
+    row('پنجک ۵ − همه', S.Q5ALL) + row('پنجک ۵ − پنجک ۱', S.Q5Q1) + row(`نیمهٔ اول (تا ${M.end[half - 1]})`, h1) + row('نیمهٔ دوم', h2) + '</tbody>';
+  const sigTxt = sig ? `در سطح ۵٪ معنادار است (|t| ≥ ۱٫۹۶)` : `در سطح ۵٪ معنادار نیست (|t| = ${fmt(Math.abs(S.Q5ALL.t), 2)} < ۱٫۹۶)`;
+  const sign = S.Q5ALL.mu >= 0 ? 'بیشتر' : 'کمتر';
+  $('fc-method').innerHTML = `<p><b>نتیجه:</b> پنجک ۵ پس از ${cost} bp هزینهٔ رفت‌وبرگشت، سالانه ${fmt(Math.abs(ann('Q5') - ann('ALL')), 1)} واحد درصد ${sign} از سبد هم‌وزن همهٔ واجدان شرایط بازده داده است؛ این تفاوت ${sigTxt}. ${facState.sig === 'lowvol' ? `نوسان پنجک ۵ (${fmt(mstats(N.net.Q5).vol, 1)}٪) از همه (${fmt(mstats(N.net.ALL).vol, 1)}٪) کمتر است؛ کاهش ریسک برقرار است حتی اگر بازده اضافه معنادار نباشد.` : 'الگوی پنجک‌ها کوهان‌شکل است: قوی‌ترین مومنتوم از میانهٔ بازار ضعیف‌تر است.'}</p>
+  <ol><li><b>سیگنال:</b> ${facState.sig === 'mom' ? 'بازدهٔ لگاریتمی TR از ۲۵۲ تا ۲۱ روز معاملاتی پیش از آخرین روز هر ماه شمسی (ماه آخر کنار گذاشته می‌شود).' : 'انحراف معیار بازدهٔ روزانهٔ TR در ۲۵۲ روز معاملاتی پیش از آخرین روز هر ماه شمسی؛ پنجک ۵ کم‌نوسان‌ترین است.'}</li>
   <li><b>واجد شرایط:</b> دست‌کم ۸۰٪ روزهای پنجره داده و دست‌کم ۵۰٪ روزهایی با بازده غیرصفر (حذف نمادهای عملاً متوقف)، و دادهٔ روز بعد.</li>
-  <li><b>پنجک‌ها:</b> مرتب‌سازی ساده؛ هم‌وزن درون هر پنجک؛ ریبالانس هر ماه شمسی؛ بازده روزانه تا ریبالانس بعد.</li>
-  <li><b>بازه:</b> ارزیابی از ۱۳۹۵/۰۱ (ردیف‌های ۲۰۱۲–۲۰۱۴ هنوز تعدیل‌نشدهٔ پراکنده دارند و سیگنال را آلوده می‌کنند).</li></ol>
-  <b>خوانش صادقانه:</b> مومنتوم خام ۱۲−۱ در این نمونه پریمیوم مثبت نشان نمی‌دهد (پنجک ۵ از میانگین کمتر است). فرضیه‌های محتمل، آزموده‌نشده: بازگشت میانگین پس از جهش‌های بازگشایی با سقف نوسان، اثر بازار صعودی تورمی همگانی، و آلودگی توقف‌های طولانی. گام بعد: مومنتوم تعدیل‌شده با نوسان یا باقیمانده‌ای نسبت به بازار/صنعت، حذف سهام در صف، و فاکتور کیفیت/حداقل نوسان (فصل ۱۱).`;
-  $('fc-csv').onclick = () => download('factor_momentum_curves.csv', [['date', 'Q1', 'Q3', 'Q5', 'ALL'], ...c.dates.map((d, i) => [d, c.Q1[i], c.Q3[i], c.Q5[i], c.ALL[i]])]);
+  <li><b>سبد:</b> هم‌وزن درون هر پنجک در روز ریبالانس (آخرین روز معاملاتی هر ماه شمسی)؛ تا ریبالانس بعد وزن‌ها با بازده رانش می‌کنند (خرید و نگهداری).</li>
+  <li><b>هزینه:</b> گردش یک‌طرفهٔ واقعی هر ماه (½ Σ|وزن هدف − وزن رانش‌یافته|) × هزینهٔ رفت‌وبرگشت ورودی؛ ساخت اولیه حساب نمی‌شود. همین هزینه به سبد «همه» هم اعمال می‌شود.</li>
+  <li><b>آزمون:</b> t با خطای معیار نیوی‌وست (۳ وقفه) چون بازده ماهانهٔ بازار ایران خودهمبستگی مثبت دارد؛ سالانه‌سازی بازده با ۱۲ ماه، نوسان با √۱۲.</li>
+  <li><b>بازه:</b> از ۱۳۹۵/۰۱؛ سیگنال از ۲۰۱۵ ساخته می‌شود.</li></ol>
+  <p><b>محدودیت‌ها:</b> جهان شامل اعضای فعلی «شاخص كل» و ${X.qa.universe.extras} نماد حذف‌شدهٔ بازیابی‌شده است، نه همهٔ نمادهای تاریخی؛ «پنجک ۵ − پنجک ۱» به فروش استقراضی نیاز دارد که در بورس تهران عملاً در دسترس نیست و فقط شاخص تشخیصی فاکتور است؛ مدل هزینه خطی است و صف خرید/فروش و دامنهٔ نوسان را در نظر نمی‌گیرد (فصل ۶).</p>`;
+  $('fc-csv').onclick = () => download(`factor_${L.file}_monthly_net_${cost}bp.csv`, [['month_end', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL', 'to_Q5_pct', 'to_ALL_pct'], ...M.end.map((d, i) => [d, ...q.map(k => (N.net[k][i] * 100).toFixed(3)), M.to.Q5[i] ?? '', M.to.ALL[i] ?? ''])]);
 }
 
 /* ══════════ Rebalance ══════════ */
 function rebRender() {
   const R = X.rebalance, cost = +$('rb-cost').value || 0, nm = { 'jalali-month': 'ماهانه (شمسی)', 'jalali-quarter': 'فصلی (شمسی)', 'jalali-halfyear': 'شش‌ماهه', 'jalali-year': 'سالانه' };
   const best = R.policies.reduce((b, p) => p.te < b.te ? p : b);
-  $('rb-pol').innerHTML = th([['سیاست'], ['ریبالانس', 'n'], ['گردش هر بار %', 'n'], ['گردش سالانه %', 'n'], ['TE در برابر رسمی %', 'n'], ['همبستگی', 'n'], ['نسبت سطح', 'n'], ['هزینهٔ فرضی bp/سال', 'n']]) + '<tbody>' + R.policies.map(p => `<tr ${p === best ? 'aria-selected="true"' : ''}><td>${nm[p.policy]}${p === best ? ' <span class="chip info">کمترین TE</span>' : ''}</td><td class="n">${p.n_rebal}</td><td class="n">${fmt(p.avg_turn_pct, 1)}</td><td class="n">${fmt(p.annual_turn_pct, 1)}</td><td class="n">${fmt(p.te)}</td><td class="n">${fmt(p.corr, 4)}</td><td class="n">${fmt(p.cum_ratio, 3)}</td><td class="n">${fmt(p.annual_turn_pct * cost / 100, 0)}</td></tr>`).join('') + '</tbody>';
-  $('rb-lin-a').innerHTML = `<span><b>هدف</b> «كل (هم وزن)» TR رسمی</span><span><b>گردش</b> یک‌طرفه = ½ Σ|وزن هدف − وزن رانش‌یافته|</span><span><b>هزینه</b> گردش سالانه × هزینهٔ رفت‌وبرگشت (ورودی بالا؛ فرضی)</span><span><b>روش</b> فصل ۰۳ §۳٫۴ · فصل ۰۶</span>`;
+  $('rb-pol').innerHTML = th([['سیاست'], ['ریبالانس', 'n'], ['گردش هر بار %', 'n'], ['گردش سالانه %', 'n'], ['TE در برابر رسمی %', 'n'], ['همبستگی', 'n'], ['نسبت سطح', 'n'], ['هزینه bp/سال', 'n']]) + '<tbody>' + R.policies.map(p => `<tr ${p === best ? 'aria-selected="true"' : ''}><td>${nm[p.policy]}${p === best ? ' <span class="chip info">کمترین TE</span>' : ''}</td><td class="n">${p.n_rebal}</td><td class="n">${fmt(p.avg_turn_pct, 1)}</td><td class="n">${fmt(p.annual_turn_pct, 1)}</td><td class="n">${fmt(p.te)}</td><td class="n">${fmt(p.corr, 4)}</td><td class="n">${fmt(p.cum_ratio, 3)}</td><td class="n">${fmt(p.annual_turn_pct * cost / 100, 0)}</td></tr>`).join('') + '</tbody>';
+  $('rb-lin-a').innerHTML = `<span><b>هدف</b> «كل (هم وزن)» TR رسمی</span><span><b>گردش</b> یک‌طرفه = ½ Σ|وزن هدف − وزن رانش‌یافته|</span><span><b>هزینه</b> گردش سالانه × هزینهٔ رفت‌وبرگشت (ورودی بالا)</span><span><b>روش</b> فصل ۰۳ §۳٫۴ · فصل ۰۶</span>`;
 }
 function initReb() {
   const R = X.rebalance;
@@ -213,8 +247,8 @@ function initQA() {
   $('qa-kpis').innerHTML = [['اعضای «شاخص كل»', u.k_members], ['با فایل قیمت', u.k_with_prices], ['نمادهای extras', u.extras], ['نماد در بازده', u.stocks_bourse_in_returns], ['ردیف قاعدهٔ ۸', rl.rule8]].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${fmt(v, 0)}</div></div>`).join('');
   $('qa-gaps').innerHTML = `<b>باز و شناخته‌شده</b><ul>
   <li><b>صنعت ۳۴ خودرو:</b> TE ۳٫۲٪ (همبستگی ۰٫۹۹۶)؛ فرضیهٔ زمان‌بندی/سهام شناور/توقف/فرابورس رد شد؛ خطا پراکنده است.</li>
-  <li><b>تاریخ پرداخت سود:</b> جمع‌آوری نشده ← Dividend Lab فقط سناریوی ثابت دارد.</li>
-  <li><b>هم‌وزن TR رسمی:</b> سطح من ≈ ۴٫۹٪ کمتر (۰٫۹۵) و PR ≈ ۴٫۶٪ بیشتر؛ تفکیک سود/سرمایه در رویدادهای ترکیبی.</li>
+  <li><b>تاریخ پرداخت سود:</b> ${X.divlab.payment_data.agm_rows} مصوبهٔ مجمع و ${X.divlab.payment_data.rows} نامهٔ زمان‌بندی پرداخت از کدال جمع‌آوری شد؛ متن زمان‌بندی‌ها عمدتاً تصویر اسکن‌شده است، پس Dividend Lab با تأخیر یکسان L محاسبه می‌کند.</li>
+  <li><b>هم‌وزن TR رسمی:</b> نسبت سطح بازسازی به رسمی ${fmt(D.stats.EW.all.cum_ratio, 3)}؛ تفاوت از تفکیک سود و افزایش سرمایه در رویدادهای ترکیبی است.</li>
   <li><b>سهام کاملاً حذف‌شده:</b> فقط آن‌هایی که با جست‌وجوی نام صنعت پیدا شده‌اند (۱۳۶ نماد extras)؛ جهان کامل نیست.</li>
   <li><b>۴ صنعت بدون عضو فعلی (۳۳، ۳۵، ۳۶، ۴۵)</b> و ۲۶ با کمتر از ۲۰۰ روز هم‌پوشانی: قابل مقایسه نیستند.</li></ul>`;
   $('qa-csv').onclick = () => download('sector_qa.csv', [['sector', 'name', 'n_official', 'n_missing', 'corr', 'te_pct', 'n_all', 'corr_all', 'te_all_pct', 'cum_ratio'], ...rows.map(r => [r.sector, r.name, r.n_last, r.n_miss, r.corr, r.te, r.n_all, r.corr_all, r.te_all, r.cum])]);
@@ -228,9 +262,10 @@ function initRep() {
     ['«كل (هم وزن)» TR فصلی شمسی', `همبستگی ${fmt(st.EW.all.corr, 4)} · TE ${fmt(st.EW.all.te)}٪ · نسبت سطح ${fmt(st.EW.all.cum_ratio, 3)}`, 'فصل ۳ §۳٫۴'],
     ['شاخص‌های صنعت', `${Q.comparable} قابل مقایسه · ${Q.n_corr99} با همبستگی ≥ ۰٫۹۹ · میانهٔ TE ${fmt(Q.median_te)}٪`, 'فصل ۳ §۳٫۴'],
     ['هزینهٔ تأخیر سود ۹۰ روزه (K / EW)', `${sgn(dvK.A.gap_pct_yr)}٪ / ${sgn(dvE.A.gap_pct_yr)}٪ در سال (بدون وام)`, 'فصل ۳ §۳٫۵'],
-    ['مومنتوم ۱۲−۱ (پیش‌نمایش)', `پنجک ۵ − ۱ = ${sgn(F.ls_ann_pct, 1)}٪ در سال؛ پنجک ۵ نسبت به همه ${sgn(F.q5_excess_ann_pct, 1)}٪`, 'فصل ۴ · ۵']];
+    ...[['مومنتوم ۱۲−۱', X.factor], ['کم‌نوسان ۲۵۲ روزه', X.factor_lowvol]].map(([n, G]) => { const N = facNet(G, 100), s = mstats(N.ex), a = mstats(N.net.Q5).ann - mstats(N.net.ALL).ann;
+      return [n + ' (خالص ۱۰۰ bp)', `پنجک ۵ نسبت به همه ${sgn(a, 1)}٪ در سال · t نیوی‌وست ${fmt(s.t, 2)} · ${Math.abs(s.t) >= 1.96 ? 'معنادار' : 'غیرمعنادار'} در سطح ۵٪`, 'فصل ۵']; })];
   $('rp-sum').innerHTML = th([['نتیجه'], ['مقدار'], ['مرجع']]) + '<tbody>' + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="mute">${r[2]}</td></tr>`).join('') + '</tbody>';
-  $('rp-text').innerHTML = `<b>وضعیت.</b> داده تا <span class="num">${D.meta.asof}</span>؛ ${fmt(D.meta.n_price_rows, 0)} ردیف قیمت. مرجع‌ها: «شاخص كل» و «كل (هم وزن)» رسمی. ماکت سرمایه‌پذیر با بازتولید کامل و بدون سقف سرمایه/وزن؛ تنها شکاف ساختاری، تأخیر پرداخت سود است. تاریخ واقعی پرداخت هنوز جمع‌آوری نشده. این صفحه از همان دادهٔ UI ساخته می‌شود؛ «چاپ» ← PDF.`;
+  $('rp-text').innerHTML = `<b>وضعیت.</b> داده تا <span class="num">${D.meta.asof}</span>؛ ${fmt(D.meta.n_price_rows, 0)} ردیف قیمت. مرجع‌ها: «شاخص كل» و «كل (هم وزن)» رسمی. ماکت سرمایه‌پذیر با بازتولید کامل و بدون سقف سرمایه/وزن؛ تنها شکاف ساختاری، تأخیر پرداخت سود است و با تأخیر یکسان L مدل می‌شود. فاکتورها با بک‌تست ماهانهٔ خالص هزینه و آزمون نیوی‌وست سنجیده می‌شوند؛ بازده‌ها با سال تقویمی سالانه شده‌اند. «چاپ» ← PDF.`;
   $('rp-lin-a').innerHTML = `<span><b>ساخت</b> <span class="num">${X.built}</span></span><span><b>داده</b> <span class="num">${D.meta.built}</span></span><span><b>قاعدهٔ سند</b> هر تغییر روش‌شناسی ← فصل + CHANGELOG (<code>CLAUDE.md</code>)</span>`;
   const log = X.reports.changelog; $('rp-chip').textContent = log.length + ' ردیف';
   $('rp-log').innerHTML = th([['تاریخ'], ['تغییر'], ['فصل‌ها']]) + '<tbody>' + log.slice().reverse().map(r => `<tr><td class="num">${r.date}</td><td title="${r.text.replace(/"/g, '&quot;')}" style="white-space:normal;min-width:260px">${r.title}</td><td class="mute" style="white-space:normal">${r.chapters}</td></tr>`).join('') + '</tbody>';

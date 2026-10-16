@@ -139,7 +139,19 @@ svg.chart { width:100%; height:100%; display:block; }
 .bars .b em { position:absolute; top:-14px; left:0; right:0; text-align:center; font: 500 var(--fs-2xs) var(--font-num); color: var(--tx-2); font-style: normal; }
 .cmdline { font-family: var(--font-num); direction:ltr; text-align:left; background: var(--bg-app); border: var(--hair) solid var(--line-strong); padding: 4px 8px; margin: 4px 0; font-size: var(--fs-xs); color: var(--tx-1); user-select: all; border-radius: var(--radius); white-space: pre-wrap; }
 .scroll { overflow:auto; }
-@media print { .topbar,.statusbar,.ctl,.panel-tools{display:none!important} body{overflow:visible} .app{display:block;height:auto} .workspace{display:block!important;height:auto} .panel{break-inside:avoid;margin-bottom:12px} }
+/* ── راهنمای شناور ─────────────────────────────────────── */
+.has-tip { cursor: help; }
+th.has-tip, .kpi .k.has-tip, .lineage b.has-tip, .legend span.has-tip, .ctl label.has-tip, .panel-title.has-tip {
+  text-decoration: underline dotted var(--tx-3); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.nav a.has-tip, button.has-tip, .symlink.has-tip, .chip.has-tip { cursor: pointer; }
+#tip { position: fixed; z-index: 1000; max-width: 340px; padding: 8px 10px; pointer-events: none;
+  background: var(--bg-head); color: var(--tx-1); border: var(--hair) solid var(--line-strong); border-inline-start: 2px solid var(--accent);
+  box-shadow: 0 6px 18px rgba(0,0,0,.28); font-size: var(--fs-sm); line-height: 1.65; text-align: start; }
+#tip .tt { font-weight: 600; margin-bottom: 2px; }
+#tip .td { color: var(--tx-2); }
+#tip .tf { margin-top: 6px; padding: 4px 6px; background: var(--bg-panel); border: var(--hair) solid var(--line); font-variant-numeric: tabular-nums; font-size: var(--fs-xs); color: var(--tx-1); }
+#tip .ts { margin-top: 4px; font-size: var(--fs-2xs); color: var(--tx-3); }
+@media print { .topbar,.statusbar,.ctl,.panel-tools,#tip{display:none!important} .has-tip{text-decoration:none!important} body{overflow:visible} .app{display:block;height:auto} .workspace{display:block!important;height:auto} .panel{break-inside:avoid;margin-bottom:12px} }
 
 .chart text { direction: ltr; unicode-bidi: isolate; }
 

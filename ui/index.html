@@ -85,7 +85,7 @@
   <main class="workspace v-div" id="v-div" hidden>
     <section class="panel" style="--lg:var(--lg-a)">
       <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title" id="dv-title">ماکت سرمایه‌پذیر · تأخیر پرداخت سود</span>
-        <span class="chip info">فرض: تأخیر ثابت</span>
+        <span class="chip info">مدل: تأخیر یکسان L</span>
         <div class="seg" id="dv-idx"><button data-k="K" aria-pressed="true">كل</button><button data-k="EW" aria-pressed="false">هم‌وزن</button></div>
         <div class="seg" id="dv-str"><button data-s="A" aria-pressed="true">بدون وام</button><button data-s="B" aria-pressed="false">با تأمین مالی</button></div>
         <div class="panel-tools"><button class="tool" id="dv-csv">CSV</button></div></div>
@@ -109,29 +109,30 @@
 
   <main class="workspace v-fac" id="v-fac" hidden>
     <section class="panel" style="--lg:var(--lg-a)">
-      <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title" id="fc-title">مومنتوم ۱۲−۱ · پنج‌گانه‌ها</span><span class="chip warn">پیش‌نمایش پژوهشی</span>
+      <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title" id="fc-title">مومنتوم ۱۲−۱ · پنج‌گانه‌ها</span><span class="chip" id="fc-chip"></span>
         <div class="seg" id="fc-sig"><button data-s="mom" aria-pressed="true">مومنتوم</button><button data-s="lowvol" aria-pressed="false">کم‌نوسان</button><button data-s="quality" aria-pressed="false">کیفیت</button></div>
         <div class="panel-tools"><button class="tool" id="fc-csv">CSV</button></div></div>
+      <div class="ctl" id="fc-ctl"><label>هزینهٔ رفت‌وبرگشت <input type="number" id="fc-cost" min="0" max="500" step="10" value="100"> bp</label><span class="mute">همهٔ اعداد این نما خالص همین هزینه‌اند</span></div>
       <div class="kpis" id="fc-kpis"></div>
       <div class="panel-body"><div class="legend" id="fc-legend"></div><svg class="chart" id="fc-chart" dir="ltr"></svg></div>
       <div class="lineage" id="fc-lineage"></div></section>
     <section class="panel" style="--lg:var(--lg-b)">
-      <div class="panel-head"><span class="lg-badge">B</span><span class="panel-title">بازده سالانهٔ هندسی هر پنجک</span></div>
+      <div class="panel-head"><span class="lg-badge">B</span><span class="panel-title">بازده سالانهٔ هندسی هر پنجک (خالص)</span></div>
       <div class="panel-body"><div class="bars" id="fc-bars"></div></div>
       <div class="lineage" id="fc-lin-b"></div></section>
     <section class="panel" style="--lg:var(--lg-c)">
-      <div class="panel-head"><span class="lg-badge">C</span><span class="panel-title">بازده هر سال شمسی</span></div>
+      <div class="panel-head"><span class="lg-badge">C</span><span class="panel-title">بازده هر سال شمسی (خالص)</span></div>
       <div class="panel-body"><table class="dt" id="fc-year"></table></div></section>
     <section class="panel" style="--lg:var(--lg-e)">
-      <div class="panel-head"><span class="lg-badge">D</span><span class="panel-title">روش و محدودیت‌ها</span></div>
-      <div class="panel-body scroll"><div class="prose" id="fc-method"></div></div></section>
+      <div class="panel-head"><span class="lg-badge">D</span><span class="panel-title">آزمون آماری · روش · محدودیت‌ها</span></div>
+      <div class="panel-body scroll"><table class="dt" id="fc-stats"></table><div class="prose" id="fc-method"></div></div></section>
   </main>
 
   <main class="workspace v-reb" id="v-reb" hidden>
     <section class="panel" style="--lg:var(--lg-a)">
       <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title">سیاست ریبالانس هم‌وزن · خطا در برابر هزینه</span>
         <div class="panel-tools"><button class="tool" id="rb-csv">CSV</button></div></div>
-      <div class="ctl"><label>هزینهٔ رفت‌وبرگشت (فرضی) <input type="number" id="rb-cost" min="0" max="500" step="10" value="100"> bp</label><span class="mute">قابل‌تنظیم؛ عدد واقعی نهاد [تأیید لازم]</span></div>
+      <div class="ctl"><label>هزینهٔ رفت‌وبرگشت <input type="number" id="rb-cost" min="0" max="500" step="10" value="100"> bp</label><span class="mute">ورودی؛ کارمزد و مالیات قرارداد نهاد را وارد کنید</span></div>
       <div class="panel-body"><table class="dt" id="rb-pol"></table></div>
       <div class="lineage" id="rb-lin-a"></div></section>
     <section class="panel" style="--lg:var(--lg-b)">
@@ -387,5 +388,7 @@ addEventListener('keydown', e => { const typing = ['INPUT', 'TEXTAREA'].includes
 render(); renderComp(); drawChart();
 </script>
 <script src="views.js"></script>
+<script src="glossary.js"></script>
+<script src="tips.js"></script>
 </body>
 </html>

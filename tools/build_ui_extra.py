@@ -5,7 +5,8 @@
     python tools/build_ui_extra.py
 
 همهٔ اعداد از همان محاسبه‌های tools/ می‌آیند؛ هیچ عدد ساختگی نیست.
-Factor Lab فقط «پیش‌نمایش پژوهشی» است (مومنتوم ۱۲−۱، بدون هزینه، با سوگیری بقای باقی‌مانده) و در UI همین‌طور برچسب می‌خورد.
+Factor Lab: بک‌تست ماهانهٔ پنج‌گانه‌ها با سری ماهانهٔ ناخالص و گردش واقعی وزن هر پنجک؛ هزینه و آزمون‌های آماری
+(t نیوی‌وست، IR، نرخ برد) در UI روی همین سری‌ها حساب می‌شوند تا هزینه قابل‌تنظیم باشد.
 """
 import json
 import re
@@ -33,7 +34,7 @@ def divlab():
     out = {}
     for name in ir.PAIRS:
         j = ir.load_pair(name)
-        yrs = len(j) / 252
+        yrs = (j.index[-1] - j.index[0]).days / 365.25       # سال تقویمی
         month = j.y.groupby(j.index.map(lambda d: ewr.g2j(d.year, d.month, d.day)[1])).sum()
         scen = []
         for L in (0, 30, 60, 90, 120, 180, 240):
@@ -101,7 +102,7 @@ def rebalance(R):
             rr = np.where(avail, X[t], 0.0)
             rp = (w * rr).sum()
             w = w * (1 + rr) / (1 + rp)
-        yrs = len(M) / 252
+        yrs = (M.index[-1] - M.index[0]).days / 365.25
         sr = ewr.portfolio_returns(M, flags)
         jj = pd.concat([sr, ew.official(ew.OFFICIAL["TR"])], axis=1, join="inner").dropna()
         jj.columns = ["m", "o"]
@@ -133,13 +134,13 @@ def rebalance(R):
                 continue
             w1 = w1 / tot
             turns.append(0.5 * np.abs(w1 - drift).sum())
-        yrs = len(W) / 252
+        yrs = (W.index[-1] - W.index[0]).days / 365.25
         cap[pol] = {"n": len(turns), "avg_turn_pct": r(np.mean(turns) * 100, 1), "annual_turn_pct": r(sum(turns) / yrs * 100, 1)}
     out["cap"] = cap
     return out
 
 
-# ── Factor Lab: مومنتوم ۱۲−۱ (پیش‌نمایش پژوهشی) ────────────────────────────
+# ── Factor Lab: بک‌تست پنج‌گانه‌ها (مومنتوم ۱۲−۱، کم‌نوسان) ────────────────────────────
 def factor(R, signal: str = "mom"):
     """signal: mom = مومنتوم ۱۲−۱ (پنجک ۵ = قوی‌ترین)، lowvol = نوسان ۲۵۲ روزه (پنجک ۵ = کم‌نوسان‌ترین)."""
     M = R.pivot_table(index="date", columns="ins_code", values="r_tr", aggfunc="last")
@@ -160,6 +161,8 @@ def factor(R, signal: str = "mom"):
     port = {q: np.full(len(dates), np.nan) for q in ("Q1", "Q2", "Q3", "Q4", "Q5", "ALL")}
     names = {q: [] for q in port}
     holds = {}
+    prev, tov = {}, {q: [] for q in port}
+    mret, mret_end, mret_start = {q: [] for q in port}, [], []
     for a, b in zip(month_end[:-1], month_end[1:]):
         if a < 252 + 21 or a < start - 1:
             continue
@@ -183,6 +186,18 @@ def factor(R, signal: str = "mom"):
             seg = X[a + 1:b + 1][:, g]
             port[q][a + 1:b + 1] = np.nanmean(seg, axis=1)
             names[q].append(len(g))
+            # گردش یک‌طرفهٔ واقعی: ½ Σ|وزن هدف − وزن رانش‌یافتهٔ دورهٔ قبل|
+            w_new = np.zeros(X.shape[1]); w_new[g] = 1 / len(g)
+            to = None
+            if q in prev:
+                w_old = prev[q]
+                to = 0.5 * np.abs(w_new - w_old).sum()
+            tov[q].append(to)
+            grow = np.nanprod(1 + np.nan_to_num(seg), axis=0)
+            wd = np.zeros(X.shape[1]); wd[g] = w_new[g] * grow
+            prev[q] = wd / wd.sum() if wd.sum() > 0 else w_new
+            mret[q].append(float(grow.mean() - 1))          # خرید و نگهداری در ماه (وزن‌ها رانش می‌کنند)
+        mret_end.append(dates[min(b, len(dates) - 1)]); mret_start.append(dates[a + 1])
     S = pd.DataFrame(port, index=dates).dropna(how="all")
     S = S[S.index >= "2016-03-21"]
     yrs = len(S) / 252
@@ -212,7 +227,31 @@ def factor(R, signal: str = "mom"):
     res["q5_monthly_turnover_pct"] = r(np.mean(ch) * 100, 1)
     res["from"], res["to"] = str(S.index[0].date()), str(S.index[-1].date())
     res["signal"] = signal
-    res["vol_ann"] = {q: r(S[q].std() * np.sqrt(252) * 100, 1) for q in S.columns}
+    # سری ماهانه (از ۱۳۹۵/۰۱) برای هزینه و آزمون آماری در UI
+    keep = [i for i, d in enumerate(mret_start) if d >= pd.Timestamp("2016-03-20")]
+    res["monthly"] = {"end": [str(mret_end[i].date()) for i in keep],
+                      **{q: [round(mret[q][i] * 100, 4) for i in keep] for q in port},
+                      "to": {q: [None if tov[q][i] is None else round(tov[q][i] * 100, 2) for i in keep] for q in port}}
+    if keep:
+        for q in port:
+            res["monthly"]["to"][q][0] = None          # ساخت اولیه جزو گردش جاری نیست
+    # خلاصه از سری ماهانهٔ خرید‌ونگهداری (همان که UI نشان می‌دهد؛ ناخالص از هزینه)
+    Mq = {q: np.array([mret[q][i] for i in keep]) for q in port}
+    n = len(keep)
+    ann = lambda x: ((1 + x).prod() ** (12 / n) - 1) * 100
+    res["ann"] = {q: r(ann(Mq[q]), 1) for q in port}
+    res["vol_ann"] = {q: r(Mq[q].std(ddof=1) * np.sqrt(12) * 100, 1) for q in port}
+    res["ls_ann_pct"] = r(ann(Mq["Q5"] - Mq["Q1"]), 1)
+    res["q5_excess_ann_pct"] = r(res["ann"]["Q5"] - res["ann"]["ALL"], 1)
+    res["q5_minus_all_te"] = r((Mq["Q5"] - Mq["ALL"]).std(ddof=1) * np.sqrt(12) * 100, 1)
+    res["ls_vol_pct"] = r((Mq["Q5"] - Mq["Q1"]).std(ddof=1) * np.sqrt(12) * 100, 1)
+
+    def nw_t(x, L=3):
+        e = x - x.mean(); T = len(x)
+        v = e @ e / T + 2 * sum((1 - l / (L + 1)) * (e[l:] @ e[:-l]) / T for l in range(1, L + 1))
+        return r(x.mean() / np.sqrt(v / T), 2)
+    res["t_nw_gross"] = {"Q5_ALL": nw_t(Mq["Q5"] - Mq["ALL"]), "Q5_Q1": nw_t(Mq["Q5"] - Mq["Q1"])}
+    res["n_months"] = n
     return res
 
 
@@ -238,7 +277,7 @@ def risk(R, info):
                   "vol": [r(vol.iloc[i], 2) for i in idx], "max_dd": r(dd.min() * 100, 1), "peak": str(peak.date()),
                   "trough": str(trough.date()), "recovered": str(rec.index[0].date()) if len(rec) else None,
                   "vol_all": r(r_.std() * np.sqrt(252) * 100, 1), "vol_1y": r(r_[-252:].std() * np.sqrt(252) * 100, 1),
-                  "ann": r(((1 + r_).prod() ** (252 / len(r_)) - 1) * 100, 1), "yearly": yrs}
+                  "ann": r(((1 + r_).prod() ** (365.25 / (r_.index[-1] - r_.index[0]).days) - 1) * 100, 1), "yearly": yrs}
     # همبستگی ماهانهٔ ۱۲ صنعت بزرگ (بازسازی ارزش‌وزن)، از ۱۳۹۸
     Rs = R.merge(info[["ins_code", "sector_code", "sector_name"]], on="ins_code", how="left")
     Rs = Rs[Rs.date >= "2019-03-21"]
@@ -342,7 +381,7 @@ def main():
             "qa": qa(panel, info, R), "reports": reports()}
     OUT.write_text("window.SIM_EXTRA = " + json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str) + ";\n", encoding="utf-8")
     print(f"ذخیره شد: {OUT} ({OUT.stat().st_size/1e3:.0f} KB)")
-    print("factor:", json.dumps({k: v for k, v in data["factor"].items() if k not in ("curve", "yearly")}, ensure_ascii=False))
+    print("factor:", json.dumps({k: v for k, v in data["factor"].items() if k not in ("curve", "yearly", "monthly")}, ensure_ascii=False))
     print("rebalance:", json.dumps({"policies": data["rebalance"]["policies"], "cap": data["rebalance"]["cap"]}, ensure_ascii=False)[:900])
     print("qa:", json.dumps({k: data["qa"][k] for k in ("universe", "rules", "sector_summary")}, ensure_ascii=False))
 
