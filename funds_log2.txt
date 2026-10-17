@@ -1,0 +1,69 @@
+
+── کشف صندوق‌های شاخصی
+  فیپیران fund/fundlistbrief: 568 صندوق؛ کلیدها: ['regNo', 'name']
+  فیپیران fund/fundlistissue: 568 صندوق؛ کلیدها: ['regNo', 'groupId', 'name', 'issueNav', 'cancelNav', 'date']
+  فیپیران efficiency/fundlist: https://fipiran.ir/services/efficiency/fundlist -> HTTP 502
+  فیپیران بدون نماد: «مشترک شاخصی کار آفرین»
+  فیپیران بدون نماد: «شاخصی هم وزن تراز»
+  فیپیران بدون نماد: «شاخص سی شرکت بزرگ فیروزه»
+  فیپیران بدون نماد: «تجارت شاخصی کاردان»
+  فیپیران بدون نماد: «شاخصی بازار آشنا»
+  فیپیران بدون نماد: «قابل معامله شاخصی کیان»
+  فیپیران بدون نماد: «شاخصی آرام مفید»
+  فیپیران بدون نماد: «شاخصی شفق رابین»
+  فیپیران بدون نماد: «شاخصی هم وزن همسنگ مفید»
+  8 صندوق شاخصی: آرام(K)، فیروزه(I30)، هم تراز(EW)، هم وزن(EW)، همسنگ(EW؟)، هوشمند(K)، وبازار(K)، کاردان(K)
+
+── آرام · صندوق س شاخصی آرام مفید (مرجع: K)
+    قیمت بازار: 1101 روز
+    فیپیران: «شاخصی آرام مفید» (امتیاز تطبیق 5)
+    فیپیران efficiency/fundefficiencylist: https://fipiran.ir/services/efficiency/fundefficiencylist?showAll=true&regNos=11939 -> ReadTimeout(ReadTimeoutError("HTTPSConnectionPool(host='fipiran.ir', port
+    فیپیران chart/fundefficiencychart: 1652 روز؛ کلیدها: ['annualEfficiency', 'dailyEfficiency', 'date', 'monthlyEfficiency', 'quarterlyEfficiency', 'sixMonthEfficiency', 'weeklyEfficiency']
+    NAV: 1652 روز (2022-03-13 تا 2026-10-11) از fipiran
+
+── فیروزه · صندوق شاخص30 شرکت فیروزه- سهام (مرجع: I30)
+    قیمت بازار: 2825 روز
+    فیپیران: «شاخص سی شرکت بزرگ فیروزه» (امتیاز تطبیق 5)
+    فیپیران efficiency/fundefficiencylist: https://fipiran.ir/services/efficiency/fundefficiencylist?showAll=true&regNos=11308 -> HTTP 401
+    فیپیران chart/fundefficiencychart: 4248 روز؛ کلیدها: ['annualEfficiency', 'dailyEfficiency', 'date', 'monthlyEfficiency', 'quarterlyEfficiency', 'sixMonthEfficiency', 'weeklyEfficiency']
+    NAV: 4248 روز (2015-02-17 تا 2026-10-12) از fipiran
+
+── هم تراز · صندوق س شاخصی هم وزن تراز-سهام (مرجع: EW)
+    قیمت بازار: 263 روز
+    فیپیران: «شاخصی هم وزن تراز» (امتیاز تطبیق 3)
+    فیپیران efficiency/fundefficiencylist: https://fipiran.ir/services/efficiency/fundefficiencylist?showAll=true&regNos=11095 -> HTTP 401
+    فیپیران chart/fundefficiencychart: 4985 روز؛ کلیدها: ['annualEfficiency', 'dailyEfficiency', 'date', 'monthlyEfficiency', 'quarterlyEfficiency', 'sixMonthEfficiency', 'weeklyEfficiency']
+    NAV: 4985 روز (2013-02-17 تا 2026-10-12) از fipiran
+
+── هم وزن · صندوق س. شاخصی کیان-س (مرجع: EW)
+    قیمت بازار: 1059 روز
+    فیپیران: تطبیق مطمئن پیدا نشد
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── همسنگ · صندوق س. شاخصی هم وزن همسنگ-س (مرجع: EW)
+    قیمت بازار: 223 روز
+    فیپیران: «شاخصی هم وزن همسنگ مفید» (امتیاز تطبیق 6)
+    فیپیران efficiency/fundefficiencylist: https://fipiran.ir/services/efficiency/fundefficiencylist?showAll=true&regNos=12488 -> HTTP 401
+    فیپیران chart/fundefficiencychart: 292 روز؛ کلیدها: ['annualEfficiency', 'dailyEfficiency', 'date', 'monthlyEfficiency', 'quarterlyEfficiency', 'sixMonthEfficiency', 'weeklyEfficiency']
+    NAV: 292 روز (2025-11-29 تا 2026-10-11) از fipiran
+
+── هوشمند · صندوق س شاخصی شفق رابین (مرجع: K)
+    قیمت بازار: 384 روز
+    فیپیران: «اختصاصی بازارگردانی هوشمند آبان» (امتیاز تطبیق 4)
+    فیپیران efficiency/fundefficiencylist: https://fipiran.ir/services/efficiency/fundefficiencylist?showAll=true&regNos=11633 -> HTTP 401
+    فیپیران chart/fundefficiencychart: 2766 روز؛ کلیدها: ['annualEfficiency', 'dailyEfficiency', 'date', 'monthlyEfficiency', 'quarterlyEfficiency', 'sixMonthEfficiency', 'weeklyEfficiency']
+    NAV: 2766 روز (2019-03-05 تا 2026-10-11) از fipiran
+
+── وبازار · صندوق س شاخصی بازارآشنا (مرجع: K)
+    قیمت بازار: 1359 روز
+    فیپیران: تطبیق مطمئن پیدا نشد
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── کاردان · صندوق س تجارت شاخصی کاردان (مرجع: K)
+    قیمت بازار: 2810 روز
+    فیپیران: «تجارت شاخصی کاردان» (امتیاز تطبیق 5)
+    فیپیران efficiency/fundefficiencylist: https://fipiran.ir/services/efficiency/fundefficiencylist?showAll=true&regNos=11312 -> HTTP 401
+    فیپیران chart/fundefficiencychart: 4202 روز؛ کلیدها: ['annualEfficiency', 'dailyEfficiency', 'date', 'monthlyEfficiency', 'quarterlyEfficiency', 'sixMonthEfficiency', 'weeklyEfficiency']
+    NAV: 4202 روز (2015-04-06 تا 2026-10-12) از fipiran
+
+خلاصه: 6/8 صندوق با NAV → C:\Users\Part Laptop\smart_investment_management\data\funds\funds.csv

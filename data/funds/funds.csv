@@ -1,9 +1,9 @@
 symbol,name,ins_code,found_by,benchmark,benchmark_src,n_price,n_nav,nav_source,site,fipiran_regno
-آرام,صندوق س شاخصی آرام مفید,14230681955555738,"instruments,tsetmc",K,declared,1100,0,,,
-فیروزه,صندوق شاخص30 شرکت فیروزه- سهام,66036975502302203,"instruments,tsetmc",I30,declared,2824,0,,,
-هم تراز,صندوق س شاخصی هم وزن تراز-سهام,51920757918600374,"instruments,tsetmc",EW,declared,263,0,,,
+آرام,صندوق س شاخصی آرام مفید,14230681955555738,"instruments,tsetmc",K,declared,1101,1652,fipiran,,11939
+فیروزه,صندوق شاخص30 شرکت فیروزه- سهام,66036975502302203,"instruments,tsetmc",I30,declared,2825,4248,fipiran,,11308
+هم تراز,صندوق س شاخصی هم وزن تراز-سهام,51920757918600374,"instruments,tsetmc",EW,declared,263,4985,fipiran,,11095
 هم وزن,صندوق س. شاخصی کیان-س,47041908051542008,"instruments,tsetmc",EW,declared,1059,0,,,
-همسنگ,صندوق س. شاخصی هم وزن همسنگ-س,36002472163498476,"instruments,tsetmc",EW,auto,223,0,,,
-هوشمند,صندوق س شاخصی شفق رابین,37920364612147195,"instruments,tsetmc",K,declared,384,0,,,
+همسنگ,صندوق س. شاخصی هم وزن همسنگ-س,36002472163498476,"instruments,tsetmc",EW,auto,223,292,fipiran,,12488
+هوشمند,صندوق س شاخصی شفق رابین,37920364612147195,"instruments,tsetmc",K,declared,384,2766,fipiran,,11633
 وبازار,صندوق س شاخصی بازارآشنا,41286608288791633,"instruments,tsetmc",K,declared,1359,0,,,
-کاردان,صندوق س تجارت شاخصی کاردان,65023851436340574,"instruments,tsetmc",K,declared,2810,0,,,
+کاردان,صندوق س تجارت شاخصی کاردان,65023851436340574,"instruments,tsetmc",K,declared,2810,4202,fipiran,,11312
