@@ -491,12 +491,52 @@ def diag() -> None:
             print(f"  خطا  {ep}  {type(e).__name__}: {str(e)[:120]}")
 
 
+def diag2() -> None:
+    """مسیر واقعی API فیپیران را از خود سایت پیدا می‌کند و بدنهٔ پاسخ‌های TSETMC قدیمی را ذخیره می‌کند."""
+    ins = "65023851436340574"
+    RAW.mkdir(parents=True, exist_ok=True)
+    print("── TSETMC قدیمی: بدنهٔ کامل")
+    for name, u in (("etfhistory", f"https://old.tsetmc.com/tsev2/data/ETFHistory.aspx?i={ins}"),
+                    ("loader", f"https://old.tsetmc.com/Loader.aspx?ParTree=15131M&i={ins}")):
+        try:
+            r = requests.get(u, headers=HEADERS, timeout=30)
+            (RAW / f"diag2_{name}.html").write_text(r.text, encoding="utf-8")
+            print(f"  {r.status_code} {u} → data/raw/funds/diag2_{name}.html ({len(r.text)} نویسه)")
+        except Exception as e:  # noqa: BLE001
+            print(f"  خطا {u}: {e}")
+    print("── سایت فیپیران: یافتن آدرس‌های API در بستهٔ جاوااسکریپت")
+    base = "https://fipiran.ir"
+    try:
+        html = requests.get(base + "/", headers=HEADERS, timeout=30).text
+        (RAW / "diag2_fipiran_index.html").write_text(html, encoding="utf-8")
+        srcs = re.findall(r'(?:src|href)="([^"]+\.js[^"]*)"', html)
+        print(f"  {len(srcs)} فایل js: {srcs[:6]}")
+        found = set()
+        for sr in srcs[:8]:
+            u = sr if sr.startswith("http") else base + (sr if sr.startswith("/") else "/" + sr)
+            try:
+                js = requests.get(u, headers=HEADERS, timeout=60).text
+            except Exception as e:  # noqa: BLE001
+                print(f"  {u}: {e}")
+                continue
+            print(f"  js {len(js)//1024} KB: {sr}")
+            for m in re.findall(r'https?://[A-Za-z0-9._\-/]*fipiran[A-Za-z0-9._\-/?=&]*', js):
+                found.add(m)
+            for m in re.findall(r'["\'`](/?(?:api|Api)/[A-Za-z0-9_/\-.?=&{}$]*(?:fund|Fund|nav|NAV|chart)[A-Za-z0-9_/\-.?=&{}$]*)["\'`]', js):
+                found.add(m)
+        for m in sorted(found)[:80]:
+            print("   ", m)
+    except Exception as e:  # noqa: BLE001
+        print(f"  خطا: {e}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", action="append", help="فقط این نماد(ها)")
     ap.add_argument("--skip-index", action="store_true")
     ap.add_argument("--site", action="append", default=[], help="نماد=آدرس سایت صندوق (اگر خودکار پیدا نشد)")
     ap.add_argument("--diag", action="store_true", help="فقط آزمون دسترسی میزبان‌ها و مسیرهای NAV (سریع)")
+    ap.add_argument("--diag2", action="store_true", help="یافتن آدرس API فیپیران از سایت و ذخیرهٔ صفحات TSETMC قدیمی")
     ap.add_argument("--log", help="کپی خروجی در این فایل (UTF-8)")
     a = ap.parse_args()
     for s in (sys.stdout, sys.stderr):
@@ -504,8 +544,8 @@ def main() -> int:
             s.reconfigure(encoding="utf-8")
     if a.log:
         sys.stdout = Tee(a.log)
-    if a.diag:
-        diag()
+    if a.diag or a.diag2:
+        (diag if a.diag else diag2)()
         return 0
     sites = dict(x.split("=", 1) for x in a.site)
     if not a.skip_index:
