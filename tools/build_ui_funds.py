@@ -72,6 +72,27 @@ def load_nav(sym: str) -> pd.DataFrame | None:
         return None
     d = pd.read_csv(p, parse_dates=["date"]).set_index("date").sort_index()
     d = d[~d.index.duplicated(keep="last")]
+    po = FUNDS / f"nav_own_{sym}.csv"          # NAV روزانهٔ خود صندوق (کارآفرین: tools/build_karafarin_nav.py)؛ از ۱۳۸۹، فیپیران از ۲۰۱۹
+    if po.exists():
+        o = pd.read_csv(po, parse_dates=["date"]).set_index("date").sort_index()
+        o = o[~o.index.duplicated(keep="last")]
+        x = d.ret_daily
+        pct = x.abs().median() > 0.05
+        fip = (x if pct else x * 100).reindex(o.index)
+        ret = o.ret_daily.copy()
+        bad = fip.notna() & ((ret - fip).abs() > 2)         # اختلاف بیش از ۲ واحد درصد: سری سایت صندوق خطا دارد؛ فیپیران
+        ret[bad] = fip[bad]
+        extra = (x if pct else x * 100)[~x.index.isin(o.index)]   # روزهایی که فقط فیپیران دارد (بعد از آخرین به‌روزرسانی سایت)
+        out = o.copy()
+        out["ret_daily"] = ret
+        out["nav_cancel_raw"] = o.nav_cancel
+        lvl = (1 + ret.fillna(0) / 100).cumprod()          # سطح NAV بدون پرش تجزیهٔ واحد (۱۰:۱ در ۲۰۲۳)، مقیاس‌شده به آخرین NAV ابطال واقعی
+        out["nav_cancel"] = lvl / lvl.iloc[-1] * o.nav_cancel.iloc[-1]
+        if len(extra):
+            out = pd.concat([out, pd.DataFrame({"ret_daily": extra})]).sort_index()
+        out["source"] = "fund_site+fipiran"
+        print(f"  NAV {sym}: سایت صندوق {len(o)} روز از {o.index[0].date()} + فیپیران {len(extra)} روز + {int(bad.sum())} روز اصلاح‌شده")
+        return out
     return d
 
 

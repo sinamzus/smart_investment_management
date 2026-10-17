@@ -8,6 +8,8 @@
 
     python tools/fetch_karafarin_portfolio.py --list                 # فقط فهرست گزارش‌های پرتفوی (بدون دانلود)
     python tools/fetch_karafarin_portfolio.py --n 36 --log kp.txt    # ۳۶ پرتفوی آخر (فاصلهٔ ۳ ثانیه؛ قابل‌ادامه)
+    python tools/fetch_karafarin_portfolio.py --n 106 --log kp2.txt  # همهٔ ۱۰۶ پرتفوی (۲۰۱۸ تا امروز)
+    python tools/fetch_karafarin_portfolio.py --nav                  # NAV روزانهٔ تازه (navPerShare و nav) ← data/raw/karafarin/nav_*.json
 
 خروجی: data/raw/karafarin/portfolio/<تاریخ-میلادی>_<شناسه>.pdf  و  data/raw/karafarin/portfolio/list.json
 بعد از آن: tools/parse_karafarin_portfolio.py (pdftotext ← holdings_کارآفرین.csv).
@@ -62,6 +64,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list", action="store_true", help="فقط فهرست پرتفوی‌ها را چاپ کن")
     ap.add_argument("--n", type=int, default=36, help="آخرین N گزارش پرتفوی (پیش‌فرض ۳۶)")
+    ap.add_argument("--nav", action="store_true", help="فقط NAV روزانه را تازه بگیر (برای tools/build_karafarin_nav.py)")
     ap.add_argument("--gap", type=float, default=3.0)
     ap.add_argument("--log", help="کپی خروجی در فایل UTF-8")
     a = ap.parse_args()
@@ -69,6 +72,16 @@ def main() -> int:
         sys.path.insert(0, str(ROOT / "tools"))
         import fetch_dividend_payments as fdp
         sys.stdout = fdp.Tee(a.log)
+    if a.nav:
+        d = ROOT / "data" / "raw" / "karafarin"
+        d.mkdir(parents=True, exist_ok=True)
+        for ep in ("navPerShare/1", "nav/1", "dailyAssetStructure/1"):
+            r = requests.get(f"{BASE}/api/v1/public/{ep}", headers=HEADERS, timeout=120)
+            r.raise_for_status()
+            (d / f"{ep.split('/')[0]}.json").write_bytes(r.content)
+            print(f"  {ep}: {len(r.content) // 1024}KB")
+            time.sleep(a.gap)
+        return 0
     items = [x for x in get_list() if is_portfolio(x)]
     items.sort(key=lambda x: x["date"], reverse=True)
     print(f"گزارش پرتفوی: {len(items)} (از {items[-1]['date'][:10]} تا {items[0]['date'][:10]})")

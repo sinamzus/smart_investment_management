@@ -94,7 +94,7 @@ def main():
             skipped.append(f"{f.name} (مجموع {tot:.0f}٪)")
             continue
         for r in rows:
-            s = ALIASES.get(r["name_fa"].replace("  ", " ").strip()) or pp.match(r["name_fa"], names) or pp.price_match(r["name_fa"], r["price"], d, inv)
+            s = ALIASES.get(r["name_fa"].replace("  ", " ").strip()) or pp.match(r["name_fa"], names) or pp.price_match(r["name_fa"], r["price"], d, inv) or pp.cand_match(r["name_fa"], r["price"], d, names)
             if not s:
                 unmatched[r["name_fa"]] = unmatched.get(r["name_fa"], 0) + 1
             recs.append({"date": d, "symbol": s, "name_fa": r["name_fa"], "weight_pct": round(r["weight_pct"], 4), "qty": r["qty"],

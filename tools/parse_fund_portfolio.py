@@ -108,6 +108,82 @@ def price_match(name: str, price, date_iso: str, inv_names: dict) -> str:
     return ""
 
 
+_TOK = []
+
+
+def token_index() -> list:
+    """[(توکن‌های نام کامل، نماد)] از instruments*.csv؛ برای تطبیق «زیردنباله» توکن‌های نام کوتاه (ملی مس ⊂ ملی صنایع مس ایران)."""
+    if not _TOK:
+        for fn in ("instruments.csv", "instruments_extra.csv"):
+            p = ROOT / "data" / fn
+            if not p.exists():
+                continue
+            for r in csv.DictReader(p.open(encoding="utf-8")):
+                if r.get("type", "stock") not in ("stock", "fund", ""):
+                    continue
+                sym = norm(r["symbol"])
+                if re.search(r"\d$", sym):
+                    continue
+                _TOK.append(([t for t in re.split(r"[\s\.\-\(\)،,_]+", norm(r["name"])) if t], sym))
+    return _TOK
+
+
+def _subseq(short: list, full: list) -> bool:
+    it = iter(full)
+    return all(any(t == u for u in it) for t in short)
+
+
+_PS = {}
+
+
+def price_series() -> dict:
+    """نماد ← سری قیمت پایانی (pClosing) از پنل بورسی؛ برای ردگیری نزدیک‌ترین قیمت هنگام تطبیق نام کوتاه."""
+    if not _PS:
+        import build_ui_extra as bx
+        _, _, R = bx.base_panel()
+        R = R[R.date >= "2022-01-01"].assign(sym=lambda x: x.symbol.map(norm))
+        for sym, g in R.groupby("sym"):
+            _PS[sym] = g.set_index("date").pClosing.sort_index()
+    return _PS
+
+
+def cand_match(name: str, price, date_iso: str, names: dict) -> str:
+    """نام کوتاه‌شدهٔ کدال («ملی مس»، «نفت اصفهان»، «فولاد مبارکه») را به نماد می‌رساند:
+    کاندیداها = نام‌های کاملی که کلید نام کوتاه *زیررشتهٔ* آن‌هاست (یا شباهت ≥ ۰٫۸)؛ اگر یکی بود همان؛ اگر چند تا بودند، آن که قیمت پایانی‌اش
+    در آخرین روز معاملاتی تا ۴ روز قبل از تاریخ گزارش به قیمت گزارش‌شده ≤ ۳٪ نزدیک است. حق‌تقدم، گواهی/شمش طلا و صندوق‌ها تطبیق نمی‌شوند."""
+    import pandas as pd
+    n = norm(name)
+    if re.search(r"تقدم|^\s*ح\s*\.|^\s*ح\s|طلا|شمش|گواهی|صندوق س|\)\s*تقدم", n):
+        return ""
+    k = key(re.sub(r"\([^()]*\)|\)[^()]*\(", "", n))
+    if len(k) < 4:
+        return ""
+    cands = sorted({v for x, v in names.items() if k in x})
+    if not cands:
+        short = [t for t in re.split(r"[\s\.\-\(\)،,_]+", re.sub(r"\([^()]*\)", "", n)) if t]
+        if len(short) >= 2:
+            cands = sorted({sym for toks, sym in token_index() if _subseq(short, toks)})
+    if not cands:
+        cands = sorted({names[x] for x in difflib.get_close_matches(k, list(names), n=3, cutoff=0.8)})
+    if len(cands) == 1:
+        return cands[0]
+    try:
+        pr = float(price)
+    except (TypeError, ValueError):
+        return ""
+    ps, d0, best = price_series(), pd.Timestamp(date_iso), ("", 9.9)
+    for c in cands:
+        sr = ps.get(c)
+        if sr is None:
+            continue
+        sr = sr[(sr.index <= d0) & (sr.index > d0 - pd.Timedelta(days=4))]
+        if len(sr):
+            err = abs(float(sr.iloc[-1]) / pr - 1) if pr else 9.9
+            if err < best[1]:
+                best = (c, err)
+    return best[0] if best[1] <= 0.03 else ""
+
+
 def month_end(title: str):
     m = re.search(r"منتهی\s*به\s*([\d۰-۹]{4})/([\d۰-۹]{1,2})/([\d۰-۹]{1,2})", title.translate(FA).replace("‌", " "))
     if not m:
@@ -204,7 +280,7 @@ def main():
             if re.match(r"\d{4}-\d\d-\d\d", pub) and d > j2g(*(int(x) for x in pub.split("-"))).isoformat():
                 continue                                   # تاریخ آیندهٔ اشتباه در عنوان (مثلاً ۱۴۰۶ به‌جای ۱۴۰۵)
             for it in parse_xlsx(xs[0]):
-                s = match(it["name_fa"], names) or price_match(it["name_fa"], it["price"], d, inv)
+                s = match(it["name_fa"], names) or price_match(it["name_fa"], it["price"], d, inv) or cand_match(it["name_fa"], it["price"], d, names)
                 if not s:
                     unmatched[(sym, it["name_fa"])] = unmatched.get((sym, it["name_fa"]), 0) + 1
                 recs.append({"date": d, "symbol": s, "name_fa": it["name_fa"], "weight_pct": round(it["weight_pct"], 4),
