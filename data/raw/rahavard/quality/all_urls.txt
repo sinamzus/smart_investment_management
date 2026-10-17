@@ -1,0 +1,24 @@
+200	document	text/html	2301B	https://rahavard365.com/asset/16685/financialratios
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	24B	https://rahavard365.com/api/v2/time/epoch
+200	xhr	application/json	51B	https://rahavard365.com/api/v2/ip-check
+401	xhr		0B	https://rahavard365.com/api/v2/accounts/access-token
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/top-banner
+200	xhr	application/json	485B	https://rahavard365.com/api/v2/fundamental/currencies
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/popup
+200	xhr	application/json	1291B	https://rahavard365.com/api/v2/asset/16685/header
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	37B	https://rahavard365.com/api/v2/fundamental/company-financial-ratios?asset_id=16685&report_type_id=1&view_currency_id=1&view_type_id=1&combination_state_id=2&audit_state_id=2&representation_state_id=2&start_date=2021-10-17T12:33:08.928Z&end_date=2026-10-17T12:33:08.928Z&fiscal_year_order=ASC&font_type=FA&detail_state=detailed&ratio_category_ids=1,2,3,4&sale_type_ids=4&detail_type_id=1&no_change_in_view_type=true
+200	xhr	application/json	14B	https://rahavard365.com/api/v2/page-settings?path=asset%2F16685%2Ffinancialratios
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	408B	https://rahavard365.com/api/v2/academy/featured-courses
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	14B	https://rahavard365.com/api/v2/page-settings?path=asset%2F16685&referer=https:%2F%2Frahavard365.com%2Fasset%2F16685%2Ffinancialratios
+200	xhr	application/json	12642B	https://rahavard365.com/api/v2/chart/light-bars?symbol=exchange.asset:16685:real_close
+200	xhr	application/json	17014B	https://rahavard365.com/api/v2/social/posts?exclude_replies=false&_count=22&entity_id=16685&entity_type=exchange.asset&has_chart_analysis=false&has_options_strategy_snapshot=false
+200	xhr	application/json	27514B	https://rahavard365.com/api/v2/asset/16685

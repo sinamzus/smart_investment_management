@@ -1,0 +1,16 @@
+→ https://rahavard365.com/asset/16685/financialratios
+    200     2301B hint=  0 html https://rahavard365.com/asset/16685/financialratios
+    200     4632B hint=  0 json https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+    200       24B hint=  0 json https://rahavard365.com/api/v2/time/epoch
+    200       51B hint=  0 json https://rahavard365.com/api/v2/ip-check
+    200      485B hint=  0 json https://rahavard365.com/api/v2/fundamental/currencies
+    200     1291B hint=  0 json https://rahavard365.com/api/v2/asset/16685/header
+    200    17048B hint=  0 json https://rahavard365.com/api/v2/licenses
+    200       37B hint=  0 json https://rahavard365.com/api/v2/fundamental/company-financial-ratios?asset_id=16685&report_type_id=1&view_currency_id=1&view_type_id=1&combin
+    200       14B hint=  0 json https://rahavard365.com/api/v2/page-settings?path=asset%2F16685%2Ffinancialratios
+    200      408B hint=  0 json https://rahavard365.com/api/v2/academy/featured-courses
+    200       14B hint=  0 json https://rahavard365.com/api/v2/page-settings?path=asset%2F16685&referer=https:%2F%2Frahavard365.com%2Fasset%2F16685%2Ffinancialratios
+    200    12642B hint=  0 json https://rahavard365.com/api/v2/chart/light-bars?symbol=exchange.asset:16685:real_close
+  ★ 200    17014B hint=  4 json https://rahavard365.com/api/v2/social/posts?exclude_replies=false&_count=22&entity_id=16685&entity_type=exchange.asset&has_chart_analysis=fa
+  ★ 200    27514B hint=  7 json https://rahavard365.com/api/v2/asset/16685
+   (ادامه می‌دهیم) TimeoutError
