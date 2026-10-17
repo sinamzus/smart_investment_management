@@ -237,12 +237,12 @@ def main():
     ys = {"K": ir.load_pair("K").y, "EW": ir.load_pair("EW").y}
     ys["I30"] = ys["K"]            # برای شاخص ۳۰ شرکت، نسخهٔ قیمتی جدا نداریم؛ بازده سود «شاخص كل» جانشین است
     bench = {k: ew.official(c) for k, (c, _) in BENCH.items()}
-    lags = bx.pay_lags()
-    MIX = [(int(L), 1.0 / len(lags)) for L in lags] if len(lags) else LAG      # توزیع واقعی تأخیر پرداخت (کدال ن-۱۳)؛ بدون آن L = 90
+    Eev = bx.pay_events()
+    mixes = {"K": bx.pay_mix(Eev, "wK"), "EW": bx.pay_mix(Eev, "wEW")}      # توزیع واقعی تأخیر پرداخت (کدال ن-۱۳ + فارابی)، وزن = سهم از جریان سود شاخص؛ بدون آن L = 90
     repl = {}
     for k in ("K", "EW"):
         j = ir.load_pair(k)
-        nav = ir.simulate(j, MIX)
+        nav = ir.simulate(j, mixes[k] or LAG)
         repl[k] = nav.pct_change().fillna(nav.iloc[0] - 1)
     rows = pd.read_csv(FUNDS / "funds.csv", dtype=str).fillna("").to_dict("records") if (FUNDS / "funds.csv").exists() else []
     if not rows:                                  # هنوز دادهای نیامده: صندوق‌های شناخته‌شدهٔ مخزن (بدون NAV)
@@ -258,7 +258,7 @@ def main():
             t = res["win"].get("all", {})
             print(f"{m['symbol']:8s} {m['benchmark']:4s} TE_w={t.get('tr', {}).get('te_w')}% TD={t.get('tr', {}).get('td')}% "
                   f"TD_vs_rep={t.get('rep', {}).get('td')}% best_fit={res['best_fit']} events={len(res['events'])}")
-    data = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "lag": int(round(float(lags.mean()))) if len(lags) else LAG, "lag_mode": "empirical" if len(lags) else "fixed", "lag_n": int(len(lags)),
+    data = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "lag": bx.wstat(Eev, "wK")["mean"] if len(Eev) else LAG, "lag_mode": "empirical" if len(Eev) else "fixed", "lag_n": int(len(Eev)),
             "bench_names": {k: v[1] for k, v in BENCH.items()}, "funds": funds, "missing": missing,
             "reference": replica_reference(bench, repl)}
     OUT.write_text("window.SIM_FUNDS = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")

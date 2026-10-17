@@ -9,7 +9,7 @@
   hold_TR     : بازده کل (TR) سهام با وزن‌های پرتفو، نقد بدون بازده
   hold_TR_nc  : همان با وزن‌های بازنرمال‌شده بدون نقد
   hold_lag    : سهام با بازده قیمتی (PR) + سودها دیرتر از استحقاق دریافت می‌شوند (طلب بی‌بازده) + نقد بدون بازده؛ تاریخ دریافت =
-                تاریخ واقعی پرداخت از نامهٔ ن-۱۳ کدال (dividend_payment_lags.csv) در صورت وجود، وگرنه تأخیر پیش‌فرض (میانگین تجربی همان جدول؛ ۹۰ اگر جدول نبود)
+                تاریخ واقعی پرداخت (کدال ن-۱۳ + فارابی؛ dividend_payment_events.csv) در صورت وجود، وگرنه تأخیر پیش‌فرض (میانگین تجربی وزنی؛ ۹۰ اگر جدول نبود)
   b           : مرجع TR رسمی؛ f: NAV صندوق (همان بازده روزانه)
 اثرها (واحد درصد، مرکب روی بازه):
   ترکیب  = hold_TR_nc − b           ← سهام پرتفو با وزن واقعی در برابر شاخص، با فرض سود فوراً سرمایه‌گذاری و بدون نقد
@@ -35,21 +35,25 @@ _PAY = {}
 
 
 def pay_map():
-    """نماد ← [(روز استحقاق، روز پرداخت واقعی)] و تأخیر پیش‌فرض (میانگین تجربی) از tools/parse_dividend_payments.py."""
+    """نماد ← [(روز استحقاق، روز پرداخت واقعی)] و تأخیر پیش‌فرض (میانگین تجربی وزن‌دهی‌شده با جریان سود «شاخص كل»؛ ۹۰ اگر جدول نبود)
+    از data/corporate_actions/dividend_payment_events.csv (tools/merge_dividend_payments.py)."""
     if not _PAY:
-        f = ROOT / "data" / "corporate_actions" / "dividend_payment_lags.csv"
-        m, lags = {}, []
+        f = ROOT / "data" / "corporate_actions" / "dividend_payment_events.csv"
+        m, dflt = {}, 90
         if f.exists():
-            E = pd.read_csv(f, dtype=str).fillna("")
-            E = E[(pd.to_numeric(E.dps_rial, errors="coerce") > 0) & (E.ex_date != "") & (E.eff != "")]
             from fetch_corporate_actions import j2g
+            E = pd.read_csv(f, dtype={"ex_date": str}).fillna({"ex_date": ""})
+            E = E[(E.ex_date != "") & (E.pay_j.notna())]
             for _, r in E.iterrows():
                 ex = pd.Timestamp(r.ex_date)
-                pay = pd.Timestamp(j2g(*map(int, r.eff.split("/"))))
+                pay = pd.Timestamp(j2g(*map(int, r.pay_j.split("/"))))
                 m.setdefault(norm(r.symbol), []).append((ex, max(pay, ex)))
-                lags.append((max(pay, ex) - ex).days)
+            lag = pd.to_numeric(E.lag_ex, errors="coerce").clip(lower=0)
+            w = E.wK.fillna(0)
+            if w.sum() > 0:
+                dflt = int(round(float((lag * w).sum() / w.sum())))
         _PAY["map"] = m
-        _PAY["default"] = int(round(float(np.mean(lags)))) if lags else 90
+        _PAY["default"] = dflt
     return _PAY["map"], _PAY["default"]
 
 
