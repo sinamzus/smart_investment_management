@@ -44,7 +44,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
            "Accept": "application/json, text/plain, */*", "Accept-Language": "fa-IR,fa;q=0.9,en;q=0.8", "Referer": BASE + "/"}
 STMT = {"ratio": "company-financial-ratios", "pl": "company-profit-losses", "bs": "company-balance-sheets"}
 Q = ("report_type_id=1&view_currency_id=1&view_type_id=1&combination_state_id=2&audit_state_id=2&representation_state_id=2"
-     "&start_date=2011-03-21T00:00:00.000Z&end_date={end}T00:00:00.000Z&fiscal_year_order=ASC&font_type=FA&detail_state={detail}"
+     "&start_date={start}T00:00:00.000Z&end_date={end}T00:00:00.000Z&fiscal_year_order=ASC&font_type=FA&detail_state={detail}"
      "&ratio_category_ids=1,2,3,4&sale_type_ids=4&detail_type_id=1&no_change_in_view_type=true")
 SEARCH = ["/api/v2/search?query={q}", "/api/v2/search?q={q}", "/api/v2/search/assets?query={q}", "/api/v2/asset/search?query={q}",
           "/api/v2/search/global?query={q}", "/api/v2/search/autocomplete?query={q}", "/api/v2/assets/search?query={q}",
@@ -61,6 +61,7 @@ def norm(s: str) -> str:
 class Http:
     def __init__(self, browser: bool):
         self.mode = "browser" if browser else "requests"
+        self.last = ""
         self.pw = self.page = None
         if self.mode == "requests":
             import requests
@@ -85,11 +86,13 @@ class Http:
         if self.mode == "requests":
             try:
                 r = self.s.get(BASE + path, timeout=60)
+                self.last = r.text[:160]
                 return r.status_code, (r.json() if r.status_code == 200 and "json" in r.headers.get("content-type", "") else None)
             except Exception as e:  # noqa: BLE001
                 return 0, None
         res = self.page.evaluate("""async (u) => { try { const r = await fetch(u, {credentials: 'include', headers: {'Accept': 'application/json'}});
             const t = await r.text(); return [r.status, t]; } catch (e) { return [0, '']; } }""", BASE + path)
+        self.last = res[1][:160]
         try:
             return res[0], (json.loads(res[1]) if res[0] == 200 else None)
         except Exception:  # noqa: BLE001
@@ -272,16 +275,31 @@ def universe():
     return out
 
 
-def fetch_asset(h: Http, aid: str):
+def fetch_asset(h: Http, aid: str, start: str = "2011-03-21"):
+    """(داده|None، وضعیت‌های چهار درخواست، بدنهٔ خطا)"""
     end = date.today().isoformat()
-    paths = [f"/api/v2/fundamental/{STMT['ratio']}?asset_id={aid}&" + Q.format(end=end, detail="detailed"),
-             f"/api/v2/fundamental/{STMT['pl']}?asset_id={aid}&" + Q.format(end=end, detail="summary"),
-             f"/api/v2/fundamental/{STMT['bs']}?asset_id={aid}&" + Q.format(end=end, detail="summary"),
+    paths = [f"/api/v2/fundamental/{STMT['ratio']}?asset_id={aid}&" + Q.format(start=start, end=end, detail="detailed"),
+             f"/api/v2/fundamental/{STMT['pl']}?asset_id={aid}&" + Q.format(start=start, end=end, detail="summary"),
+             f"/api/v2/fundamental/{STMT['bs']}?asset_id={aid}&" + Q.format(start=start, end=end, detail="summary"),
              f"/api/v2/asset/{aid}/eps"]
     res = h.get_many(paths)
-    if any(st != 200 for st, _ in res):
-        return None
-    return {"ratio": parse_table(res[0][1], "ratio"), "pl": parse_table(res[1][1], "pl"), "bs": parse_table(res[2][1], "bs"), "eps": parse_eps(res[3][1])}
+    sts = [st for st, _ in res]
+    if any(st != 200 for st in sts):
+        bad = next(p for p, (st, _) in zip(paths, res) if st != 200)
+        _, _ = h.get(bad)                                   # دوباره برای دیدن بدنهٔ خطا
+        return None, sts, h.last
+    return {"ratio": parse_table(res[0][1], "ratio"), "pl": parse_table(res[1][1], "pl"), "bs": parse_table(res[2][1], "bs"), "eps": parse_eps(res[3][1])}, sts, ""
+
+
+def fetch_robust(h: Http, aid: str, diag: list):
+    """چند راهبرد: بازهٔ بلند ← بازهٔ ۵ ساله مثل خود سایت ← (در requests) سوییچ به Chrome."""
+    five = date(date.today().year - 5, date.today().month, 1).isoformat()
+    for start in ("2011-03-21", five):
+        d, sts, body = fetch_asset(h, aid, start)
+        if d is not None:
+            return d
+        diag.append(f"start={start} وضعیت‌ها {sts} {body!r}")
+    return None
 
 
 def run(h: Http, only: str, n: int, gap: float):
@@ -310,8 +328,15 @@ def run(h: Http, only: str, n: int, gap: float):
         row = ids.get(norm(sym))
         if not row:
             wf.writerow([code, sym, "نگاشت شناسه نیست"]); miss += 1; continue
-        d = fetch_asset(h, row["asset_id"])
+        diag = []
+        d = fetch_robust(h, row["asset_id"], diag)
+        if d is None and h.mode == "requests" and any(x in "".join(diag) for x in ("401", "403", "[0")):
+            print("  requests رد شد ← سوییچ به Chrome")
+            h = Http(True)
+            d = fetch_robust(h, row["asset_id"], diag)
         if d is None:
+            if miss < 6:
+                print(f"  ✖ {sym} (asset {row['asset_id']}):", " | ".join(diag))
             wf.writerow([code, sym, "پاسخ ناموفق"]); miss += 1; continue
         for stmt in ("ratio", "pl", "bs"):
             for t, fy, sd, aud, rep, v in d[stmt]:
@@ -350,9 +375,10 @@ def main() -> int:
         sys.stdout = fdp.Tee(a.log)
     h = connect(a.browser)
     if a.test:
-        d = fetch_asset(h, "451")
+        diag = []
+        d = fetch_robust(h, "451", diag)
         if not d:
-            sys.exit("دریافت فملی ناموفق")
+            sys.exit("دریافت فملی ناموفق: " + " | ".join(diag))
         print({k: len(v) for k, v in d.items()})
         for t, fy, sd, aud, rep, v in d["ratio"][:8]:
             print("  ", t, fy, sd, aud, rep, round(v, 2))
