@@ -21,6 +21,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import analyze_fund_holdings as ah
+import fund_diagnostics as fd
 import investable_replica as ir
 import rebuild_ew_index as ew
 import rebuild_ew_rebalanced as ewr
@@ -91,7 +93,7 @@ def jyear(d):
     return ewr.g2j(d.year, d.month, d.day)[0]
 
 
-def analyze_fund(m: dict, bench: dict, repl: dict) -> dict | None:
+def analyze_fund(m: dict, bench: dict, repl: dict, ys: dict) -> dict | None:
     sym = m["symbol"]
     nd = load_nav(sym)
     if nd is None or nd.empty:
@@ -135,6 +137,16 @@ def analyze_fund(m: dict, bench: dict, repl: dict) -> dict | None:
         out["win"][w] = x
     fit = out["win"]["all"]["fit"]
     out["best_fit"] = min((v, kk) for kk, v in fit.items() if v is not None)[1]
+    # ریشهٔ خطا: تأخیر سود یا چیز دیگر؟ (fund_diagnostics.py)
+    out["divtest"] = fd.divlag_test(fr, btr, ys[k])
+    out["holdings"] = ah.analyze(sym, fr, btr) if (FUNDS / f"holdings_{sym}.csv").exists() else None   # پرتفوی کدال (اگر parse شده باشد)
+    out["season"] = fd.seasonality(fr, btr, lambda d: ewr.g2j(d.year, d.month, d.day)[1])
+    # سری روزانه برای زوم و محاسبهٔ خطا در هر بازهٔ دلخواه (UI)
+    jd_ = pd.concat([fr, btr], axis=1, join="inner").dropna()
+    rp_ = repl[k].reindex(jd_.index) if k in repl else None
+    out["daily"] = {"d": [d.strftime("%y%m%d") for d in jd_.index], "f": [round(float(v), 6) for v in jd_.iloc[:, 0]],
+                    "b": [round(float(v), 6) for v in jd_.iloc[:, 1]],
+                    "r": [None if pd.isna(v) else round(float(v), 6) for v in rp_] if rp_ is not None else None}
     # سال شمسی
     j = pd.concat([fr, btr], axis=1, join="inner").dropna()
     j.columns = ["f", "b"]
@@ -221,6 +233,8 @@ def issue_navs() -> dict:
 
 def main():
     iss = issue_navs()
+    ys = {"K": ir.load_pair("K").y, "EW": ir.load_pair("EW").y}
+    ys["I30"] = ys["K"]            # برای شاخص ۳۰ شرکت، نسخهٔ قیمتی جدا نداریم؛ بازده سود «شاخص كل» جانشین است
     bench = {k: ew.official(c) for k, (c, _) in BENCH.items()}
     repl = {}
     for k in ("K", "EW"):
@@ -235,7 +249,7 @@ def main():
     for m in rows:
         if not m.get("last_cancel_nav") and m.get("fipiran_regno") in iss:
             m["last_cancel_nav"], m["last_nav_date"] = iss[m["fipiran_regno"]]
-        res = analyze_fund(m, bench, repl)
+        res = analyze_fund(m, bench, repl, ys)
         (funds.append(res) if res else missing.append({"symbol": m["symbol"], "name": m["name"], "benchmark": m["benchmark"]}))
         if res:
             t = res["win"].get("all", {})

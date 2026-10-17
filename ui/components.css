@@ -162,6 +162,9 @@ th.has-tip, .kpi .k.has-tip, .lineage b.has-tip, .legend span.has-tip, .ctl labe
 .workspace.v-risk > section:first-child { grid-row: span 2; }
 .workspace.v-fnd { grid-template-columns: 1.5fr 1fr; grid-template-rows: 1fr 1fr; }
 #fn-tab tr[data-sym] { cursor: pointer; }
+#fn-chart { cursor: crosshair; user-select: none; }
+#fn-ctl input[type="date"] { background: var(--bg-panel); color: var(--tx-1); border: var(--hair) solid var(--line-strong); height: 22px; padding: 0 4px; }
+#fn-ctl { flex-wrap: wrap; }
 #fn-tab tr[data-sym][aria-selected="true"] td { background: var(--bg-select); }
 .symlink { color: var(--accent-tx); cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--accent-dim); }
 .symlink:hover { color: var(--tx-1); }

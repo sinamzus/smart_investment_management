@@ -243,8 +243,9 @@
   <main class="workspace v-fnd" id="v-fnd" hidden>
     <section class="panel" style="--lg:var(--lg-a)">
       <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title">ردیابی صندوق‌های شاخصی در برابر شاخص مرجع</span><span class="chip" id="fn-chip"></span>
-        <div class="seg" id="fn-win"><button data-w="all" aria-pressed="true">کل عمر</button><button data-w="3y" aria-pressed="false">۳ سال</button><button data-w="1y" aria-pressed="false">۱ سال</button></div>
         <div class="panel-tools"><button class="tool" id="fn-csv">CSV</button></div></div>
+      <div class="ctl" id="fn-ctl"><div class="seg" id="fn-pre"><button data-k="all">کل</button><button data-k="3y">۳ سال</button><button data-k="1y">۱ سال</button><button data-k="6m">۶ ماه</button><button data-k="3m">۳ ماه</button><button data-k="1m">۱ ماه</button></div>
+        <label>از <input type="date" id="fn-from"></label><label>تا <input type="date" id="fn-to"></label><span class="mute">یا روی نمودار بکشید تا زوم شود</span></div>
       <div class="panel-body scroll"><table class="dt" id="fn-tab"></table></div>
       <div class="lineage" id="fn-lin-a"></div></section>
     <section class="panel" style="--lg:var(--lg-b)">
@@ -254,10 +255,11 @@
       <div class="panel-body"><div class="legend" id="fn-legend"></div><svg class="chart" id="fn-chart" dir="ltr"></svg></div>
       <div class="lineage" id="fn-lin-b"></div></section>
     <section class="panel" style="--lg:var(--lg-c)">
-      <div class="panel-head"><span class="lg-badge">C</span><span class="panel-title">هر سال شمسی · صندوق در برابر مرجع</span></div>
-      <div class="panel-body scroll"><table class="dt" id="fn-year"></table></div></section>
+      <div class="panel-head"><span class="lg-badge">C</span><span class="panel-title">خطا در دوره‌های مختلف · صندوق در برابر مرجع</span>
+        <div class="seg" id="fn-pergrp"><button data-p="year" aria-pressed="true">سال</button><button data-p="quarter" aria-pressed="false">فصل</button><button data-p="month" aria-pressed="false">ماه</button></div></div>
+      <div class="panel-body scroll"><table class="dt" id="fn-per"></table></div></section>
     <section class="panel" style="--lg:var(--lg-e)">
-      <div class="panel-head"><span class="lg-badge">D</span><span class="panel-title">روش · خوانش · داده</span></div>
+      <div class="panel-head"><span class="lg-badge">D</span><span class="panel-title">ریشهٔ خطا · روش · داده</span></div>
       <div class="panel-body scroll"><div class="prose" id="fn-method"></div></div></section>
   </main>
 
