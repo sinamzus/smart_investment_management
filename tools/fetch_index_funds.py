@@ -520,6 +520,10 @@ def diag2() -> None:
                 print(f"  {u}: {e}")
                 continue
             print(f"  js {len(js)//1024} KB: {sr}")
+            if len(js) > 100_000:                       # بستهٔ اصلی را فشرده ذخیره کن تا آدرس‌های API را خودم بخوانم
+                with gzip.open(RAW / "diag2_fipiran_main.js.gz", "wt", encoding="utf-8") as fh:
+                    fh.write(js)
+                print("  ذخیره شد: data/raw/funds/diag2_fipiran_main.js.gz")
             for m in re.findall(r'https?://[A-Za-z0-9._\-/]*fipiran[A-Za-z0-9._\-/?=&]*', js):
                 found.add(m)
             for m in re.findall(r'["\'`](/?(?:api|Api)/[A-Za-z0-9_/\-.?=&{}$]*(?:fund|Fund|nav|NAV|chart)[A-Za-z0-9_/\-.?=&{}$]*)["\'`]', js):
