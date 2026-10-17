@@ -141,7 +141,7 @@ def price_series() -> dict:
     if not _PS:
         import build_ui_extra as bx
         _, _, R = bx.base_panel()
-        R = R[R.date >= "2022-01-01"].assign(sym=lambda x: x.symbol.map(norm))
+        R = R[R.date >= "2017-01-01"].assign(sym=lambda x: x.symbol.map(norm))
         for sym, g in R.groupby("sym"):
             _PS[sym] = g.set_index("date").pClosing.sort_index()
     return _PS

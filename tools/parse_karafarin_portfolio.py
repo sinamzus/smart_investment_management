@@ -25,17 +25,21 @@ if hasattr(sys.stdout, "reconfigure"):
 RAW = ROOT / "data" / "raw" / "karafarin" / "portfolio"
 OUT = ROOT / "data" / "funds" / "holdings_کارآفرین.csv"
 NUM = re.compile(r"^(-|-?[\d,]+(\.\d+)?)$")      # «-» = صفر (قالب ۱۴۰۴ به بعد)
-PCT = re.compile(r"^(\d+(?:\.\d+)?)%$")
+PCT = re.compile(r"^(\d+(?:\.\d+)?)%?$")      # قالب ۱۳۹۷ درصد را بدون «%» چاپ می‌کند
+BIG = re.compile(r"\d{1,3},\d{3}")
 # نام‌های کوتاه/لیگاتوردار PDF (pdftotext «لا» را «ال» می‌کند: فوالد) که با نام کامل TSETMC نمی‌خوانند؛ نمادها با پنل بازده تأیید شدند
 ALIASES = {"ملی مس": "فملی", "فولاد مبارکه": "فولاد", "فوالد مبارکه": "فولاد", "نفت تهران": "شتران", "گل گهر": "کگل", "نفت و گاز پارسیان": "پارسان",
            "نفت اصفهان": "شپنا", "سرمایه گذاری غدیر": "وغدیر", "مخابرات": "اخابر", "کشتیرانی ایران": "حکشتی", "چادرملو": "کچاد",
-           "سرمایه گذاری البرز": "والبر", "عمران فارس": "ثفارس"}
+           "سرمایه گذاری البرز": "والبر", "عمران فارس": "ثفارس",
+           "مپنا": "رمپنا", "پتروشیمی تامین": "تاپیکو", "گروه توسعه ملی ایران": "وبانک", "پتروشیمی خلیج فارس": "فارس", "فولاد کاوه": "کاوه",
+           "فولاد هرمزگان": "هرمز", "فولاد امیرکبیر": "فجر", "آذرآب": "فاذر", "پتروشیمی مبین": "مبین", "بورس اوراق بهادار تهران": "بورس",
+           "سرمایه گذاری معادن و فلزات": "ومعادن"}
 MARKS = re.compile(r"[‪-‮‎‏﻿]")
 
 
 def text_of(pdf: Path) -> str:
     t = subprocess.run(["pdftotext", "-layout", "-q", str(pdf), "-"], capture_output=True, timeout=120).stdout.decode("utf-8", "replace")
-    return MARKS.sub("", unicodedata.normalize("NFKC", t)).translate(pp.FA).replace("ي", "ی").replace("ك", "ک")
+    return MARKS.sub("", unicodedata.normalize("NFKC", t)).translate(pp.FA).replace("ي", "ی").replace("ك", "ک").replace("فوالد", "فولاد")
 
 
 def num(s: str) -> float:
@@ -51,15 +55,15 @@ def parse_pdf(pdf: Path):
     d = j2g(*map(int, m.groups()))
     rows, on = [], False
     for ln in t.split("\n"):
-        if re.search(r"درآمد", ln) and on and rows:
-            break                                          # بخش‌های بعدی (درآمد/سود فروش) همان نام‌ها را با درصد درآمد تکرار می‌کنند
-        if re.search(r"سرمایه\s*گذاری\s+در\s+سهام", ln):
-            if not re.search(r"درآمد", ln):
-                on = True                                  # سرتیتر جدول سهام؛ در هر صفحه تکرار می‌شود
+        header_like = not BIG.search(ln)                   # سرتیتر/عنوان بخش: عدد هزارگان ندارد
+        if on and rows and header_like and re.search(r"درآمد|سپرده|گواهی سپرده|اوراق|واحدهای صندوق|(^|\s)-\s*2\s*[آ-ی]|-1-2", ln):
+            break                                          # بخش بعدی؛ جدول‌های درآمد همان نام‌ها را با درصد درآمد تکرار می‌کنند
+        if header_like and re.search(r"سرمایه\s*گذاری\s+در\s+سهام", ln) and "درآمد" not in ln:
+            on = True                                      # سرتیتر جدول سهام (در هر صفحه تکرار می‌شود)
             continue
-        if on and re.search(r"-\s*2\b|-1-2|سپرده|گواهی سپرده|واحدهای صندوق", ln) and not PCT.match((ln.split() or [""])[0]):
-            if rows:
-                break
+        if header_like and "درصد" in ln and "تعداد" in ln:
+            on = True                                      # سرستون ستون‌ها (قالب ۱۳۹۷ سرتیتر بخش ندارد)
+            continue
         if not on:
             continue
         toks = [x.strip() for x in re.split(r"\s{2,}", ln.strip()) if x.strip()]
@@ -72,7 +76,8 @@ def parse_pdf(pdf: Path):
         nm = pp.norm(names[-1])
         if nm.startswith("جمع") or "نقل" in nm or nm.startswith("اختیار"):
             continue                                       # جمع ستون/صفحه («جمع نقل به صفحه بعد») و اختیار معامله (درصد ندارد/مجموع را دوبار می‌شمارد)
-        rows.append({"name_fa": nm, "weight_pct": float(PCT.match(toks[0]).group(1)), "value": num(nums[0]),
+        hint = pp.norm(names[-2]) if len(names) >= 2 and " " not in names[-2] and len(names[-2]) <= 9 else ""   # ستون «نماد» (قالب ۱۳۹۷)
+        rows.append({"name_fa": nm, "symbol_hint": hint, "weight_pct": float(PCT.match(toks[0]).group(1)), "value": num(nums[0]),
                      "price": num(nums[2]), "qty": num(nums[3])})
     return str(d.date()) if hasattr(d, "date") else str(d), rows
 
@@ -94,7 +99,7 @@ def main():
             skipped.append(f"{f.name} (مجموع {tot:.0f}٪)")
             continue
         for r in rows:
-            s = ALIASES.get(r["name_fa"].replace("  ", " ").strip()) or pp.match(r["name_fa"], names) or pp.price_match(r["name_fa"], r["price"], d, inv) or pp.cand_match(r["name_fa"], r["price"], d, names)
+            s = (r["symbol_hint"] if r["symbol_hint"] in inv else "") or ALIASES.get(r["name_fa"].replace("  ", " ").strip()) or pp.match(r["name_fa"], names) or pp.price_match(r["name_fa"], r["price"], d, inv) or pp.cand_match(r["name_fa"], r["price"], d, names)
             if not s:
                 unmatched[r["name_fa"]] = unmatched.get(r["name_fa"], 0) + 1
             recs.append({"date": d, "symbol": s, "name_fa": r["name_fa"], "weight_pct": round(r["weight_pct"], 4), "qty": r["qty"],
