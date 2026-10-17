@@ -1,0 +1,25 @@
+
+══ کاردان ══
+  Total=290؛ کلیدهای یک نامه: ['SuperVision', 'TracingNo', 'Symbol', 'CompanyName', 'UnderSupervision', 'Title', 'LetterCode', 'SentDateTime', 'PublishDateTime', 'HasHtml', 'IsEstimate', 'Url', 'HasExcel', 'HasPdf', 'HasXbrl', 'HasAttachment', 'AttachmentUrl', 'PdfUrl', 'ExcelUrl', 'XbrlUrl', 'TedanUrl']
+نامه‌ها: 290؛ گروه‌بندی بر پایهٔ LetterCode:
+            230  صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۵/۰۶/۳۱
+  ن-۱۰       60  اطلاعات و صورت‌های مالی میاندوره‌ای  دوره ۳ ماهه منتهی به  ۱۴۰۵/۰۵/۳۱ (حسابرسی نشده)
+عنوان‌های مرتبط با پرتفو: 149
+  ۱۴۰۵/۰۷/۱۲ ۱۲:۱۸:۵۴ | ن-۱۰ | اطلاعات و صورت‌های مالی میاندوره‌ای  دوره ۳ ماهه منتهی به  ۱۴۰۵/۰۵/۳۱ (حسابرسی نشده) | HasHtml=True Att=True | /Reports/Decision.aspx?LetterSerial=DQmYLt6KGsqjAcGQQQaQQQlT7NTg%3d%3d&rt=2&let=6&ct=5&ft=4
+  ۱۴۰۵/۰۷/۱۲ ۱۱:۱۲:۰۶ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۵/۰۶/۳۱ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=FGf0LAPl4dFlJeigHaubFQ%3d%3d
+  ۱۴۰۵/۰۶/۰۷ ۱۳:۵۰:۵۳ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۵/۰۵/۳۱ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=MrwRbvOOObOOO9rALQQQaQQQYDQQQaQQQ77loGQw%3d%3d
+  ۱۴۰۵/۰۵/۰۷ ۱۱:۲۶:۳۳ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۵/۰۴/۳۱ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=uTSLSIKgTaIQQQaQQQEKBq46btYg%3d%3d
+  ۱۴۰۵/۰۴/۰۷ ۱۰:۴۱:۳۹ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۵/۰۳/۳۱ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=qBuGQQQaQQQt6dmHjIY7VI6SaY1g%3d%3d
+  ۱۴۰۵/۰۳/۰۵ ۰۹:۵۴:۲۴ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۵/۰۲/۳۱ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=ElWG7PZsYIfOOObOOOiBXhzQQQaQQQoURA%3d%3d
+  ۱۴۰۵/۰۲/۰۶ ۱۲:۴۰:۵۲ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۵/۰۱/۳۱ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=PRbwT77m1DLeNGn8B61MNQ%3d%3d
+  ۱۴۰۵/۰۱/۳۰ ۱۱:۱۷:۰۴ | ن-۱۰ | اطلاعات و صورت‌های مالی میاندوره‌ای  دوره ۹ ماهه منتهی به  ۱۴۰۴/۱۱/۳۰ (حسابرسی نشده) | HasHtml=True Att=True | /Reports/Decision.aspx?LetterSerial=N89j3GX6XaY2oo4YOkeBSg%3d%3d&rt=2&let=6&ct=5&ft=4
+  ۱۴۰۵/۰۱/۱۰ ۰۹:۰۰:۲۲ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۴/۱۲/۲۹ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=37CHwsReWSQQQaQQQHPHi5HY96KQ%3d%3d
+  ۱۴۰۴/۱۲/۰۴ ۰۸:۳۲:۳۱ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۴/۱۱/۳۰ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=kv1261fMdAnKITij7TV8lA%3d%3d
+  ۱۴۰۴/۱۱/۰۱ ۱۵:۴۸:۰۳ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۴/۱۰/۳۰ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=ADeNAIxMOqpcAP5RVeQQQaQQQdnw%3d%3d
+  ۱۴۰۴/۱۰/۲۲ ۱۵:۲۲:۴۷ | ن-۱۰ | اطلاعات و صورت‌های مالی میاندوره‌ای  دوره ۶ ماهه منتهی به  ۱۴۰۴/۰۸/۳۰ (حسابرسی شده) | HasHtml=True Att=True | /Reports/Decision.aspx?LetterSerial=2kd5pvqm3Jq43vGaXEWttg%3d%3d&rt=2&let=6&ct=5&ft=4
+  ۱۴۰۴/۱۰/۰۹ ۱۵:۱۹:۰۱ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۴/۰۹/۳۰ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=dXntG6QhY2toZBmrOOObOOO9fk9Q%3d%3d
+  ۱۴۰۴/۰۹/۲۶ ۱۱:۳۶:۴۲ | ن-۱۰ | اطلاعات و صورت‌های مالی میاندوره‌ای  دوره ۶ ماهه منتهی به  ۱۴۰۴/۰۸/۳۰ (حسابرسی نشده) | HasHtml=True Att=True | /Reports/Decision.aspx?LetterSerial=PQzjfu8HrVx7ggVFy7rrAg%3d%3d&rt=2&let=6&ct=5&ft=4
+  ۱۴۰۴/۰۹/۰۹ ۱۵:۳۴:۱۰ |  | صورت وضعیت پورتفوی صندوق سرمایه گذاری دوره ۱ ماهه منتهی به  ۱۴۰۴/۰۸/۳۰ | HasHtml=False Att=True | /Reports/Attachment.aspx?LetterSerial=IQeo45Jbi79hbg6lZsiigQ%3d%3d
+
+── متن نمونهٔ آخرین نامه (۱۲۰۰ نویسه) ──
+صورت‌های مالی میاندوره‌ای 3 ماهه منتهی به 1405/05/31 &nbsp; لطفاً چند لحظه صبر کنید... اطلاعات و صورت‌های مالی میاندوره‌ای صورت خالص دارایی ها صورت سود و زیان صورت گردش خالص دارایی‌ها EN شرکت: تجارت شاخصي کاردان تاریخ نامعتبر سرمایه ثبت شده: 2,000,000 نماد: کاردان سرمایه ثبت نشده: 0 کد صنعت (ISIC): 46430613 اطلاعات و صورت‌های مالی میاندوره‌ای &nbsp 3 ماهه منتهی به در تاریخ 1405/05/31 (حسابرسی نشده) سال مالی منتهی به: 1406/02/31 وضعیت ناشر: پذيرفته شده در بورس تهران اطلاعات نمایش داده شده با اطلاعات امضا شده مطابقت دارد کلیه مبالغ درج شده به میلیون ریال می باشد
