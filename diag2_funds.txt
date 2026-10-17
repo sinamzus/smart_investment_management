@@ -1,0 +1,8 @@
+── TSETMC قدیمی: بدنهٔ کامل
+  200 https://old.tsetmc.com/tsev2/data/ETFHistory.aspx?i=65023851436340574 → data/raw/funds/diag2_etfhistory.html (1933 نویسه)
+  200 https://old.tsetmc.com/Loader.aspx?ParTree=15131M&i=65023851436340574 → data/raw/funds/diag2_loader.html (5240 نویسه)
+── سایت فیپیران: یافتن آدرس‌های API در بستهٔ جاوااسکریپت
+  2 فایل js: ['/manifest.json', '/static/js/main.9c3c97d2.js']
+  js 0 KB: /manifest.json
+  js 7496 KB: /static/js/main.9c3c97d2.js
+    https://www.fipiran.ir/
