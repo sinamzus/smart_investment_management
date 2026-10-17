@@ -125,8 +125,8 @@ function divPayPanel() {
     <b>میانهٔ تأخیر ${p.median} روز، میانگین ${p.mean}، چارک‌ها ${p.q25}–${p.q75}</b> — پراکندگی بزرگ است، پس مدل یک عدد ثابت نیست؛ گزینهٔ «توزیع واقعی تأخیر» را روشن کنید.` : 'تاریخ پرداخت هنوز در داده نیست؛ مدل تأخیر یکسان L را به کار می‌برد.'}
     منبع: کدال ن-۱۳ و ن-۵۲؛ نمونه فقط ۳۰ شرکت بزرگ است و نمونه‌های متن‌دار ممکن است نمایندهٔ همهٔ ناشران نباشند [راستی‌آزمایی نشده].</div>
   ${hist}${yr}
-  <div class="prose"><b>تکمیل داده:</b> رهاورد۳۶۵ برای همهٔ نمادها «تاریخ پرداخت» را دارد؛ ابتدا ساختار پاسخ شبکه را ثبت کنید (روی سیستم شما):<div class="cmdline">pip install playwright\npython tools/fetch_rahavard_dividends.py --capture فملی --log cap_rahavard.txt\ngit add -A; git commit -m "rahavard capture"; git push -u origin claude/charming-ptolemy-cyehmc</div>
-    خروجی: <code>data/corporate_actions/dividend_payment_lags.csv</code> (${p.events} رویداد) و <code>codal_payment_dates.csv</code>.</div>`;
+  <div class="prose"><b>پوشش بیشتر:</b> لیست DPS رهاورد۳۶۵ فقط برای کاربر پریمیوم است، پس منبع نیست. تاریخ پرداخت رویدادهای باقی‌مانده (پیوست‌های اسکن‌شده) و نمادهای بیرون از ۳۰ شرکت بزرگ فعلاً در دسترس نیست؛ مدل برای آن‌ها از همان توزیع تجربی استفاده می‌کند.
+    داده‌ها: <code>data/corporate_actions/dividend_payment_lags.csv</code> (${p.events} رویداد) و <code>codal_payment_dates.csv</code>.</div>`;
 }
 function initDiv() {
   document.querySelectorAll('#dv-idx button').forEach(b => b.onclick = () => { dv.k = b.dataset.k; divRender(); });
@@ -257,7 +257,7 @@ function initQA() {
   $('qa-kpis').innerHTML = [['اعضای «شاخص كل»', u.k_members], ['با فایل قیمت', u.k_with_prices], ['نمادهای extras', u.extras], ['نماد در بازده', u.stocks_bourse_in_returns], ['ردیف قاعدهٔ ۸', rl.rule8]].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${fmt(v, 0)}</div></div>`).join('');
   $('qa-gaps').innerHTML = `<b>باز و شناخته‌شده</b><ul>
   <li><b>صنعت ۳۴ خودرو:</b> TE ۳٫۲٪ (همبستگی ۰٫۹۹۶)؛ فرضیهٔ زمان‌بندی/سهام شناور/توقف/فرابورس رد شد؛ خطا پراکنده است.</li>
-  <li><b>تاریخ پرداخت سود:</b> ${X.divlab.payment_data.agm_rows} مصوبهٔ مجمع و ${X.divlab.payment_data.rows} نامهٔ زمان‌بندی پرداخت از کدال جمع‌آوری شد؛ فقط ${X.divlab.payment_data.letters_text || 0} پیوست متن‌دار است و برای ${X.divlab.payment_data.with_date || 0} رویداد تاریخ پرداخت استخراج شد (میانهٔ تأخیر ${X.divlab.payment_data.median || '—'} روز)؛ بقیه (تصویر اسکن‌شده) با رهاورد۳۶۵ تکمیل می‌شود.</li>
+  <li><b>تاریخ پرداخت سود:</b> ${X.divlab.payment_data.agm_rows} مصوبهٔ مجمع و ${X.divlab.payment_data.rows} نامهٔ زمان‌بندی پرداخت از کدال جمع‌آوری شد؛ فقط ${X.divlab.payment_data.letters_text || 0} پیوست متن‌دار است و برای ${X.divlab.payment_data.with_date || 0} رویداد تاریخ پرداخت استخراج شد (میانهٔ تأخیر ${X.divlab.payment_data.median || '—'} روز)؛ بقیه (تصویر اسکن‌شده) و نمادهای بیرون از ۳۰ شرکت بزرگ فعلاً بی‌تاریخ‌اند و مدل از توزیع تجربی استفاده می‌کند (بند باز؛ لیست DPS رهاورد پریمیوم است).</li>
   <li><b>هم‌وزن TR رسمی:</b> نسبت سطح بازسازی به رسمی ${fmt(D.stats.EW.all.cum_ratio, 3)}؛ تفاوت از تفکیک سود و افزایش سرمایه در رویدادهای ترکیبی است.</li>
   <li><b>سهام کاملاً حذف‌شده:</b> فقط آن‌هایی که با جست‌وجوی نام صنعت پیدا شده‌اند (۱۳۶ نماد extras)؛ جهان کامل نیست.</li>
   <li><b>۴ صنعت بدون عضو فعلی (۳۳، ۳۵، ۳۶، ۴۵)</b> و ۲۶ با کمتر از ۲۰۰ روز هم‌پوشانی: قابل مقایسه نیستند.</li></ul>`;
