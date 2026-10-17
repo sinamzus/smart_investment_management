@@ -116,7 +116,10 @@ def collect(n: int, symbols=None) -> None:
 def find(text: str) -> None:
     """نماد کدال یک صندوق را از نام پیدا می‌کند: چند شکل نام را به‌عنوان Symbol می‌پرسد و Symbol/CompanyName نتایج را چاپ می‌کند."""
     base = text.strip()
-    variants = list(dict.fromkeys([base, base.replace(" ", ""), " ".join(base.split()[-2:]), base.split()[-1], "مشترک " + base.split()[-1], base.replace("مشترک ", "").replace("شاخصی ", "")]))
+    toks = [t for t in base.replace("مشترک", "").replace("شاخصی", "").split() if t]
+    core = "".join(toks)                                   # «کارآفرین»
+    variants = list(dict.fromkeys([base, base.replace(" ", ""), core, " ".join(toks), "مشترک " + core, "مشترک" + core, "شاخصی " + core, "شاخصی" + core,
+                                   core + " مشترک", "ص " + core, core + "1", core + "2", core + "3", "کارآفرین", "کاراف", "KARAFARIN"]))
     print(f"\n══ جست‌وجوی نماد کدال برای «{text}» ══")
     seen = set()
     for v in variants:
