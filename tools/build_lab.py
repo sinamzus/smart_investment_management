@@ -150,16 +150,17 @@ def finalize(lab, S, R):
     for rid, r in runs.items():
         res = r["res"]
         ex = fe.net(res["ret"]["S"], res["to"]["S"], COST) - fe.net(res["ret"]["ALL"], res["to"]["ALL"], COST)
-        D[rid] = pd.Series(ex, index=pd.DatetimeIndex(res["end"]))
+        D[rid] = pd.Series(ex, index=pd.DatetimeIndex(res["sig_date"]))      # کلید = روز سیگنال (در برابر تأخیر اجرا ثابت)
         sr_list.append(float(np.mean(ex) / np.std(ex, ddof=1)) if np.std(ex) > 0 else np.nan)
         ids.append(rid)
     M = pd.DataFrame(D)
-    M = M.loc[:, M.notna().mean() >= 0.9].fillna(0.0)
+    full = M.notna().sum().max()
+    M = M.loc[:, M.notna().sum() >= 0.9 * full].fillna(0.0)             # فقط استراتژی‌های با پوشش کامل؛ بنیادی‌ها (۶۲ ماه) خارج از PBO/RC
     N = len(runs)
     R["multi"] = {"N": N, "bonferroni_t": rs.bonferroni_t(N)}
     pb = rs.pbo_cscv(M.values) if M.shape[1] >= 10 else {}
     spa = rs.reality_check(M.values) if M.shape[1] >= 10 else {}
-    R["multi"].update({"pbo": pb, "rc_spa": {**spa, "best_id": (M.columns[spa["best_idx"]] if spa else None)}})
+    R["multi"].update({"n_used": int(M.shape[1]), "months": int(M.shape[0]), "pbo": pb, "rc_spa": {**spa, "best_id": (M.columns[spa["best_idx"]] if spa else None)}})
     pvals = []
     for rid, r in runs.items():
         st = r["stats"]
@@ -201,6 +202,9 @@ def main(export_only=False):
     S = lab.S
     if export_only and pk.exists():
         R = pickle.load(open(pk, "rb"))
+        if "--refinalize" in sys.argv:
+            R = finalize(lab, S, R)
+            pickle.dump(R, open(pk, "wb"))
     else:
         R = run_all(lab, S)
         zoo, (use, ok, fw) = sg.zoo(mk, lab.idx, S)
