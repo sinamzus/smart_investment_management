@@ -123,7 +123,7 @@ def capture(sym: str, urls: list, seconds: int) -> None:
                 print(f"→ {u}")
                 try:
                     page.goto(u, wait_until="domcontentloaded", timeout=60000)
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    page.wait_for_timeout(8000)                              # networkidle نه: رهاورد اتصال بلندمدت دارد و هیچ‌وقت idle نمی‌شود
                 except Exception as e:  # noqa: BLE001
                     print("   (ادامه می‌دهیم)", type(e).__name__)
                 for _ in range(4):                                       # اسکرول برای بارگذاری تنبل
