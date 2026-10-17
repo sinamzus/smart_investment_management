@@ -30,21 +30,43 @@ def r(x, n=4):
 
 
 # ── Dividend Lab ─────────────────────────────────────────────────────────
-def pay_lags() -> pd.Series:
-    """تأخیر واقعی پرداخت (روز از استحقاق؛ بدون منفی) از نامه‌های ن-۱۳ (tools/parse_dividend_payments.py)."""
-    f = ROOT / "data/corporate_actions/dividend_payment_lags.csv"
+def pay_events() -> pd.DataFrame:
+    """رویدادهای دارای تاریخ پرداخت و روز استحقاق (tools/merge_dividend_payments.py: کدال ن-۱۳ + فارابی)، با تأخیر ≥ ۰."""
+    f = ROOT / "data/corporate_actions/dividend_payment_events.csv"
     if not f.exists():
-        return pd.Series(dtype=float)
-    E = pd.read_csv(f)
-    E = E[pd.to_numeric(E.dps_rial, errors="coerce") > 0]
-    s = pd.to_numeric(E.lag_eff_ex.fillna(E.lag_eff), errors="coerce").dropna().clip(lower=0)
-    return s
+        return pd.DataFrame()
+    E = pd.read_csv(f, dtype={"ex_date": str}).fillna({"ex_date": ""})
+    E = E[E.ex_date != ""].copy()
+    E["lag"] = pd.to_numeric(E.lag_ex, errors="coerce").clip(lower=0)
+    return E.dropna(subset=["lag"])
+
+
+def pay_mix(E: pd.DataFrame, w: str) -> list:
+    """[(تأخیر روز، وزن نرمال)] برای simulate؛ وزن = سهم رویداد از جریان سود شاخص (wK یا wEW)."""
+    if E.empty or E[w].fillna(0).sum() <= 0:
+        return []
+    g_ = E.assign(L=E.lag.round().astype(int)).groupby("L")[w].sum()
+    g_ = g_[g_ > 0]
+    return [(int(L), float(v / g_.sum())) for L, v in g_.items()]
+
+
+def pay_lags() -> pd.Series:
+    """تأخیر هر رویداد (بدون وزن) — برای آمار توصیفی و سازگاری با build_ui_funds."""
+    E = pay_events()
+    return E.lag if len(E) else pd.Series(dtype=float)
+
+
+def wstat(E: pd.DataFrame, w: str) -> dict:
+    ww = E[w].fillna(0)
+    o = np.argsort(E.lag.values)
+    cw_ = np.cumsum(ww.values[o]) / ww.sum()
+    return {"mean": int(round(float((E.lag * ww).sum() / ww.sum()))), "median": int(E.lag.values[o][np.searchsorted(cw_, 0.5)])}
 
 
 def divlab():
     out = {}
-    lags = pay_lags()
-    mix = [(int(L), 1.0 / len(lags)) for L in lags] if len(lags) else None
+    E_all = pay_events()
+    mixes = {"K": pay_mix(E_all, "wK"), "EW": pay_mix(E_all, "wEW")}
     for name in ir.PAIRS:
         j = ir.load_pair(name)
         yrs = (j.index[-1] - j.index[0]).days / 365.25       # سال تقویمی
@@ -58,12 +80,13 @@ def divlab():
                 b = ir.stats(ir.simulate(j, L, rb), j.tr)
                 row[f"B{int(rb*100)}"] = {k: r(v, 4) for k, v in b.items()}
             scen.append(row)
-        emp = None
-        if mix:      # توزیع تجربی تأخیر (هر رویداد واقعی یک اتم با وزن برابر)
+        mix, emp = mixes.get(name) or [], None
+        if mix:      # توزیع تجربی تأخیر؛ وزن هر رویداد = سهمش از جریان سود همان شاخص
             emp = {"A": {k: r(v, 4) for k, v in ir.stats(ir.simulate(j, mix), j.tr).items()}}
             for rb in (0.25, 0.35):
                 emp[f"B{int(rb*100)}"] = {k: r(v, 4) for k, v in ir.stats(ir.simulate(j, mix, rb), j.tr).items()}
-        out[name] = {"empirical": emp, "dates": [str(d.date()) for d in j.index], "tr": [round(float(v), 7) for v in j.tr],
+        out[name] = {"empirical": emp, "empirical_mix": [[L, round(w_, 5)] for L, w_ in mix] or None,
+                     "dates": [str(d.date()) for d in j.index], "tr": [round(float(v), 7) for v in j.tr],
                      "pr": [round(float(v), 7) for v in j.pr], "y_ann_pct": r(j.y.sum() / yrs * 100, 2),
                      "month_share": [r(month.get(m, 0) / j.y.sum() * 100, 1) for m in range(1, 13)],
                      "scenarios": scen, "from": str(j.index[0].date()), "to": str(j.index[-1].date())}
@@ -71,21 +94,24 @@ def divlab():
     n = lambda f: int(len(pd.read_csv(ca / f))) if (ca / f).exists() else 0   # noqa: E731
     out["payment_data"] = {"available": n("codal_payment_schedule_raw.csv") > 0, "rows": n("codal_payment_schedule_raw.csv"),
                            "agm_rows": n("codal_agm.csv")}
-    if len(lags):
-        E = pd.read_csv(ca / "dividend_payment_lags.csv", dtype=str).fillna("")
-        E = E[pd.to_numeric(E.dps_rial, errors="coerce") > 0]
+    if len(E_all):
+        ev = pd.read_csv(ca / "dividend_payment_events.csv", dtype=str).fillna("")
+        lags = E_all.lag
         bins = [0, 15, 30, 60, 90, 120, 180, 10000]
-        h = pd.cut(lags, bins, right=False).value_counts(sort=False)
-        lg = pd.to_numeric(E.lag_eff_ex.where(E.lag_eff_ex != "", E.lag_eff), errors="coerce").clip(lower=0)
-        by_year = {y: {"n": int(len(x)), "median": int(x.median())} for y, x in lg.dropna().groupby(E.session_date_j.str[:4].loc[lg.dropna().index])}
+        lab = [f"{a_}–{b_ if b_ < 10000 else '+'}" for a_, b_ in zip(bins[:-1], bins[1:])]
+        cut = pd.cut(lags, bins, right=False, labels=lab)
+        h = cut.value_counts(sort=False)
+        hK = (E_all.wK.fillna(0).groupby(cut, observed=False).sum() / E_all.wK.sum()).reindex(lab).fillna(0)
+        by_year = {y: {"n": int(len(x)), "median": int(x.median())} for y, x in lags.groupby(E_all.agm_j.str[:4])}
         P = pd.read_csv(ca / "codal_payment_dates.csv", dtype=str).fillna("")
+        cov = pd.read_csv(ca / "dividend_payment_coverage.csv") if (ca / "dividend_payment_coverage.csv").exists() else pd.DataFrame()
         out["payment_data"].update({
-            "events": int(len(E)), "with_date": int(len(lags)), "letters_text": int((P.chars.astype(int) > 200).sum()), "letters": int(len(P)),
+            "events": int(len(ev)), "with_date": int(len(ev)), "with_ex": int(len(E_all)), "symbols": int(ev.symbol.nunique()),
+            "sources": ev.source.value_counts().to_dict(), "letters_text": int((P.chars.astype(int) > 200).sum()), "letters": int(len(P)),
             "median": int(lags.median()), "mean": int(round(lags.mean())), "q25": int(lags.quantile(.25)), "q75": int(lags.quantile(.75)),
-            "hist": [[f"{int(i.left)}–{int(i.right) if i.right < 10000 else '+'}", int(c)] for i, c in h.items()], "by_year": by_year,
-            "symbols": int(E[E.lag_eff != ""].symbol.nunique())})
-    # ‌مخلوط تجربی برای استفاده در مدل‌های دیگر
-    out["payment_data"]["empirical_mix"] = sorted(int(x) for x in lags)
+            "k": wstat(E_all, "wK"), "ew": wstat(E_all, "wEW"),
+            "hist": [[l_, int(h.get(l_, 0)), round(float(hK.get(l_, 0)) * 100, 1)] for l_ in lab], "by_year": by_year,
+            "coverage": cov.to_dict("records")})
     return out
 
 
