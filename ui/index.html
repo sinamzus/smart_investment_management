@@ -24,6 +24,7 @@
       <a href="#sym" data-view="sym">Symbol<kbd>7</kbd></a>
       <a href="#pf" data-view="pf">Fund<kbd>8</kbd></a>
       <a href="#risk" data-view="risk">Risk<kbd>9</kbd></a>
+      <a href="#fnd" data-view="fnd">Index Funds<kbd>0</kbd></a>
     </nav>
     <label class="cmd">
       <span class="prompt">›</span>
@@ -239,12 +240,34 @@
       <div class="lineage"><span><b>روش</b> بازده ماهانهٔ شمسی هر صنعت از بازسازی ارزش‌وزن (TR)، از ۱۳۹۸</span><span><b>رنگ</b> آبی = همبستگی بالا</span></div></section>
   </main>
 
+  <main class="workspace v-fnd" id="v-fnd" hidden>
+    <section class="panel" style="--lg:var(--lg-a)">
+      <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title">ردیابی صندوق‌های شاخصی در برابر شاخص مرجع</span><span class="chip" id="fn-chip"></span>
+        <div class="seg" id="fn-win"><button data-w="all" aria-pressed="true">کل عمر</button><button data-w="3y" aria-pressed="false">۳ سال</button><button data-w="1y" aria-pressed="false">۱ سال</button></div>
+        <div class="panel-tools"><button class="tool" id="fn-csv">CSV</button></div></div>
+      <div class="panel-body scroll"><table class="dt" id="fn-tab"></table></div>
+      <div class="lineage" id="fn-lin-a"></div></section>
+    <section class="panel" style="--lg:var(--lg-b)">
+      <div class="panel-head"><span class="lg-badge">B</span><span class="panel-title" id="fn-title">صندوق</span>
+        <div class="seg" id="fn-ref"><button data-r="tr" aria-pressed="true">مرجع رسمی</button><button data-r="rep" aria-pressed="false">ماکت سرمایه‌پذیر</button></div></div>
+      <div class="kpis" id="fn-kpis"></div>
+      <div class="panel-body"><div class="legend" id="fn-legend"></div><svg class="chart" id="fn-chart" dir="ltr"></svg></div>
+      <div class="lineage" id="fn-lin-b"></div></section>
+    <section class="panel" style="--lg:var(--lg-c)">
+      <div class="panel-head"><span class="lg-badge">C</span><span class="panel-title">هر سال شمسی · صندوق در برابر مرجع</span></div>
+      <div class="panel-body scroll"><table class="dt" id="fn-year"></table></div></section>
+    <section class="panel" style="--lg:var(--lg-e)">
+      <div class="panel-head"><span class="lg-badge">D</span><span class="panel-title">روش · خوانش · داده</span></div>
+      <div class="panel-body scroll"><div class="prose" id="fn-method"></div></div></section>
+  </main>
+
   <footer class="statusbar" id="status"></footer>
 </div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="data/data.js"></script>
 <script src="data/extra.js"></script>
+<script src="data/funds.js"></script>
 <script>
 const D = window.SIM_DATA;
 if (!D) { document.body.innerHTML = '<p style="padding:24px">ui/data/data.js پیدا نشد. ابتدا <code>python tools/build_ui_data.py</code> را اجرا کنید.</p>'; throw new Error('no data'); }

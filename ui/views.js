@@ -2,7 +2,7 @@
    داده: window.SIM_EXTRA (tools/build_ui_extra.py) و window.SIM_DATA. هیچ عدد ثابتی در این فایل نیست مگر متن توضیحی. */
 (function () {
 const X = window.SIM_EXTRA;
-const VIEWS = { index: 'v-index', div: 'v-div', fac: 'v-fac', reb: 'v-reb', qa: 'v-qa', rep: 'v-rep', sym: 'v-sym', pf: 'v-pf', risk: 'v-risk' };
+const VIEWS = { index: 'v-index', div: 'v-div', fac: 'v-fac', reb: 'v-reb', qa: 'v-qa', rep: 'v-rep', sym: 'v-sym', pf: 'v-pf', risk: 'v-risk', fnd: 'v-fnd' };
 const JM = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
 const inited = {}, redraws = {};
 const jyear = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year: 'numeric' });
@@ -402,6 +402,92 @@ function initRisk() {
   redraws.risk = drawRisk; renderRisk();
 }
 
+/* ══════════ Index Funds ══════════ */
+const fn = { sym: null, w: 'all', ref: 'tr', i: null };
+const FB = () => (window.SIM_FUNDS && window.SIM_FUNDS.bench_names) || {};
+const fnBench = k => FB()[k] || k;
+function fnRows() {
+  const w = fn.w;
+  return window.SIM_FUNDS.funds.map(f => ({ f, m: (f.win[w] || {}).tr || {}, rp: (f.win[w] || {}).rep || {}, lag: (f.win[w] || {}).lag_cost })).filter(r => r.m.n)
+    .sort((a, b) => (a.m.te_w ?? 1e9) - (b.m.te_w ?? 1e9));
+}
+function fnTable() {
+  const F = window.SIM_FUNDS, rows = fnRows();
+  const th_ = [['نماد'], ['مرجع'], ['از'], ['روز', 'n'], ['TE هفتگی %', 'n'], ['TE روزانه %', 'n'], ['TD سالانه %', 'n'], ['TD نسبت به ماکت %', 'n'], ['همبستگی هفتگی', 'n'], ['بتا', 'n'], ['R²', 'n'], ['پریمیوم میانگین %', 'n'], ['پریمیوم σ %', 'n'], ['رویداد', 'n']];
+  const body = rows.map(({ f, m, rp }) => {
+    const p = f.premium || {}, auto = f.benchmark_src === 'auto', odd = f.best_fit !== f.benchmark;
+    return `<tr data-sym="${f.symbol}" ${f.symbol === fn.sym ? 'aria-selected="true"' : ''}><td><b>${f.symbol}</b></td><td>${fnBench(f.benchmark).replace(/[«»]/g, '')}${auto ? ' <span class="chip warn">حدسی</span>' : ''}${odd ? ` <span class="chip warn" data-tip="با این صندوق بهترین برازش را شاخص ${fnBench(f.best_fit)} دارد؛ مرجع اعلام‌شده را بررسی کنید.">برازش بهتر: ${fnBench(f.best_fit).replace(/[«»]/g, '')}</span>` : ''}</td><td class="num">${m.from}</td><td class="n">${m.n}</td><td class="n"><b>${fmt(m.te_w)}</b></td><td class="n">${fmt(m.te_d)}</td><td class="n ${cls(m.td)}">${sgn(m.td)}</td><td class="n ${cls(rp.td)}">${rp.td == null ? '—' : sgn(rp.td)}</td><td class="n">${fmt(m.corr_w, 4)}</td><td class="n">${fmt(m.beta, 3)}</td><td class="n">${fmt(m.r2, 4)}</td><td class="n ${cls(p.mean)}">${p.mean == null ? '—' : sgn(p.mean)}</td><td class="n">${p.std == null ? '—' : fmt(p.std)}</td><td class="n">${f.events.length || ''}</td></tr>`;
+  }).join('');
+  const ref = F.reference.map(x => `<tr class="mute"><td>ماکت SIM</td><td>${fnBench(x.benchmark).replace(/[«»]/g, '')}</td><td class="num">${x.from}</td><td class="n">${x.n}</td><td class="n">${fmt(x.te_w)}</td><td class="n">${fmt(x.te_d)}</td><td class="n ${cls(x.td)}">${sgn(x.td)}</td><td class="n">—</td><td class="n">${fmt(x.corr_w, 4)}</td><td class="n">${fmt(x.beta, 3)}</td><td class="n">${fmt(x.r2, 4)}</td><td class="n">—</td><td class="n">—</td><td class="n"></td></tr>`).join('');
+  $('fn-tab').innerHTML = th(th_) + '<tbody>' + body + ref + '</tbody>';
+  document.querySelectorAll('#fn-tab tr[data-sym]').forEach(tr => tr.onclick = () => { fn.sym = tr.dataset.sym; fn.i = null; fnRender(); });
+}
+function fnEmpty() {
+  const F = window.SIM_FUNDS;
+  $('fn-chip').textContent = 'منتظر دادهٔ NAV';
+  $('fn-tab').innerHTML = th([['نماد'], ['نام'], ['مرجع']]) + '<tbody>' + F.missing.map(m => `<tr><td><b>${m.symbol}</b></td><td>${m.name}</td><td>${fnBench(m.benchmark).replace(/[«»]/g, '')}${m.benchmark_src === 'auto' ? ' <span class="chip warn">حدسی</span>' : ''}</td></tr>`).join('') + '</tbody>';
+  ['fn-kpis', 'fn-chart', 'fn-lin-b'].forEach(k => $(k).innerHTML = '');
+  $('fn-legend').innerHTML = '<span>نمودار NAV در برابر مرجع و TE غلتان پس از دریافت دادهٔ صندوق‌ها ساخته می‌شود (دستور در پنل D)</span>';
+  $('fn-year').innerHTML = '<tbody><tr><td class="mute" style="white-space:normal;padding:10px">جدول سال‌ها پس از دریافت NAV.</td></tr></tbody>';
+  $('fn-title').textContent = 'صندوق';
+  $('fn-lin-a').innerHTML = `<span><b>وضعیت</b> NAV این صندوق‌ها هنوز در مخزن نیست؛ ${F.missing.length} صندوق شاخصی شناسایی شده است</span>`;
+  $('fn-method').innerHTML = fnMethod(false);
+}
+function fnMethod(has) {
+  const F = window.SIM_FUNDS;
+  return `<p><b>داده:</b> قیمت بازار و NAV ابطال هر صندوق از TSETMC و فیپیران (یا سایت خود صندوق) با <code>tools/fetch_index_funds.py</code> روی سیستم شما گرفته می‌شود؛ سپس <code>python tools/build_ui_funds.py</code> این نما را می‌سازد.</p>
+  ${has ? '' : `<div class="cmdline">python tools/fetch_index_funds.py --log funds_log.txt\npython tools/build_ui_funds.py\ngit add -A; git commit -m "index funds"; git push -u origin claude/charming-ptolemy-cyehmc</div>`}
+  <p><b>روش:</b></p><ol>
+  <li>بازده روزانهٔ صندوق از NAV ابطال (در نبود آن NAV آماری) روی روزهای معاملاتی شاخص؛ دو ماه اول عمر صندوق (تشکیل سبد) کنار می‌رود.</li>
+  <li><b>TE هفتگی</b> = انحراف معیار بازده فعال ۵ روزهٔ غیرهم‌پوشان × √۵۲. معیار اصلی است، چون NAV و شاخص در بورس تهران هم‌زمان منتشر نمی‌شوند و TE روزانه را بالا می‌برد. <b>TE روزانه</b> برای مقایسه با ادبیات هم آمده است.</li>
+  <li><b>TD</b> (تفاوت ردیابی) = بازده سالانهٔ صندوق منهای مرجع با سال تقویمی؛ منفی یعنی صندوق عقب مانده است.</li>
+  <li><b>TD نسبت به ماکت</b> = بازده صندوق منهای ماکت سرمایه‌پذیر SIM (بازتولید کامل، بدون کارمزد، سود با تأخیر ${F.lag} روز). بخش ساختاری TD (تأخیر سود) را از سهم قابل‌انتساب به مدیر (کارمزد، نقدی، اجرا) جدا می‌کند؛ هر صندوقی که به‌خاطر تأخیر سود از TR رسمی عقب است، نسبت به ماکت منصفانه‌تر سنجیده می‌شود. ماکت فقط برای «شاخص كل» و هم‌وزن موجود است.</li>
+  <li>جهش بازده فعال روزانه بیش از ۲۰٪ (تجزیهٔ واحد یا خطای NAV) رویداد حساب و خنثی می‌شود و در ستون «رویداد» می‌آید؛ ۵ تا ۲۰٪ فقط علامت می‌خورد.</li>
+  <li><b>برازش بهتر:</b> NAV هر صندوق در برابر هر سه شاخص (كل، هم‌وزن، ۳۰ شرکت) سنجیده می‌شود؛ اگر شاخص دیگری TE کمتری بدهد، مرجع اعلام‌شده یا نوع صندوق باید بازبینی شود. <b>حدسی</b> یعنی مرجع را مالک پروژه اعلام نکرده و از نام صندوق حدس زده شده است.</li>
+  <li><b>پریمیوم</b> = قیمت پایانی بازار ÷ NAV ابطال − ۱؛ هزینهٔ واقعی سرمایه‌گذار بازار ثانویه، جدا از خطای ردیابی NAV.</li></ol>
+  <p><b>محدودیت‌ها:</b> NAV ابطال تحت‌تأثیر برآورد قیمت سهام متوقف و صف است؛ کارمزد سالانه از دادهٔ NAV جدا نشده و در TD دیده می‌شود؛ مرجع «شاخص ۳۰ شرکت» بازده کل بودنش از رفتار روز استحقاق تأیید شد، ولی ترکیب تاریخی آن بازسازی نشده است.</p>`;
+}
+function fnRender() {
+  const F = window.SIM_FUNDS;
+  if (!F.funds.length) { fnEmpty(); return; }
+  document.querySelectorAll('#fn-win button').forEach(b => b.setAttribute('aria-pressed', b.dataset.w === fn.w));
+  document.querySelectorAll('#fn-ref button').forEach(b => b.setAttribute('aria-pressed', b.dataset.r === fn.ref));
+  const rows = fnRows();
+  if (!rows.length) { $('fn-tab').innerHTML = ''; $('fn-lin-a').innerHTML = '<span>برای این بازه دادهٔ کافی نیست</span>'; return; }
+  if (!rows.find(r => r.f.symbol === fn.sym)) fn.sym = rows[0].f.symbol;
+  $('fn-chip').textContent = rows.length + ' صندوق';
+  fnTable();
+  $('fn-lin-a').innerHTML = `<span><b>مرتب</b> بر پایهٔ TE هفتگی (کمتر بهتر)</span><span><b>NAV</b> ابطال تا <span class="num">${rows.map(r => r.f.nav_to).sort().pop()}</span></span><span><b>ساخت</b> <span class="num">${F.built}</span></span><span><b>ردیف خاکستری</b> ماکت SIM در ۳ سال اخیر؛ کف ساختاری</span>`;
+  const { f, m, rp } = rows.find(r => r.f.symbol === fn.sym), base = fn.ref === 'rep' && rp.n ? rp : m, nm = fn.ref === 'rep' && rp.n ? 'ماکت سرمایه‌پذیر ' + fnBench(f.benchmark) : fnBench(f.benchmark);
+  $('fn-title').textContent = `${f.symbol} · ${f.name}`;
+  $('fn-kpis').innerHTML = [['TE هفتگی', fmt(base.te_w) + '%', ''], ['TD سالانه', sgn(base.td) + '%', cls(base.td)], ['همبستگی هفتگی', fmt(base.corr_w, 4), ''], ['بتا', fmt(base.beta, 3), ''], ['پریمیوم میانگین', f.premium ? sgn(f.premium.mean) + '%' : '—', f.premium ? cls(f.premium.mean) : ''], ['خالص دارایی', f.aum_bn ? fmt(f.aum_bn, 0) + ' م.ر' : '—', '']]
+    .map(([k, v, c]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
+  const c = f.curve, st = fn;
+  $('fn-legend').innerHTML = `<span><i style="color:var(--ch-1)"></i>صندوق (NAV)</span><span><i style="color:var(--ch-2)"></i>${nm.replace(/[«»]/g, '')}</span>${c.rep && fn.ref === 'tr' ? '<span><i style="color:var(--ch-3);border-top-style:dashed"></i>ماکت سرمایه‌پذیر</span>' : ''}<span><i style="color:var(--down)"></i>TE ۶۳ روزه (٪)</span><span class="readout" id="fn-readout"></span>`;
+  const bser = fn.ref === 'rep' && c.rep ? c.rep : c.b, ser = [{ v: c.f, color: 'var(--ch-1)', w: 1.5 }, { v: bser, color: 'var(--ch-2)', w: 1.3 }];
+  if (c.rep && fn.ref === 'tr') ser.push({ v: c.rep, color: 'var(--ch-3)', w: 1.1, dash: true });
+  const draw = () => {
+    paneChart($('fn-chart'), c.dates, [{ frac: .65, log: true, series: ser, fmt: v => fmt(v, 0) }, { frac: .35, zero: true, series: [{ v: c.te63, color: 'var(--down)', w: 1.2 }], fmt: v => fmt(v, 1) + '%' }], st);
+    $('fn-readout').innerHTML = st.i == null ? '' : `<b>${c.dates[st.i]}</b> &nbsp; صندوق <b>${fmt(c.f[st.i], 1)}</b> &nbsp; مرجع <b>${fmt(bser[st.i], 1)}</b> &nbsp; TE₆₃ <b>${fmt(c.te63[st.i], 2)}%</b>`;
+  };
+  if (!$('fn-chart')._hov) { $('fn-chart')._hov = true; attachHover($('fn-chart'), null, i => { fn.i = i; redraws.fnd && redraws.fnd(); }); }
+  redraws.fnd = draw; draw();
+  $('fn-lin-b').innerHTML = `<span><b>NAV</b> ${f.nav_col === 'nav_cancel' ? 'ابطال' : 'آماری'} · <span class="num">${f.nav_from}</span> → <span class="num">${f.nav_to}</span> · منبع ${f.nav_source === 'fipiran' ? 'فیپیران' : 'سایت صندوق'}</span><span><b>مرجع</b> ${nm}${f.benchmark_src === 'auto' ? ' (حدسی)' : ''}</span>${f.price_te != null ? `<span><b>TE قیمت بازار</b> ${fmt(f.price_te)}%</span>` : ''}`;
+  $('fn-year').innerHTML = th([['سال شمسی'], ['صندوق %', 'n'], ['مرجع %', 'n'], ['تفاوت %', 'n'], ['TE سالانه %', 'n'], ['روز', 'n']]) + '<tbody>' + f.yearly.map(y => `<tr><td class="num">${y.jy}</td><td class="n ${cls(y.f)}">${sgn(y.f, 1)}</td><td class="n ${cls(y.b)}">${sgn(y.b, 1)}</td><td class="n ${cls(y.d)}">${sgn(y.d)}</td><td class="n">${fmt(y.te)}</td><td class="n mute">${y.days}</td></tr>`).join('') + '</tbody>';
+  const evs = f.events.length ? `<p><b>رویدادهای خنثی‌شده برای ${f.symbol}:</b> ${f.events.map(e => `<span class="num">${e[0]}</span> (${sgn(e[1], 1)}٪)`).join('، ')}</p>` : '';
+  const miss = F.missing.length ? `<p><b>NAV دریافت‌نشده:</b> ${F.missing.map(x => x.symbol).join('، ')}</p>` : '';
+  $('fn-method').innerHTML = evs + miss + fnMethod(true);
+}
+function initFnd() {
+  document.querySelectorAll('#fn-win button').forEach(b => b.onclick = () => { fn.w = b.dataset.w; fnRender(); });
+  document.querySelectorAll('#fn-ref button').forEach(b => b.onclick = () => { fn.ref = b.dataset.r; fnRender(); });
+  $('fn-csv').onclick = () => {
+    const F = window.SIM_FUNDS; if (!F.funds.length) return download('index_funds_candidates.csv', [['symbol', 'name', 'benchmark'], ...F.missing.map(m => [m.symbol, m.name, m.benchmark])]);
+    download(`index_funds_tracking_${fn.w}.csv`, [['symbol', 'benchmark', 'from', 'days', 'te_weekly_pct', 'te_daily_pct', 'td_pct', 'td_vs_replica_pct', 'corr_weekly', 'beta', 'r2', 'premium_mean_pct', 'premium_std_pct', 'events'], ...fnRows().map(({ f, m, rp }) => [f.symbol, f.benchmark, m.from, m.n, m.te_w, m.te_d, m.td, rp.td ?? '', m.corr_w, m.beta, m.r2, (f.premium || {}).mean ?? '', (f.premium || {}).std ?? '', f.events.length])]);
+  };
+  redraws.fnd = null; fnRender();
+}
+
 /* ══════════ تراکم، حافظهٔ تنظیمات، تاریخچهٔ فرمان، کلیک روی نماد ══════════ */
 const LS = { get: k => { try { return localStorage.getItem('sim.' + k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem('sim.' + k, v); } catch (e) { /* بی‌اهمیت */ } } };
 const DENS = ['compact', 'default', 'comfortable'];
@@ -418,7 +504,7 @@ $('cmd').addEventListener('keydown', e => {
 }, true);
 
 /* ══════════ Router ══════════ */
-const INIT = { div: initDiv, fac: initFac, reb: initReb, qa: initQA, rep: initRep, sym: initSym, pf: initPf, risk: initRisk };
+const INIT = { div: initDiv, fac: initFac, reb: initReb, qa: initQA, rep: initRep, sym: initSym, pf: initPf, risk: initRisk, fnd: initFnd };
 function show(name) {
   if (!VIEWS[name]) return;
   Object.entries(VIEWS).forEach(([k, id]) => { $(id).hidden = k !== name; });
@@ -430,13 +516,13 @@ function show(name) {
 document.querySelectorAll('#nav a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); show(a.dataset.view); }));
 addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || e.ctrlKey || e.metaKey) return;
-  const n = '123456789'.indexOf(e.key); if (n >= 0) show(Object.keys(VIEWS)[n]);
+  const n = '1234567890'.indexOf(e.key); if (n >= 0) show(Object.keys(VIEWS)[n]);
 });
 const _run = window.run;
 window.run = function (cmd) {
   const [c, a] = cmd.trim().toLowerCase().split(/\s+/);
   if (c === 'go' || c === 'view') { if (VIEWS[a]) { show(a); toast('نما: ' + a); } else toast('نما: ' + Object.keys(VIEWS).join(' · ')); return; }
-  if (c === 'help') { toast('GO INDEX|DIV|FAC|REB|QA|REP|SYM|PF|RISK · SYM <نماد> · IDX K|EW · WIN 2014|2016 · THEME · DENSITY · ↑↓ تاریخچه'); return; }
+  if (c === 'help') { toast('GO INDEX|DIV|FAC|REB|QA|REP|SYM|PF|RISK|FND · SYM <نماد> · IDX K|EW · WIN 2014|2016 · THEME · DENSITY · ↑↓ تاریخچه'); return; }
   if (c === 'sym' && a) { window.openSym(cmd.trim().split(/\s+/)[1]); return; }
   if (c === 'density') { $('density').click(); return; }
   if (c === 'idx' || c === 'win') show('index');

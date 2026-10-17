@@ -160,6 +160,9 @@ th.has-tip, .kpi .k.has-tip, .lineage b.has-tip, .legend span.has-tip, .ctl labe
 .workspace.v-pf   { grid-template-columns: 1.6fr 1fr; grid-template-rows: 1fr 1fr; }
 .workspace.v-risk { grid-template-columns: 1.4fr 1fr; grid-template-rows: 1.3fr 1fr; }
 .workspace.v-risk > section:first-child { grid-row: span 2; }
+.workspace.v-fnd { grid-template-columns: 1.5fr 1fr; grid-template-rows: 1fr 1fr; }
+#fn-tab tr[data-sym] { cursor: pointer; }
+#fn-tab tr[data-sym][aria-selected="true"] td { background: var(--bg-select); }
 .symlink { color: var(--accent-tx); cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--accent-dim); }
 .symlink:hover { color: var(--tx-1); }
 .heat { border-collapse: collapse; font: 500 10.5px var(--font-num); direction: ltr; }

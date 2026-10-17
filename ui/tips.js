@@ -3,7 +3,7 @@
    (یا فوکوس صفحه‌کلید) توضیح، فرمول و مرجع سند را نشان می‌دهد. برچسب‌های دارای راهنما خط‌چین زیرشان دارند. */
 (function () {
   const G = window.SIM_GLOSSARY; if (!G) return;
-  const SEL = 'th, .kpi .k, .panel-title, .lineage b, .legend span:not(.readout), .seg button, button.tool, .chip, .nav a, .ctl label, .ctl .mute, .statusbar span, .topbar button, .cmd, .lg-badge, .symlink, #dev td .chip, #dev td .num, #pf-tab td .chip, #qa-sec td .chip, #rk-corr td, #sy-title, #sy-q, #sy-info td:first-child';
+  const SEL = 'th, .kpi .k, .panel-title, .lineage b, .legend span:not(.readout), .seg button, button.tool, .chip, .nav a, .ctl label, .ctl .mute, .statusbar span, .topbar button, .cmd, .lg-badge, .symlink, #dev td .chip, #dev td .num, #pf-tab td .chip, #qa-sec td .chip, #fn-tab td .chip, #rk-corr td, #sy-title, #sy-q, #sy-info td:first-child';
   const norm = t => t.replace(/\s+/g, ' ').trim().replace(/[\s%٪:.]+$/, '').replace(/(\D)\d+$/, '$1').trim();
   const E = {}; for (const k in G.E) E[norm(k)] = G.E[k];                 // کلیدهای واژه‌نامه هم یکسان‌سازی شوند
   const viewOf = el => { const m = el.closest('main.workspace'); return m ? m.id.replace(/^v-/, '') : ''; };

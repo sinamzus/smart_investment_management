@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""سنجش ردیابی صندوق‌های شاخصی در برابر شاخص مرجع → ui/data/funds.js (window.SIM_FUNDS)
+
+    python tools/build_ui_funds.py
+
+ورودی (از tools/fetch_index_funds.py): data/funds/funds.csv، nav_<نماد>.csv، price_<نماد>.csv.gz
+
+روش (فصل ۳ §۳٫۶):
+- بازده صندوق از NAV ابطال (اگر نبود NAV آماری) روی روزهای معاملاتی شاخص: NAV هر روز معاملاتی = آخرین NAV منتشرشده تا آن روز.
+- دو ماه اول عمر صندوق (دورهٔ تشکیل سبد) کنار می‌رود.
+- جهش |بازده فعال روزانه| > ۲۰٪ = رویداد واحد (تجزیهٔ واحد، تقسیم سود) ← خنثی و فهرست می‌شود؛ ۵ تا ۲۰٪ فقط علامت می‌خورد.
+- مرجع اصلی: سری رسمی TR شاخص اعلام‌شده. مرجع منصفانه: ماکت سرمایه‌پذیر همان شاخص با تأخیر ۹۰ روزهٔ سود (فصل ۳ §۳٫۵)
+  ← تفاوت ردیابی به «اثر تأخیر سود» (ساختاری) و «کارمزد، نقد و اجرا» (قابل‌انتساب به مدیر) تجزیه می‌شود.
+- TE روزانه × √۲۵۲ و TE هفتگی (بازده ۵ روزه) × √۵۲؛ هفتگی به ناهمزمانی انتشار NAV حساس نیست. TD با سال تقویمی.
+"""
+import json
+import os
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+import investable_replica as ir
+import rebuild_ew_index as ew
+import rebuild_ew_rebalanced as ewr
+
+ROOT = ew.ROOT
+FUNDS = Path(os.environ.get("SIM_FUNDS_DIR", ROOT / "data" / "funds"))
+OUT = Path(os.environ.get("SIM_FUNDS_OUT", ROOT / "ui" / "data" / "funds.js"))
+BENCH = {"K": ("32097828799138957", "«شاخص كل»"), "EW": ("67130298613737946", "«شاخص كل (هم وزن)»"),
+         "I30": ("10523825119011581", "«شاخص ۳۰ شرکت بزرگ»")}
+LAG = 90
+WARMUP_DAYS = 60
+EVENT, FLAG = 0.20, 0.05
+
+
+def r(x, n=2):
+    return None if x is None or pd.isna(x) else round(float(x), n)
+
+
+def ann(ret: pd.Series) -> float:
+    yrs = (ret.index[-1] - ret.index[0]).days / 365.25
+    return ((1 + ret).prod() ** (1 / max(yrs, 1e-9)) - 1) * 100
+
+
+def metrics(f: pd.Series, b: pd.Series) -> dict:
+    j = pd.concat([f, b], axis=1, join="inner").dropna()
+    j.columns = ["f", "b"]
+    if len(j) < 40:
+        return {"n": len(j)}
+    a = j.f - j.b
+    w = (1 + j).groupby(np.arange(len(j)) // 5).prod() - 1           # بازده ۵ روزهٔ غیرهم‌پوشان
+    aw = w.f - w.b
+    beta = np.cov(j.f, j.b)[0, 1] / j.b.var()
+    yrs = (j.index[-1] - j.index[0]).days / 365.25
+    td = (((1 + j.f).prod() / (1 + j.b).prod()) ** (1 / yrs) - 1) * 100
+    return {"n": len(j), "from": str(j.index[0].date()), "to": str(j.index[-1].date()),
+            "te_d": r(a.std() * np.sqrt(252) * 100), "te_w": r(aw.std() * np.sqrt(52) * 100),
+            "td": r(td), "ann_f": r(ann(j.f), 1), "ann_b": r(ann(j.b), 1),
+            "corr": r(j.f.corr(j.b), 4), "corr_w": r(w.f.corr(w.b), 4), "beta": r(beta, 3), "r2": r(j.f.corr(j.b) ** 2, 4),
+            "mad_bp": r(a.abs().mean() * 1e4, 1)}
+
+
+def load_nav(sym: str) -> pd.DataFrame | None:
+    p = FUNDS / f"nav_{sym}.csv"
+    if not p.exists():
+        return None
+    d = pd.read_csv(p, parse_dates=["date"]).set_index("date").sort_index()
+    d = d[~d.index.duplicated(keep="last")]
+    return d
+
+
+def load_price(sym: str) -> pd.DataFrame | None:
+    p = FUNDS / f"price_{sym}.csv.gz"
+    if not p.exists():
+        return None
+    d = pd.read_csv(p, parse_dates=["date"]).set_index("date").sort_index()
+    return d[~d.index.duplicated(keep="last")]
+
+
+def fund_returns(nav: pd.Series, dates: pd.DatetimeIndex) -> pd.Series:
+    nav = nav[nav > 0].dropna()
+    s = nav.reindex(dates.union(nav.index)).ffill(limit=6).reindex(dates)
+    s = s[s.index >= nav.index[0] + pd.Timedelta(days=WARMUP_DAYS)]
+    return s.pct_change().dropna()
+
+
+def jyear(d):
+    return ewr.g2j(d.year, d.month, d.day)[0]
+
+
+def analyze_fund(m: dict, bench: dict, repl: dict) -> dict | None:
+    sym = m["symbol"]
+    nd = load_nav(sym)
+    if nd is None or nd.empty:
+        return None
+    col = "nav_cancel" if nd.get("nav_cancel") is not None and nd.nav_cancel.notna().sum() > 30 else "nav_stat"
+    k = m["benchmark"]
+    btr = bench[k]
+    fr = fund_returns(nd[col], btr.index)
+    # رویدادهای واحد
+    a = (fr - btr.reindex(fr.index)).dropna()
+    ev = a[a.abs() > EVENT]
+    flags = a[(a.abs() > FLAG) & (a.abs() <= EVENT)]
+    fr = fr.copy()
+    fr[ev.index] = btr.reindex(ev.index)
+    out = {"symbol": sym, "name": m["name"], "benchmark": k, "benchmark_src": m.get("benchmark_src", "declared"),
+           "nav_col": col, "nav_source": m.get("nav_source", ""), "nav_from": str(nd.index[0].date()), "nav_to": str(nd.index[-1].date()),
+           "events": [[str(d.date()), r(v * 100, 1)] for d, v in ev.items()],
+           "flags": [[str(d.date()), r(v * 100, 1)] for d, v in flags.items()][:30]}
+    last = fr.index[-1]
+    wins = {"all": fr.index[0], "3y": last - pd.DateOffset(years=3), "1y": last - pd.DateOffset(years=1)}
+    out["win"] = {}
+    for w, start in wins.items():
+        f = fr[fr.index > start]
+        if len(f) < 40:
+            continue
+        x = {"tr": metrics(f, btr)}
+        if k in repl:
+            x["rep"] = metrics(f, repl[k])
+            x["lag_cost"] = metrics(repl[k][repl[k].index > start].reindex(f.index).dropna(), btr).get("td")
+        for kk, s in bench.items():                                    # مرجع با بهترین برازش
+            x.setdefault("fit", {})[kk] = metrics(f, s).get("te_w")
+        out["win"][w] = x
+    fit = out["win"]["all"]["fit"]
+    out["best_fit"] = min((v, kk) for kk, v in fit.items() if v is not None)[1]
+    # سال شمسی
+    j = pd.concat([fr, btr], axis=1, join="inner").dropna()
+    j.columns = ["f", "b"]
+    out["yearly"] = [{"jy": int(y), "f": r(((1 + g.f).prod() - 1) * 100, 1), "b": r(((1 + g.b).prod() - 1) * 100, 1),
+                      "d": r((((1 + g.f).prod() / (1 + g.b).prod()) - 1) * 100, 2), "te": r((g.f - g.b).std() * np.sqrt(252) * 100, 2), "days": len(g)}
+                     for y, g in j.groupby(j.index.map(jyear))]
+    # منحنی‌ها (هفتگی)
+    idx = sorted(set(list(range(0, len(j), 5)) + [len(j) - 1]))
+    lvl_f, lvl_b = (1 + j.f).cumprod() * 100, (1 + j.b).cumprod() * 100
+    cur = {"dates": [str(j.index[i].date()) for i in idx], "f": [r(lvl_f.iloc[i], 2) for i in idx], "b": [r(lvl_b.iloc[i], 2) for i in idx]}
+    if k in repl:
+        rp = repl[k].reindex(j.index).fillna(0)
+        lv = (1 + rp).cumprod() * 100
+        cur["rep"] = [r(lv.iloc[i], 2) for i in idx]
+    roll = (j.f - j.b).rolling(63).std() * np.sqrt(252) * 100
+    cur["te63"] = [r(roll.iloc[i], 2) for i in idx]
+    out["curve"] = cur
+    # قیمت بازار در برابر NAV
+    pr = load_price(sym)
+    if pr is not None and not pr.empty:
+        px = pr.close.where(pr.close > 0)
+        nv = nd[col].reindex(px.index.union(nd.index)).ffill(limit=3).reindex(px.index)
+        prem = (px / nv - 1).dropna()
+        prem = prem[prem.index >= nd.index[0] + pd.Timedelta(days=WARMUP_DAYS)]
+        if len(prem) > 20:
+            p1 = prem[prem.index > prem.index[-1] - pd.DateOffset(years=1)]
+            out["premium"] = {"mean": r(prem.mean() * 100), "std": r(prem.std() * 100), "abs1": r((prem.abs() > 0.01).mean() * 100, 0),
+                              "mean_1y": r(p1.mean() * 100), "last": r(prem.iloc[-1] * 100), "adv_1y": r(pr.value[pr.index > pr.index[-1] - pd.DateOffset(years=1)].mean() / 1e10, 1)}
+            pm = prem.reindex(prem.index.union(pd.DatetimeIndex(cur["dates"]))).ffill(limit=5).reindex(pd.DatetimeIndex(cur["dates"]))
+            out["curve"]["prem"] = [r(v * 100, 2) for v in pm]
+            prr = px.pct_change().dropna()
+            prr = prr[prr.index.isin(fr.index)]
+            out["price_te"] = metrics(prr, btr).get("te_w")
+    if nd.get("aum") is not None and nd.aum.notna().any():
+        out["aum_bn"] = r(nd.aum.dropna().iloc[-1] / 1e9, 0)          # خالص دارایی، میلیارد ریال
+    return out
+
+
+def replica_reference(bench: dict, repl: dict) -> list:
+    """ماکت SIM (بازتولید کامل، بدون کارمزد، سود با تأخیر ۹۰ روز) در برابر TR رسمی، ۳ سال اخیر."""
+    rows = []
+    for k in repl:
+        b = bench[k]
+        last = b.index[-1]
+        f = repl[k][repl[k].index > last - pd.DateOffset(years=3)]
+        rows.append({"benchmark": k, **metrics(f, b)})
+    return rows
+
+
+def main():
+    bench = {k: ew.official(c) for k, (c, _) in BENCH.items()}
+    repl = {}
+    for k in ("K", "EW"):
+        j = ir.load_pair(k)
+        nav = ir.simulate(j, LAG)
+        repl[k] = nav.pct_change().fillna(nav.iloc[0] - 1)
+    rows = pd.read_csv(FUNDS / "funds.csv", dtype=str).fillna("").to_dict("records") if (FUNDS / "funds.csv").exists() else []
+    if not rows:                                  # هنوز دادهای نیامده: صندوق‌های شناخته‌شدهٔ مخزن (بدون NAV)
+        import fetch_index_funds as fx
+        rows = [{"symbol": x["symbol"], "name": x["name"], "benchmark": x["benchmark"], "benchmark_src": x["benchmark_src"]} for x in fx.discover_local()]
+    funds, missing = [], []
+    for m in rows:
+        res = analyze_fund(m, bench, repl)
+        (funds.append(res) if res else missing.append({"symbol": m["symbol"], "name": m["name"], "benchmark": m["benchmark"]}))
+        if res:
+            t = res["win"].get("all", {})
+            print(f"{m['symbol']:8s} {m['benchmark']:4s} TE_w={t.get('tr', {}).get('te_w')}% TD={t.get('tr', {}).get('td')}% "
+                  f"TD_vs_rep={t.get('rep', {}).get('td')}% best_fit={res['best_fit']} events={len(res['events'])}")
+    data = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "lag": LAG,
+            "bench_names": {k: v[1] for k, v in BENCH.items()}, "funds": funds, "missing": missing,
+            "reference": replica_reference(bench, repl)}
+    OUT.write_text("window.SIM_FUNDS = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
+    print(f"ذخیره شد: {OUT} — {len(funds)} صندوق با NAV، {len(missing)} بدون NAV")
+
+
+if __name__ == "__main__":
+    main()
