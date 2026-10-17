@@ -97,8 +97,8 @@ def probe(sym: str, n_save: int) -> None:
             print(fdp.text_of(f.read_text(encoding="utf-8", errors="replace"))[:1200])
 
 
-def collect(n: int) -> None:
-    for sym in FUND_SYMBOLS:
+def collect(n: int, symbols=None) -> None:
+    for sym in (symbols or FUND_SYMBOLS):
         print(f"\n══ {sym} ══")
         try:
             items = list_all(sym)
@@ -113,9 +113,34 @@ def collect(n: int) -> None:
             print("  خطا:", e)
 
 
+def find(text: str) -> None:
+    """نماد کدال یک صندوق را از نام پیدا می‌کند: چند شکل نام را به‌عنوان Symbol می‌پرسد و Symbol/CompanyName نتایج را چاپ می‌کند."""
+    base = text.strip()
+    variants = list(dict.fromkeys([base, base.replace(" ", ""), " ".join(base.split()[-2:]), base.split()[-1], "مشترک " + base.split()[-1], base.replace("مشترک ", "").replace("شاخصی ", "")]))
+    print(f"\n══ جست‌وجوی نماد کدال برای «{text}» ══")
+    seen = set()
+    for v in variants:
+        try:
+            d = fdp.fetch(fdp.SEARCH.format(page=1, sym=quote(v))).json()
+        except fdp.Blocked:
+            raise
+        except Exception as e:  # noqa: BLE001
+            print(f"  «{v}»: خطا {str(e)[:80]}")
+            continue
+        got = d.get("Letters") or []
+        print(f"  «{v}»: Total={d.get('Total')}")
+        for x in got[:50]:
+            k = (x.get("Symbol"), x.get("CompanyName"))
+            if k not in seen:
+                seen.add(k)
+                print(f"      Symbol={x.get('Symbol')!r}  CompanyName={x.get('CompanyName')!r}  نمونه: {str(x.get('Title'))[:60]}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--probe", help="نماد صندوق (مثلاً کاردان)")
+    ap.add_argument("--find", help="نماد کدال را از نام صندوق پیدا کن (مثلاً «مشترک شاخصی کار آفرین»)")
+    ap.add_argument("--symbols", help="با --collect: فقط این نمادها (با ویرگول؛ برای صندوق‌هایی که در فهرست پیش‌فرض نیستند)")
     ap.add_argument("--collect", type=int, help="آخرین N نامهٔ پرتفو برای هر صندوق (پیشنهاد ۲۴ ≈ ۲ سال؛ ۲ درخواست برای هر نامه)")
     ap.add_argument("--save", type=int, default=3, help="در --probe چند نمونه ذخیره شود")
     ap.add_argument("--gap", type=float, default=8.0)
@@ -127,8 +152,10 @@ def main() -> int:
         sys.stdout = fdp.Tee(a.log)
     if a.probe:
         probe(a.probe, a.save)
+    elif a.find:
+        find(a.find)
     elif a.collect:
-        collect(a.collect)
+        collect(a.collect, [x.strip() for x in a.symbols.split(",")] if a.symbols else None)
     else:
         ap.print_help()
     return 0

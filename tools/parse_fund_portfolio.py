@@ -158,7 +158,7 @@ def parse_xlsx(path: Path) -> list[dict]:
                     if v is not None and lab in clean(v) and (both is None or both in clean(v)):
                         best = j if best is None else max(best, j)
             return best
-        c_pct, c_price, c_qty = last("درصد", "دارایی"), last("قیمت بازار"), last("تعداد")
+        c_pct, c_price, c_qty, c_val = last("درصد", "دارایی"), last("قیمت بازار"), last("تعداد"), last("خالص ارزش فروش")
         c_nm = next((j for j, v in enumerate(rows[hdr]) if v is not None and clean(v) in ("شرکت", "نام شرکت", "نام سهام")), 0)
         out = []
         for r in rows[hdr + 2:]:
@@ -167,10 +167,14 @@ def parse_xlsx(path: Path) -> list[dict]:
             nm = clean(r[c_nm])
             if nm.startswith("جمع"):
                 break
+            if nm.startswith(("نقل از", "نقل به")):         # ردیف جمع انتقالی بین صفحه‌ها (فیروزه، وبازار، ...) دوباره‌شماری می‌کند
+                continue
             v = r[c_pct] if c_pct is not None and c_pct < len(r) else None
             if isinstance(v, (int, float)):
+                val = r[c_val] if c_val is not None and c_val < len(r) else None
                 out.append({"name_fa": nm, "weight_pct": float(v), "qty": r[c_qty] if c_qty is not None and c_qty < len(r) else None,
-                            "price": r[c_price] if c_price is not None and c_price < len(r) else None})
+                            "price": r[c_price] if c_price is not None and c_price < len(r) else None,
+                            "value": float(val) if isinstance(val, (int, float)) else None})
         if out:
             if sum(o["weight_pct"] for o in out) <= 1.5:          # برخی صندوق‌ها کسر (۰ تا ۱) می‌نویسند نه درصد
                 for o in out:
@@ -204,7 +208,7 @@ def main():
                 if not s:
                     unmatched[(sym, it["name_fa"])] = unmatched.get((sym, it["name_fa"]), 0) + 1
                 recs.append({"date": d, "symbol": s, "name_fa": it["name_fa"], "weight_pct": round(it["weight_pct"], 4),
-                             "qty": it["qty"], "price": it["price"], "matched": int(bool(s))})
+                             "qty": it["qty"], "price": it["price"], "matched": int(bool(s)), "weight_src": "pct", "_value": it.get("value")})
         if not recs:
             continue
         tot = {}
@@ -213,7 +217,23 @@ def main():
         bad = sorted(d for d, v in tot.items() if not 50 <= v <= 106)   # مجموع سهام باید ۵۰ تا ~۱۰۵٪ دارایی باشد؛ غیر از این یعنی ستون/برگهٔ اشتباه خوانده شده
         if bad:
             print(f"  {sym}: {len(bad)} ماه با مجموع نامعتبر کنار گذاشته شد: " + "، ".join(f"{d} ({tot[d]:.0f}٪)" for d in bad[:6]))
+        # ستون «درصد» در برخی ماه‌ها مقدار ذخیره‌شدهٔ فرمول کهنه دارد (مثلاً فیروزه)؛ جایگزین: وزن از «خالص ارزش فروش» نسبت به جمع سهام
+        # (نقد و سایر دارایی‌ها در این ماه‌ها معلوم نیست ⇒ مجموع سهام ۱۰۰٪ فرض می‌شود و weight_src = value)
+        fixed = []
+        for d in list(bad):
+            rr = [r for r in recs if r["date"] == d]
+            vs = [r["_value"] for r in rr]
+            if rr and all(v is not None and v >= 0 for v in vs) and sum(vs) > 0:
+                for r_, v in zip(rr, vs):
+                    r_["weight_pct"] = round(v / sum(vs) * 100, 4)
+                    r_["weight_src"] = "value_norm"
+                fixed.append(d)
+        bad = [d for d in bad if d not in fixed]
+        if fixed:
+            print(f"  {sym}: {len(fixed)} ماه با وزن از ارزش فروش بازسازی شد (نقد نامعلوم): " + "، ".join(fixed[:5]))
         recs = [r for r in recs if r["date"] not in bad]
+        for r in recs:
+            r.pop("_value", None)
         if not recs:
             continue
         recs.sort(key=lambda r: (r["date"], -r["weight_pct"]))
