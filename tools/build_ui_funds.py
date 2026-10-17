@@ -9,7 +9,7 @@
 روش (فصل ۳ §۳٫۶):
 - بازده صندوق از NAV ابطال (اگر نبود NAV آماری) روی روزهای معاملاتی شاخص: NAV هر روز معاملاتی = آخرین NAV منتشرشده تا آن روز.
 - دو ماه اول عمر صندوق (دورهٔ تشکیل سبد) کنار می‌رود.
-- جهش |بازده فعال روزانه| > ۲۰٪ = رویداد واحد (تجزیهٔ واحد، تقسیم سود) ← خنثی و فهرست می‌شود؛ ۵ تا ۲۰٪ فقط علامت می‌خورد.
+- جهش |بازده فعال روزانه| > ۸٪ = رویداد (تجزیهٔ واحد، خطای NAV؛ برای صندوق شاخصی غیرممکن است) ← خنثی و فهرست می‌شود؛ ۳ تا ۸٪ فقط علامت می‌خورد. TE مقاوم (بر پایهٔ MAD) هم گزارش می‌شود.
 - مرجع اصلی: سری رسمی TR شاخص اعلام‌شده. مرجع منصفانه: ماکت سرمایه‌پذیر همان شاخص با تأخیر ۹۰ روزهٔ سود (فصل ۳ §۳٫۵)
   ← تفاوت ردیابی به «اثر تأخیر سود» (ساختاری) و «کارمزد، نقد و اجرا» (قابل‌انتساب به مدیر) تجزیه می‌شود.
 - TE روزانه × √۲۵۲ و TE هفتگی (بازده ۵ روزه) × √۵۲؛ هفتگی به ناهمزمانی انتشار NAV حساس نیست. TD با سال تقویمی.
@@ -32,7 +32,7 @@ BENCH = {"K": ("32097828799138957", "«شاخص كل»"), "EW": ("67130298613737
          "I30": ("10523825119011581", "«شاخص ۳۰ شرکت بزرگ»")}
 LAG = 90
 WARMUP_DAYS = 60
-EVENT, FLAG = 0.20, 0.05
+EVENT, FLAG = 0.08, 0.03
 
 
 def r(x, n=2):
@@ -57,6 +57,7 @@ def metrics(f: pd.Series, b: pd.Series) -> dict:
     td = (((1 + j.f).prod() / (1 + j.b).prod()) ** (1 / yrs) - 1) * 100
     return {"n": len(j), "from": str(j.index[0].date()), "to": str(j.index[-1].date()),
             "te_d": r(a.std() * np.sqrt(252) * 100), "te_w": r(aw.std() * np.sqrt(52) * 100),
+            "te_w_rob": r(1.4826 * (aw - aw.median()).abs().median() * np.sqrt(52) * 100),
             "td": r(td), "ann_f": r(ann(j.f), 1), "ann_b": r(ann(j.b), 1),
             "corr": r(j.f.corr(j.b), 4), "corr_w": r(w.f.corr(w.b), 4), "beta": r(beta, 3), "r2": r(j.f.corr(j.b) ** 2, 4),
             "mad_bp": r(a.abs().mean() * 1e4, 1)}
@@ -153,15 +154,33 @@ def analyze_fund(m: dict, bench: dict, repl: dict) -> dict | None:
     out["curve"] = cur
     # قیمت بازار در برابر NAV
     pr = load_price(sym)
-    if pr is not None and not pr.empty and col != "ret_daily":
+    nav_lvl = None
+    if col == "ret_daily" and m.get("last_cancel_nav") and m.get("last_nav_date"):
+        # سطح NAV از بازده روزانه، لنگرشده به آخرین NAV ابطال فیپیران: NAV_t = NAV_آخر ÷ Π(1+r بعد از t)
+        x_ = (nd.ret_daily.dropna() / 100 if nd.ret_daily.abs().median() > 0.05 else nd.ret_daily.dropna())
+        x_ = x_[x_.index <= pd.Timestamp(m["last_nav_date"])]
+        after = (1 + x_)[::-1].cumprod()[::-1].shift(-1).fillna(1.0)
+        nav_lvl = float(m["last_cancel_nav"]) / after
+    if pr is not None and not pr.empty and (col != "ret_daily" or nav_lvl is not None):
         px = pr.close.where(pr.close > 0)
-        nv = nd[col].reindex(px.index.union(nd.index)).ffill(limit=3).reindex(px.index)
+        src_ = nav_lvl if nav_lvl is not None else nd[col]
+        nv = src_.reindex(px.index.union(src_.index)).ffill(limit=3).reindex(px.index)
         prem = (px / nv - 1).dropna()
+        prem = prem[prem.abs() < 0.5]                     # تجزیهٔ واحد در قیمت بازار (سطح ناسازگار) کنار می‌رود
         prem = prem[prem.index >= nd.index[0] + pd.Timedelta(days=WARMUP_DAYS)]
-        if len(prem) > 20:
+        if nav_lvl is not None:
+            # فقط پریمیوم لحظه‌ای: قیمت پایانی همان روزِ آخرین NAV ابطال ÷ آن NAV − ۱. سطح NAV بازسازی‌شده از بازده روزانه با بازگشت
+            # در زمان خطا انباشته می‌کند (آزموده شد: میانگین ۹۰ روزه تا ۸٪ انحراف) و برای آمار پریمیوم قابل اتکا نیست.
+            d0 = pd.Timestamp(m["last_nav_date"])
+            ppx = px[px.index <= d0].dropna()
+            if len(ppx) and (d0 - ppx.index[-1]).days <= 4:
+                out["premium"] = {"last": r((ppx.iloc[-1] / float(m["last_cancel_nav"]) - 1) * 100), "mean": None, "std": None, "n": 1,
+                                  "from": str(ppx.index[-1].date()), "adv_1y": r(pr.value[pr.index > pr.index[-1] - pd.DateOffset(years=1)].mean() / 1e10, 1)}
+        elif len(prem) > 20:
             p1 = prem[prem.index > prem.index[-1] - pd.DateOffset(years=1)]
             out["premium"] = {"mean": r(prem.mean() * 100), "std": r(prem.std() * 100), "abs1": r((prem.abs() > 0.01).mean() * 100, 0),
-                              "mean_1y": r(p1.mean() * 100), "last": r(prem.iloc[-1] * 100), "adv_1y": r(pr.value[pr.index > pr.index[-1] - pd.DateOffset(years=1)].mean() / 1e10, 1)}
+                              "mean_1y": r(p1.mean() * 100), "last": r(prem.iloc[-1] * 100), "n": len(prem), "from": str(prem.index[0].date()),
+                              "adv_1y": r(pr.value[pr.index > pr.index[-1] - pd.DateOffset(years=1)].mean() / 1e10, 1)}
             pm = prem.reindex(prem.index.union(pd.DatetimeIndex(cur["dates"]))).ffill(limit=5).reindex(pd.DatetimeIndex(cur["dates"]))
             out["curve"]["prem"] = [r(v * 100, 2) for v in pm]
             prr = px.pct_change().dropna()
@@ -169,6 +188,8 @@ def analyze_fund(m: dict, bench: dict, repl: dict) -> dict | None:
             out["price_te"] = metrics(prr, btr).get("te_w")
     if col == "ret_daily":
         out["nav_col_note"] = "dailyEfficiency"
+        if nav_lvl is not None:
+            out["last_nav"] = [m["last_nav_date"], float(m["last_cancel_nav"])]
     if nd.get("aum") is not None and nd.aum.notna().any():
         out["aum_bn"] = r(nd.aum.dropna().iloc[-1] / 1e9, 0)          # خالص دارایی، میلیارد ریال
     return out
@@ -185,7 +206,21 @@ def replica_reference(bench: dict, repl: dict) -> list:
     return rows
 
 
+def issue_navs() -> dict:
+    """آخرین NAV ابطال هر صندوق از پاسخ خام فیپیران (fundlistissue): regNo → (NAV، تاریخ)."""
+    p = ROOT / "data" / "raw" / "funds" / "fipiran_fund_fundlistissue.json"
+    out = {}
+    if p.exists():
+        d = json.loads(p.read_text(encoding="utf-8"))
+        rows = next((v for v in d.values() if isinstance(v, list)), []) if isinstance(d, dict) else d
+        for r_ in rows:
+            if r_.get("cancelNav") and r_.get("date"):
+                out[str(r_["regNo"])] = (float(r_["cancelNav"]), str(r_["date"])[:10])
+    return out
+
+
 def main():
+    iss = issue_navs()
     bench = {k: ew.official(c) for k, (c, _) in BENCH.items()}
     repl = {}
     for k in ("K", "EW"):
@@ -198,6 +233,8 @@ def main():
         rows = [{"symbol": x["symbol"], "name": x["name"], "benchmark": x["benchmark"], "benchmark_src": x["benchmark_src"]} for x in fx.discover_local()]
     funds, missing = [], []
     for m in rows:
+        if not m.get("last_cancel_nav") and m.get("fipiran_regno") in iss:
+            m["last_cancel_nav"], m["last_nav_date"] = iss[m["fipiran_regno"]]
         res = analyze_fund(m, bench, repl)
         (funds.append(res) if res else missing.append({"symbol": m["symbol"], "name": m["name"], "benchmark": m["benchmark"]}))
         if res:

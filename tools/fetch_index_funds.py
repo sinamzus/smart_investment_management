@@ -49,6 +49,14 @@ RAW = ROOT / "data" / "raw" / "funds"
 DECLARED = {
     "کاردان": "K", "فیروزه": "I30", "آرام": "K", "وبازار": "K", "هوشمند": "K", "هم وزن": "EW", "هم تراز": "EW",
 }
+# نام صندوق در فهرست فیپیران (از fundlistbrief، ۲۰۲۶-۱۰-۱۷؛ نام TSETMC با فیپیران فرق دارد، مثلاً «رابین»/«بازارآشنا»)
+FIPIRAN_NAMES = {
+    "کاردان": "تجارت شاخصی کاردان", "آرام": "شاخصی آرام مفید", "وبازار": "شاخصی بازار آشنا", "هوشمند": "شاخصی شفق رابین",
+    "هم وزن": "قابل معامله شاخصی کیان", "هم تراز": "شاخصی هم وزن تراز", "همسنگ": "شاخصی هم وزن همسنگ مفید",
+    "فیروزه": "شاخص سی شرکت بزرگ فیروزه", "کارآفرین": "مشترک شاخصی کار آفرین",
+}
+# صندوق‌های شاخصی بدون نماد بورسی (صدور و ابطال): فقط NAV
+NAV_ONLY = {"کارآفرین": {"name": "مشترک شاخصی کار آفرین", "benchmark": "K"}}
 INDEX_CODES = {"K": "32097828799138957", "EW": "67130298613737946", "I30": "10523825119011581",
                "K_PR": "5798407779416661", "EW_PR": "8384385859414435"}
 
@@ -223,6 +231,7 @@ def tse_etf(ins: str, symbol: str) -> dict:
 
 # ── فیپیران ──────────────────────────────────────────────────────────────
 _FIP_LIST = None
+_FIP_ISSUE: dict = {}      # regNo → (NAV ابطال، NAV صدور، تاریخ) آخرین مقدار از fundlistissue
 _FIP_BASE = None
 
 
@@ -251,6 +260,10 @@ def fipiran_list():
                 rows = find_list(d)
                 if rows:
                     print(f"  فیپیران {ep}: {len(rows)} صندوق؛ کلیدها: {list(rows[0].keys())[:25]}")
+                    if ep.endswith("fundlistissue"):
+                        for r_ in rows:
+                            if r_.get("cancelNav"):
+                                _FIP_ISSUE[str(r_.get("regNo"))] = (num(r_.get("cancelNav")), num(r_.get("issueNav")), to_date(r_.get("date")))
                     if len(rows) > len(_FIP_LIST):
                         _FIP_LIST = rows
             except Exception as e:  # noqa: BLE001
@@ -267,13 +280,21 @@ def fipiran_match(f: dict) -> dict | None:
     rows = fipiran_list()
     if not rows:
         return None
+    want_name = FIPIRAN_NAMES.get(f["symbol"]) or FIPIRAN_NAMES.get(f["symbol"].replace(" ", ""))
+    if want_name:
+        for r in rows:
+            nm = next((v for k, v in r.items() if isinstance(v, str) and "name" in k.lower()), "")
+            if norm(nm).replace(" ", "") == norm(want_name).replace(" ", ""):
+                print(f"    فیپیران: «{norm(nm)}» (نام ثابت، regNo {_pick(r, 'regNo')})")
+                return r
+        print(f"    فیپیران: نام «{want_name}» در فهرست نبود؛ تطبیق تقریبی")
     want = _tokens(f["name"]) | {norm(f["symbol"])}
     best, score = None, 0
     for r in rows:
         text = " ".join(str(v) for v in r.values() if isinstance(v, str))
         sc = len(want & _tokens(text))
-        if norm(f["symbol"]) in norm(text).split():
-            sc += 3
+        if "شاخص" not in norm(text):
+            continue
         if sc > score:
             best, score = r, sc
     if best and score >= 2:
@@ -496,6 +517,9 @@ def discover() -> list[dict]:
     for sym, r in sorted(found.items()):
         decl = DECLARED.get(sym) or DECLARED.get(sym.replace(" ", ""))
         out.append({**r, "benchmark": decl or guess_benchmark(r["name"]), "benchmark_src": "declared" if decl else "auto"})
+    for sym, x in NAV_ONLY.items():
+        if sym not in {r["symbol"] for r in out}:
+            out.append({"symbol": sym, "name": x["name"], "ins_code": "", "found_by": "nav_only", "benchmark": x["benchmark"], "benchmark_src": "auto", "nav_only": "1"})
     print(f"  {len(out)} صندوق شاخصی: " + "، ".join(f"{r['symbol']}({r['benchmark']}{'' if r['benchmark_src'] == 'declared' else '؟'})" for r in out))
     return out
 
@@ -569,6 +593,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", action="append", help="فقط این نماد(ها)")
     ap.add_argument("--skip-index", action="store_true")
+    ap.add_argument("--no-price", action="store_true", help="قیمت بازار را دوباره نگیر (فقط NAV)")
     ap.add_argument("--site", action="append", default=[], help="نماد=آدرس سایت صندوق (اگر خودکار پیدا نشد)")
     ap.add_argument("--diag", action="store_true", help="فقط آزمون دسترسی میزبان‌ها و مسیرهای NAV (سریع)")
     ap.add_argument("--diag2", action="store_true", help="یافتن آدرس API فیپیران از سایت و ذخیرهٔ صفحات TSETMC قدیمی")
@@ -595,10 +620,10 @@ def main() -> int:
         print(f"\n── {f['symbol']} · {f['name']} (مرجع: {f['benchmark']})")
         m = {**f, "n_price": 0, "n_nav": 0, "nav_source": "", "site": sites.get(f["symbol"], ""), "fipiran_regno": ""}
         try:
-            if not m["ins_code"]:
+            if not m["ins_code"] and not f.get("nav_only"):
                 hit = tse_find(f["symbol"], f["name"])
                 m["ins_code"] = str(hit["insCode"]) if hit else ""
-            if m["ins_code"]:
+            if m["ins_code"] and not a.no_price:
                 m["n_price"] = tse_prices(m["ins_code"], f["symbol"])
                 print(f"    قیمت بازار: {m['n_price']} روز")
                 tse_etf(m["ins_code"], f["symbol"])
@@ -608,6 +633,9 @@ def main() -> int:
         row = fipiran_match(f)
         if row:
             m["fipiran_regno"] = str(_pick(row, "regNo", "regno") or "")
+            last = _FIP_ISSUE.get(m["fipiran_regno"])
+            if last:
+                m["last_cancel_nav"], m["last_issue_nav"], m["last_nav_date"] = last
             m["site"] = m["site"] or str(_pick(row, "websiteAddress", "website", "url", "siteUrl") or "")
             navs = fipiran_nav(f, row)
             src = "fipiran" if navs else ""
@@ -627,7 +655,7 @@ def main() -> int:
         old = {r["symbol"]: r for r in csv.DictReader(p.open(encoding="utf-8"))} if p.exists() else {}
         old.update({m["symbol"]: m for m in meta})
         with p.open("w", newline="", encoding="utf-8") as fh:
-            w = csv.DictWriter(fh, fieldnames=list(meta[0].keys()))
+            w = csv.DictWriter(fh, fieldnames=list(dict.fromkeys(k for r in list(old.values()) for k in r)), restval="")
             w.writeheader()
             w.writerows(old.values())
         print(f"\nخلاصه: {sum(1 for m in old.values() if int(m['n_nav'] or 0) > 0)}/{len(old)} صندوق با NAV → {p}")
