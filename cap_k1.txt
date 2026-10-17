@@ -1,0 +1,60 @@
+→ http://karafarinindexfund.ir
+    200     1626B hint=  0 html https://karafarinindexfund.ir/
+    200      242B hint=  0 json https://karafarinindexfund.ir/api/v1/public/siteInfo
+  ★ 200     7203B hint=  2 json https://karafarinindexfund.ir/api/v1/public/linkItems/navbar
+    200      392B hint=  0 json https://karafarinindexfund.ir/api/v1/public/siteParams
+    404       96B hint=  0 json https://karafarinindexfund.ir/api/v1/public/appDownload
+    200      177B hint=  0 json https://karafarinindexfund.ir/api/v1/public/slides
+    200       25B hint=  0 json https://karafarinindexfund.ir/api/v1/public/fund-score
+    200      241B hint=  0 json https://karafarinindexfund.ir/api/v1/public/fundNavInfo/1
+    200      450B hint=  0 json https://karafarinindexfund.ir/api/v1/public/fundInfo/1
+    200        4B hint=  0 json https://karafarinindexfund.ir/api/v1/public/hasIndustries/1
+    200   668419B hint=  0 json https://karafarinindexfund.ir/api/v1/public/navPerShare/1
+    200       73B hint=  0 html https://karafarinindexfund.ir/api/v1/public/content/Enamad
+   (ادامه می‌دهیم) TimeoutError
+
+حالا تا 120 ثانیه فرصت دارید خودتان هم در همین مرورگر کار کنید (نماد را جست‌وجو کنید، تب سود/DPS را بزنید، صفحه‌بندی را ببینید).
+زودتر تمام کردید: در ترمینال Ctrl+C بزنید (ذخیره می‌شود).
+    200  1751390B hint=  0 json https://karafarinindexfund.ir/api/v1/public/nav/1
+    501      252B hint=  0 json https://karafarinindexfund.ir/api/v1/public/fundProfits/1
+    200   493182B hint=  0 json https://karafarinindexfund.ir/api/v1/public/returnVSBourseThreeMonth/1
+    200   491596B hint=  0 json https://karafarinindexfund.ir/api/v1/public/returnVSBourseMonthly/1
+    200   506677B hint=  0 json https://karafarinindexfund.ir/api/v1/public/returnVSBourseAnniversary/1
+    200      286B hint=  0 json https://karafarinindexfund.ir/api/v1/public/industries/1
+    200      217B hint=  0 json https://karafarinindexfund.ir/api/v1/public/mixAsset/1
+    200   439928B hint=  0 json https://karafarinindexfund.ir/api/v1/public/dailyNav/1
+    200  2525330B hint=  0 json https://karafarinindexfund.ir/api/v1/public/dailyAssetStructure/1
+    200    58098B hint=  0 json https://karafarinindexfund.ir/api/v1/public/articles/financialReport
+    200      469B hint=  0 html https://karafarinindexfund.ir/api/v1/public/content/FundReturnDaily
+  ★ 200     1208B hint=  1 html https://karafarinindexfund.ir/api/v1/public/content/FundReturn
+    200   859010B hint=  0 json https://karafarinindexfund.ir/api/v1/public/fundReturnDaily/1
+    200     1275B hint=  0 json https://karafarinindexfund.ir/api/v1/public/fundReturnPeriodic/1
+    200        2B hint=  0 json https://karafarinindexfund.ir/api/v1/public/articles/rating
+    200        2B hint=  0 json https://karafarinindexfund.ir/api/v1/public/valueDivision?size=-1
+  ★ 200      683B hint=  4 html https://karafarinindexfund.ir/api/v1/public/content/Expense
+  ★ 200     3226B hint=  1 json https://karafarinindexfund.ir/api/v1/public/expenses
+    200       69B hint=  0 json https://karafarinindexfund.ir/api/v1/public/navRequirements
+    200      384B hint=  0 html https://karafarinindexfund.ir/api/v1/public/content/Rules
+    200      446B hint=  0 json https://karafarinindexfund.ir/api/v1/public/articles/rules
+    200       67B hint=  0 json https://karafarinindexfund.ir/api/v1/docExist/StatuteFirstVersion
+    200     1085B hint=  0 html https://karafarinindexfund.ir/api/v1/public/content/Statute
+    200     7092B hint=  0 json https://karafarinindexfund.ir/api/v1/public/articles/statuteChangesVersion
+    200       67B hint=  0 json https://karafarinindexfund.ir/api/v1/docExist/StatuteLastVersion
+    200      872B hint=  0 json https://karafarinindexfund.ir/api/v1/public/articles/legal
+    200      361B hint=  0 json https://karafarinindexfund.ir/api/v1/public/articleDetail/3513
+    200      121B hint=  0 json https://karafarinindexfund.ir/api/v1/public/bankAccounts
+    200      155B hint=  0 json https://karafarinindexfund.ir/api/v1/public/premiumOwners
+  ★ 200      719B hint=  6 html https://karafarinindexfund.ir/api/v1/public/content/InvestmentHelpBankAccount
+
+پایان به درخواست شما.
+
+42 پاسخ (JSON/HTML) ذخیره شد در C:\Users\Part Laptop\smart_investment_management\data\raw\rahavard\karafarin_site؛ فهرست همهٔ آدرس‌های دیده‌شده: all_urls.txt
+بیشترین نشانهٔ «پرداخت/سود»:
+  hint=  6  042_karafarinindexfund_ir_api_v1_public_content_InvestmentHelpBankAccount.html  https://karafarinindexfund.ir/api/v1/public/content/InvestmentHelpBankAccount
+  hint=  4  029_karafarinindexfund_ir_api_v1_public_content_Expense.html  https://karafarinindexfund.ir/api/v1/public/content/Expense
+  hint=  2  003_karafarinindexfund_ir_api_v1_public_linkItems_navbar.json  https://karafarinindexfund.ir/api/v1/public/linkItems/navbar
+  hint=  1  024_karafarinindexfund_ir_api_v1_public_content_FundReturn.html  https://karafarinindexfund.ir/api/v1/public/content/FundReturn
+  hint=  1  030_karafarinindexfund_ir_api_v1_public_expenses.json  https://karafarinindexfund.ir/api/v1/public/expenses
+  hint=  0  001_karafarinindexfund_ir.html  https://karafarinindexfund.ir/
+  hint=  0  002_karafarinindexfund_ir_api_v1_public_siteInfo.json  https://karafarinindexfund.ir/api/v1/public/siteInfo
+  hint=  0  004_karafarinindexfund_ir_api_v1_public_siteParams.json  https://karafarinindexfund.ir/api/v1/public/siteParams

@@ -1,0 +1,26 @@
+200	document	text/html; charset=utf-8	98893B	https://codal.ir/
+200	xhr	application/json; charset=utf-8	16296B	https://search.codal.ir/api/search/v2/q?Audited=true&AuditorRef=-1&Category=-1&Childs=true&CompanyState=-1&CompanyType=-1&Consolidatable=true&IsNotAudited=false&Length=-1&LetterType=-1&Mains=true&NotAudited=true&NotConsolidatable=true&PageNumber=1&Publisher=false&ReportingType=-1&TracingNo=-1&search=false
+200	other	image/vnd.microsoft.icon	text-failed:UnicodeDecodeError	https://codal.ir/assets/favicon/favicon.ico?v=RyQ5xz7ege
+200	other	image/vnd.microsoft.icon	text-failed:UnicodeDecodeError	https://codal.ir/assets/favicon/favicon.ico?v=RyQ5xz7ege
+200	other	image/vnd.microsoft.icon	text-failed:UnicodeDecodeError	https://codal.ir/assets/favicon/favicon.ico?v=RyQ5xz7ege
+200	xhr	application/json; charset=utf-8	3262B	https://search.codal.ir/api/search/v1/IndustryGroup
+200	xhr	application/json; charset=utf-8	5701B	https://search.codal.ir/api/search/v1/auditors
+200	xhr	application/json; charset=utf-8	18597B	https://search.codal.ir/api/search/v1/categories
+200	xhr	application/json; charset=utf-8	16511B	https://search.codal.ir/api/search/v1/financialYears
+200	xhr	application/json; charset=utf-8	569974B	https://search.codal.ir/api/search/v1/companies
+200	xhr	application/json; charset=utf-8	183B	https://search.codal.ir/api/search/v1/financialYears?Name=%D8%B5%D9%86%D8%AF%D9%88%D9%82+%D8%B3%D8%B1%D9%85%D8%A7%DB%8C%D9%87+%DA%AF%D8%B0%D8%A7%D8%B1%DB%8C+%D9%85%D8%B4%D8%AA%D8%B1%DA%A9+%D8%B4%D8%A7%D8%AE%D8%B5%DB%8C+%DA%A9%D8%A7%D8%B1%D8%A2%D9%81%D8%B1%DB%8C%D9%86&Symbol=%DA%A9%D8%A7%D8%B1%D8%A2%D9%81%D8%B1%DB%8C%D9%86+%D8%B4%D8%A7%D8%AE%D8%B5%DB%8C
+200	xhr	application/json; charset=utf-8	15577B	https://search.codal.ir/api/search/v2/q?Audited=true&AuditorRef=-1&Category=-1&Childs=true&CompanyState=2&CompanyType=3&Consolidatable=true&IndustryGroup=46&IsNotAudited=false&Length=-1&LetterType=-1&Mains=true&Name=%D8%B5%D9%86%D8%AF%D9%88%D9%82+%D8%B3%D8%B1%D9%85%D8%A7%DB%8C%D9%87+%DA%AF%D8%B0%D8%A7%D8%B1%DB%8C+%D9%85%D8%B4%D8%AA%D8%B1%DA%A9+%D8%B4%D8%A7%D8%AE%D8%B5%DB%8C+%DA%A9%D8%A7%D8%B1%D8%A2%D9%81%D8%B1%DB%8C%D9%86&NotAudited=true&NotConsolidatable=true&PageNumber=1&Publisher=false&ReportingType=1000002&Symbol=%DA%A9%D8%A7%D8%B1%D8%A2%D9%81%D8%B1%DB%8C%D9%86+%D8%B4%D8%A7%D8%AE%D8%B5%DB%8C&TracingNo=-1&name=%D8%B5%D9%86%D8%AF%D9%88%D9%82+%D8%B3%D8%B1%D9%85%D8%A7%DB%8C%D9%87+%DA%AF%D8%B0%D8%A7%D8%B1%DB%8C+%D9%85%D8%B4%D8%AA%D8%B1%DA%A9+%D8%B4%D8%A7%D8%AE%D8%B5%DB%8C+%DA%A9%D8%A7%D8%B1%D8%A2%D9%81%D8%B1%DB%8C%D9%86&search=true
+200	other	image/vnd.microsoft.icon	text-failed:UnicodeDecodeError	https://codal.ir/assets/favicon/favicon.ico?v=RyQ5xz7ege
+200	xhr	text/html; charset=utf-8	1510B	https://codal.ir/Reports/Attachment_Partial.aspx?LetterSerial=f4VU07OOObOOOUAxQ192NalrO4jw%3d%3d&_=1792236361113
+200	xhr	text/html; charset=utf-8	1510B	https://codal.ir/Reports/Attachment_Partial.aspx?LetterSerial=f4VU07OOObOOOUAxQ192NalrO4jw%3d%3d&_=1792236361114
+200	document	text/html; charset=utf-8	99006B	https://codal.ir/ReportList.aspx?search&Symbol=%DA%A9%D8%A7%D8%B1%D8%A2%D9%81%D8%B1%DB%8C%D9%86%20%D8%B4%D8%A7%D8%AE%D8%B5%DB%8C
+200	xhr	application/json; charset=utf-8	5701B	https://search.codal.ir/api/search/v1/auditors
+200	xhr	application/json; charset=utf-8	183B	https://search.codal.ir/api/search/v1/financialYears?Symbol=%DA%A9%D8%A7%D8%B1%D8%A2%D9%81%D8%B1%DB%8C%D9%86+%D8%B4%D8%A7%D8%AE%D8%B5%DB%8C
+200	xhr	application/json; charset=utf-8	3262B	https://search.codal.ir/api/search/v1/IndustryGroup
+200	xhr	application/json; charset=utf-8	18597B	https://search.codal.ir/api/search/v1/categories
+200	other	image/vnd.microsoft.icon	text-failed:UnicodeDecodeError	https://codal.ir/assets/favicon/favicon.ico?v=RyQ5xz7ege
+200	xhr	application/json; charset=utf-8	569974B	https://search.codal.ir/api/search/v1/companies
+200	xhr	application/json; charset=utf-8	15577B	https://search.codal.ir/api/search/v2/q?Audited=true&AuditorRef=-1&Category=-1&Childs=true&CompanyState=-1&CompanyType=-1&Consolidatable=true&IsNotAudited=false&Length=-1&LetterType=-1&Mains=true&NotAudited=true&NotConsolidatable=true&PageNumber=1&Publisher=false&ReportingType=-1&Symbol=%DA%A9%D8%A7%D8%B1%D8%A2%D9%81%D8%B1%DB%8C%D9%86+%D8%B4%D8%A7%D8%AE%D8%B5%DB%8C&TracingNo=-1&search=true
+200	other	image/vnd.microsoft.icon	text-failed:UnicodeDecodeError	https://codal.ir/assets/favicon/favicon.ico?v=RyQ5xz7ege
+200	xhr	text/html; charset=utf-8	1503B	https://codal.ir/Reports/Attachment_Partial.aspx?LetterSerial=ptBNdZfvlzPg5waqHXExpg%3d%3d&_=1792236384511
+200	document	application/vnd.openxmlformats-officedoc	text-failed:Error	https://codal.ir/Reports/DownloadFile.aspx?id=QssAx81iXNpbA2LbZCvi8w%3d%3d
