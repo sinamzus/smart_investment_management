@@ -469,11 +469,34 @@ def discover() -> list[dict]:
     return out
 
 
+def diag() -> None:
+    """کدام میزبان‌ها در دسترس‌اند و آیا TSETMC تاریخچهٔ NAV دارد؟ (یک اجرا، نتیجه را push کنید)"""
+    ins = next((f["ins_code"] for f in discover_local() if f["symbol"] == "کاردان"), "65023851436340574")
+    print("── میزبان‌ها")
+    for u in ("https://fund.fipiran.ir/", "https://fund.fipiran.ir/api/v1/fund/fundcompare", "https://fipiran.ir/", "https://www.fipiran.ir/",
+              "https://cdn.tsetmc.com/api/Fund/GetETFByInsCode/" + ins):
+        try:
+            r = requests.get(u, headers=HEADERS, timeout=25)
+            print(f"  {r.status_code}  {u}  [{len(r.content)} بایت]  {r.text[:90]!r}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  خطا  {u}  {type(e).__name__}: {str(e)[:140]}")
+    print("── مسیرهای محتمل تاریخچهٔ NAV در TSETMC [راستی‌آزمایی نشده]")
+    for ep in (f"{CDN}/Fund/GetETFHistory/{ins}", f"{CDN}/Fund/GetETFNavHistory/{ins}", f"{CDN}/Fund/GetFundHistory/{ins}",
+               f"{CDN}/Fund/GetETFByInsCode/{ins}/0", f"{CDN}/ClosingPrice/GetClosingPriceHistory/{ins}/20260101",
+               f"https://old.tsetmc.com/tsev2/data/ETFHistory.aspx?i={ins}", f"https://old.tsetmc.com/Loader.aspx?ParTree=15131M&i={ins}"):
+        try:
+            r = requests.get(ep, headers=HEADERS, timeout=25)
+            print(f"  {r.status_code}  {ep}  [{len(r.content)} بایت]  {r.text[:140]!r}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  خطا  {ep}  {type(e).__name__}: {str(e)[:120]}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", action="append", help="فقط این نماد(ها)")
     ap.add_argument("--skip-index", action="store_true")
     ap.add_argument("--site", action="append", default=[], help="نماد=آدرس سایت صندوق (اگر خودکار پیدا نشد)")
+    ap.add_argument("--diag", action="store_true", help="فقط آزمون دسترسی میزبان‌ها و مسیرهای NAV (سریع)")
     ap.add_argument("--log", help="کپی خروجی در این فایل (UTF-8)")
     a = ap.parse_args()
     for s in (sys.stdout, sys.stderr):
@@ -481,6 +504,9 @@ def main() -> int:
             s.reconfigure(encoding="utf-8")
     if a.log:
         sys.stdout = Tee(a.log)
+    if a.diag:
+        diag()
+        return 0
     sites = dict(x.split("=", 1) for x in a.site)
     if not a.skip_index:
         print("── شاخص‌های مرجع")
