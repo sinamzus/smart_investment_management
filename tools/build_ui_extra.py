@@ -30,8 +30,21 @@ def r(x, n=4):
 
 
 # ── Dividend Lab ─────────────────────────────────────────────────────────
+def pay_lags() -> pd.Series:
+    """تأخیر واقعی پرداخت (روز از استحقاق؛ بدون منفی) از نامه‌های ن-۱۳ (tools/parse_dividend_payments.py)."""
+    f = ROOT / "data/corporate_actions/dividend_payment_lags.csv"
+    if not f.exists():
+        return pd.Series(dtype=float)
+    E = pd.read_csv(f)
+    E = E[pd.to_numeric(E.dps_rial, errors="coerce") > 0]
+    s = pd.to_numeric(E.lag_eff_ex.fillna(E.lag_eff), errors="coerce").dropna().clip(lower=0)
+    return s
+
+
 def divlab():
     out = {}
+    lags = pay_lags()
+    mix = [(int(L), 1.0 / len(lags)) for L in lags] if len(lags) else None
     for name in ir.PAIRS:
         j = ir.load_pair(name)
         yrs = (j.index[-1] - j.index[0]).days / 365.25       # سال تقویمی
@@ -45,7 +58,12 @@ def divlab():
                 b = ir.stats(ir.simulate(j, L, rb), j.tr)
                 row[f"B{int(rb*100)}"] = {k: r(v, 4) for k, v in b.items()}
             scen.append(row)
-        out[name] = {"dates": [str(d.date()) for d in j.index], "tr": [round(float(v), 7) for v in j.tr],
+        emp = None
+        if mix:      # توزیع تجربی تأخیر (هر رویداد واقعی یک اتم با وزن برابر)
+            emp = {"A": {k: r(v, 4) for k, v in ir.stats(ir.simulate(j, mix), j.tr).items()}}
+            for rb in (0.25, 0.35):
+                emp[f"B{int(rb*100)}"] = {k: r(v, 4) for k, v in ir.stats(ir.simulate(j, mix, rb), j.tr).items()}
+        out[name] = {"empirical": emp, "dates": [str(d.date()) for d in j.index], "tr": [round(float(v), 7) for v in j.tr],
                      "pr": [round(float(v), 7) for v in j.pr], "y_ann_pct": r(j.y.sum() / yrs * 100, 2),
                      "month_share": [r(month.get(m, 0) / j.y.sum() * 100, 1) for m in range(1, 13)],
                      "scenarios": scen, "from": str(j.index[0].date()), "to": str(j.index[-1].date())}
@@ -53,6 +71,21 @@ def divlab():
     n = lambda f: int(len(pd.read_csv(ca / f))) if (ca / f).exists() else 0   # noqa: E731
     out["payment_data"] = {"available": n("codal_payment_schedule_raw.csv") > 0, "rows": n("codal_payment_schedule_raw.csv"),
                            "agm_rows": n("codal_agm.csv")}
+    if len(lags):
+        E = pd.read_csv(ca / "dividend_payment_lags.csv", dtype=str).fillna("")
+        E = E[pd.to_numeric(E.dps_rial, errors="coerce") > 0]
+        bins = [0, 15, 30, 60, 90, 120, 180, 10000]
+        h = pd.cut(lags, bins, right=False).value_counts(sort=False)
+        lg = pd.to_numeric(E.lag_eff_ex.where(E.lag_eff_ex != "", E.lag_eff), errors="coerce").clip(lower=0)
+        by_year = {y: {"n": int(len(x)), "median": int(x.median())} for y, x in lg.dropna().groupby(E.session_date_j.str[:4].loc[lg.dropna().index])}
+        P = pd.read_csv(ca / "codal_payment_dates.csv", dtype=str).fillna("")
+        out["payment_data"].update({
+            "events": int(len(E)), "with_date": int(len(lags)), "letters_text": int((P.chars.astype(int) > 200).sum()), "letters": int(len(P)),
+            "median": int(lags.median()), "mean": int(round(lags.mean())), "q25": int(lags.quantile(.25)), "q75": int(lags.quantile(.75)),
+            "hist": [[f"{int(i.left)}–{int(i.right) if i.right < 10000 else '+'}", int(c)] for i, c in h.items()], "by_year": by_year,
+            "symbols": int(E[E.lag_eff != ""].symbol.nunique())})
+    # ‌مخلوط تجربی برای استفاده در مدل‌های دیگر
+    out["payment_data"]["empirical_mix"] = sorted(int(x) for x in lags)
     return out
 
 

@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 import analyze_fund_holdings as ah
+import build_ui_extra as bx
 import fund_diagnostics as fd
 import investable_replica as ir
 import rebuild_ew_index as ew
@@ -32,7 +33,7 @@ FUNDS = Path(os.environ.get("SIM_FUNDS_DIR", ROOT / "data" / "funds"))
 OUT = Path(os.environ.get("SIM_FUNDS_OUT", ROOT / "ui" / "data" / "funds.js"))
 BENCH = {"K": ("32097828799138957", "«شاخص كل»"), "EW": ("67130298613737946", "«شاخص كل (هم وزن)»"),
          "I30": ("10523825119011581", "«شاخص ۳۰ شرکت بزرگ»")}
-LAG = 90
+LAG = 90            # فقط اگر جدول تأخیر واقعی (dividend_payment_lags.csv) نباشد
 WARMUP_DAYS = 60
 EVENT, FLAG = 0.08, 0.03
 
@@ -236,10 +237,12 @@ def main():
     ys = {"K": ir.load_pair("K").y, "EW": ir.load_pair("EW").y}
     ys["I30"] = ys["K"]            # برای شاخص ۳۰ شرکت، نسخهٔ قیمتی جدا نداریم؛ بازده سود «شاخص كل» جانشین است
     bench = {k: ew.official(c) for k, (c, _) in BENCH.items()}
+    lags = bx.pay_lags()
+    MIX = [(int(L), 1.0 / len(lags)) for L in lags] if len(lags) else LAG      # توزیع واقعی تأخیر پرداخت (کدال ن-۱۳)؛ بدون آن L = 90
     repl = {}
     for k in ("K", "EW"):
         j = ir.load_pair(k)
-        nav = ir.simulate(j, LAG)
+        nav = ir.simulate(j, MIX)
         repl[k] = nav.pct_change().fillna(nav.iloc[0] - 1)
     rows = pd.read_csv(FUNDS / "funds.csv", dtype=str).fillna("").to_dict("records") if (FUNDS / "funds.csv").exists() else []
     if not rows:                                  # هنوز دادهای نیامده: صندوق‌های شناخته‌شدهٔ مخزن (بدون NAV)
@@ -255,7 +258,7 @@ def main():
             t = res["win"].get("all", {})
             print(f"{m['symbol']:8s} {m['benchmark']:4s} TE_w={t.get('tr', {}).get('te_w')}% TD={t.get('tr', {}).get('td')}% "
                   f"TD_vs_rep={t.get('rep', {}).get('td')}% best_fit={res['best_fit']} events={len(res['events'])}")
-    data = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "lag": LAG,
+    data = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "lag": int(round(float(lags.mean()))) if len(lags) else LAG, "lag_mode": "empirical" if len(lags) else "fixed", "lag_n": int(len(lags)),
             "bench_names": {k: v[1] for k, v in BENCH.items()}, "funds": funds, "missing": missing,
             "reference": replica_reference(bench, repl)}
     OUT.write_text("window.SIM_FUNDS = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")

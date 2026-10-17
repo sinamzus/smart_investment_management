@@ -58,17 +58,18 @@ function bars(el, labels, values, f, mark) {
 }
 
 /* ══════════ Dividend Lab ══════════ */
-const dv = { k: 'K', s: 'A', lag: 90, rb: 25, i: null, cur: null };
+const dv = { k: 'K', s: 'A', lag: 90, rb: 25, emp: false, i: null, cur: null };
 function divSim(ds, tr, pr, lag, rb) {
-  const n = tr.length, day = ds.map(d => Date.parse(d) / 864e5), pay = new Int32Array(n), due = new Float64Array(n + 1), nav = new Float64Array(n);
-  let k = 0; for (let t = 0; t < n; t++) { if (k < t) k = t; while (k < n && day[k] < day[t] + lag) k++; pay[t] = k; }
+  const lags = Array.isArray(lag) ? lag : [lag], m = lags.length;
+  const n = tr.length, day = ds.map(d => Date.parse(d) / 864e5), due = new Float64Array(n + 1), nav = new Float64Array(n);
+  const pays = lags.map(L => { const pay = new Int32Array(n); let k = 0; for (let t = 0; t < n; t++) { if (k < t) k = t; while (k < n && day[k] < day[t] + L) k++; pay[t] = k; } return pay; });
   let V = 1, A = 0, B = 0;
   for (let t = 0; t < n; t++) {
     const dd = t ? day[t] - day[t - 1] : 0;
     if (rb != null && B > 0) V -= B * rb * dd / 365;
     V *= 1 + pr[t];
     const y = tr[t] - pr[t];
-    if (y !== 0) { const amt = V * y / (1 + pr[t]); due[pay[t]] += amt; A += amt; if (rb != null) { V += amt; B += amt; } }
+    if (y !== 0) { const amt = V * y / (1 + pr[t]); for (let a = 0; a < m; a++) due[pays[a][t]] += amt / m; A += amt; if (rb != null) { V += amt; B += amt; } }
     const p = due[t]; if (p !== 0) { A -= p; if (rb != null) B -= p; else V += p; }
     nav[t] = V + A - B;
   }
@@ -76,7 +77,7 @@ function divSim(ds, tr, pr, lag, rb) {
 }
 function divCompute() {
   const S = X.divlab[dv.k], rb = dv.s === 'B' ? dv.rb / 100 : null;
-  const nav = divSim(S.dates, S.tr, S.pr, dv.lag, rb), n = nav.length;
+  const PD = X.divlab.payment_data, nav = divSim(S.dates, S.tr, S.pr, dv.emp && PD.empirical_mix && PD.empirical_mix.length ? PD.empirical_mix : dv.lag, rb), n = nav.length;
   const trL = new Float64Array(n); let c = 1; for (let t = 0; t < n; t++) { c *= 1 + S.tr[t]; trL[t] = c; }
   const d = []; for (let t = 1; t < n; t++) d.push((nav[t] / nav[t - 1] - 1) - S.tr[t]);
   const mean = d.reduce((a, b) => a + b, 0) / d.length, sd = Math.sqrt(d.reduce((a, b) => a + (b - mean) ** 2, 0) / (d.length - 1));
@@ -93,7 +94,10 @@ function divDraw() {
 }
 function divRender() {
   divCompute(); const c = dv.cur, S = c.S;
-  $('dv-lag-o').textContent = dv.lag; $('dv-rb-o').textContent = dv.rb;
+  const PD = X.divlab.payment_data, hasEmp = !!(PD.empirical_mix && PD.empirical_mix.length);
+  $('dv-emp-w').hidden = !hasEmp; $('dv-emp').checked = dv.emp && hasEmp; $('dv-lag').disabled = dv.emp && hasEmp;
+  $('dv-model-chip').textContent = dv.emp && hasEmp ? `مدل: توزیع واقعی تأخیر (${PD.with_date} رویداد کدال)` : 'مدل: تأخیر یکسان L';
+  $('dv-lag-o').textContent = dv.emp && hasEmp ? `میانه ${PD.median}` : dv.lag; $('dv-rb-o').textContent = dv.rb;
   $('dv-rb-w').style.display = dv.s === 'B' ? '' : 'none';
   document.querySelectorAll('#dv-idx button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === dv.k));
   document.querySelectorAll('#dv-str button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === dv.s));
@@ -101,32 +105,38 @@ function divRender() {
   $('dv-kpis').innerHTML = [['تفاوت ردیابی سالانه', sgn(c.gap, 2) + '%', cls(c.gap)], ['نسبت سطح نهایی NAV / TR', fmt(c.ratio, 3), c.ratio >= 1 ? 'up' : 'down'],
     ['خطای ردیابی (TE سالانه)', fmt(c.te, 2) + '%', ''], ['سود نقدی ضمنی سالانه', fmt(S.y_ann_pct, 1) + '%', ''], ['بازه', S.from.slice(0, 4) + '→' + S.to.slice(0, 4), '']]
     .map(([k, v, cl]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cl}">${v}</div></div>`).join('');
-  $('dv-lineage').innerHTML = `<span><b>مدل</b> NAV = ارزش پرتفوی + مطالبات سود − وام؛ سود روز استحقاق = TR − PR رسمی، پرداخت L روز بعد</span><span><b>L = ۰</b> دقیقاً TR رسمی (تأییدکنندهٔ مدل)</span><span><b>فرض</b> تأخیر یکسان L برای همهٔ شرکت‌ها و نرخ وام ثابت در کل دوره</span><span><b>روش‌شناسی</b> فصل ۰۳ §۳٫۵</span>`;
+  $('dv-lineage').innerHTML = `<span><b>مدل</b> NAV = ارزش پرتفوی + مطالبات سود − وام؛ سود روز استحقاق = TR − PR رسمی، پرداخت L روز بعد</span><span><b>L = ۰</b> دقیقاً TR رسمی (تأییدکنندهٔ مدل)</span><span><b>فرض</b> ${dv.emp && PD.empirical_mix ? 'هر سود نقدی با تأخیر یکی از رویدادهای واقعی کدال پرداخت می‌شود (وزن برابر؛ جهان ۳۰ شرکت بزرگ)' : 'تأخیر یکسان L برای همهٔ شرکت‌ها'}؛ نرخ وام ثابت در کل دوره</span><span><b>روش‌شناسی</b> فصل ۰۳ §۳٫۵</span>`;
   // سناریوهای ثابت
   const near = S.scenarios.reduce((b, r) => Math.abs(r.lag - dv.lag) < Math.abs(b.lag - dv.lag) ? r : b);
   $('dv-scen').innerHTML = th([['L (روز)', 'n'], ['A: بدون وام — فاصله %/سال', 'n'], ['A: TE %', 'n'], ['B ۲۵٪ — فاصله', 'n'], ['B ۲۵٪ — TE', 'n'], ['B ۳۵٪ — فاصله', 'n'], ['B ۳۵٪ — TE', 'n']]) +
-    '<tbody>' + S.scenarios.map(r => `<tr ${r === near ? 'aria-selected="true"' : ''}><td class="n">${r.lag}</td><td class="n ${cls(r.A.gap_pct_yr)}">${sgn(r.A.gap_pct_yr)}</td><td class="n">${fmt(r.A.te_pct)}</td><td class="n ${cls(r.B25.gap_pct_yr)}">${sgn(r.B25.gap_pct_yr)}</td><td class="n">${fmt(r.B25.te_pct, 3)}</td><td class="n ${cls(r.B35.gap_pct_yr)}">${sgn(r.B35.gap_pct_yr)}</td><td class="n">${fmt(r.B35.te_pct, 3)}</td></tr>`).join('') + '</tbody>';
+    '<tbody>' + (S.empirical ? (e => `<tr ${dv.emp ? 'aria-selected="true"' : ''}><td class="n">توزیع واقعی (${PD.with_date} رویداد؛ میانه ${PD.median}، میانگین ${PD.mean})</td><td class="n ${cls(e.A.gap_pct_yr)}">${sgn(e.A.gap_pct_yr)}</td><td class="n">${fmt(e.A.te_pct)}</td><td class="n ${cls(e.B25.gap_pct_yr)}">${sgn(e.B25.gap_pct_yr)}</td><td class="n">${fmt(e.B25.te_pct, 3)}</td><td class="n ${cls(e.B35.gap_pct_yr)}">${sgn(e.B35.gap_pct_yr)}</td><td class="n">${fmt(e.B35.te_pct, 3)}</td></tr>`)(S.empirical) : '') + S.scenarios.map(r => `<tr ${r === near && !dv.emp ? 'aria-selected="true"' : ''}><td class="n">${r.lag}</td><td class="n ${cls(r.A.gap_pct_yr)}">${sgn(r.A.gap_pct_yr)}</td><td class="n">${fmt(r.A.te_pct)}</td><td class="n ${cls(r.B25.gap_pct_yr)}">${sgn(r.B25.gap_pct_yr)}</td><td class="n">${fmt(r.B25.te_pct, 3)}</td><td class="n ${cls(r.B35.gap_pct_yr)}">${sgn(r.B35.gap_pct_yr)}</td><td class="n">${fmt(r.B35.te_pct, 3)}</td></tr>`).join('') + '</tbody>';
   $('dv-lin-b').innerHTML = `<span>${dv.k === 'K' ? 'شاخص كل' : 'هم‌وزن'} · نسبت به TR نظری رسمی</span><span><b>خوانش</b> وام TE را تقریباً صفر می‌کند چون هزینه‌اش قطعی است (نرخ × سود × L/۳۶۵)؛ میانگین بهتر فقط اگر نرخ وام < بازده بازار</span>`;
   bars($('dv-bars'), JM.map(m => m.slice(0, 5)), S.month_share, v => fmt(v, 0), (i, v) => v === Math.max(...S.month_share));
   $('dv-lin-c').innerHTML = `<span><b>خوانش</b> سود در ${JM[S.month_share.indexOf(Math.max(...S.month_share))]} متمرکز است؛ تأخیر در همین ماه‌ها بیشترین مبلغ را معلق می‌کند</span><span><b>منبع</b> y = r<sub>TR</sub> − r<sub>PR</sub> رسمی</span>`;
   divDraw();
 }
 function divPayPanel() {
-  const p = X.divlab.payment_data;
-  $('dv-pay-chip').textContent = p.rows + ' زمان‌بندی · ' + p.agm_rows + ' مجمع';
-  $('dv-pay').innerHTML = `<div class="note">تاریخ مجمع و سود هر سهم از ${p.agm_rows} مصوبهٔ مجمع کدال خوانده شده و با تعدیل قیمت TSETMC تطبیق کامل دارد. تاریخ پرداخت در نامه‌های «زمان‌بندی پرداخت سود» (${p.rows} نامه) به‌صورت پیوست تصویری منتشر می‌شود و در این نسخه به داده تبدیل نشده است؛ بنابراین مدل بالا تأخیر یکسان L را برای همهٔ شرکت‌ها به کار می‌برد.
-    منبع: کدال، «زمان‌بندی پرداخت سود» (ن-۱۳) و «تصمیمات مجمع عادی سالیانه» (ن-۵۲).</div>
-    <div class="prose"><b>به‌روزرسانی داده (روی سیستم شما؛ قابل‌ادامه پس از قطع):</b><div class="cmdline">python tools/fetch_dividend_payments.py --collect 30 --years 5 --log collect.txt\npython tools/fetch_dividend_payments.py --parse\ngit add -A; git commit -m "codal collect"; git push -u origin claude/charming-ptolemy-cyehmc</div>
-    خروجی: <code>data/corporate_actions/codal_agm.csv</code> (${p.agm_rows} ردیف) و <code>codal_payment_schedule_raw.csv</code> (${p.rows} ردیف).</div>`;
+  const p = X.divlab.payment_data, has = p.with_date > 0;
+  $('dv-pay-chip').textContent = has ? p.with_date + ' رویداد با تاریخ پرداخت · ' + p.agm_rows + ' مجمع' : p.rows + ' زمان‌بندی · ' + p.agm_rows + ' مجمع';
+  const hist = has ? `<table class="dt"><thead><tr><th>تأخیر از استحقاق (روز)</th>${p.hist.map(h => `<th class="n">${h[0]}</th>`).join('')}</tr></thead><tbody><tr><td>رویداد</td>${p.hist.map(h => `<td class="n">${h[1]}</td>`).join('')}</tr></tbody></table>` : '';
+  const yr = has ? `<table class="dt"><thead><tr><th>سال مجمع</th>${Object.keys(p.by_year).map(y => `<th class="n">${y}</th>`).join('')}</tr></thead><tbody><tr><td>میانهٔ تأخیر (روز)</td>${Object.values(p.by_year).map(o => `<td class="n">${o.median}</td>`).join('')}</tr><tr><td>رویداد</td>${Object.values(p.by_year).map(o => `<td class="n">${o.n}</td>`).join('')}</tr></tbody></table>` : '';
+  $('dv-pay').innerHTML = `<div class="note">تاریخ مجمع و سود هر سهم از ${p.agm_rows} مصوبهٔ مجمع کدال خوانده شده و با تعدیل قیمت TSETMC تطبیق کامل دارد.
+    ${has ? `تاریخ پرداخت از نامه‌های «زمان‌بندی پرداخت سود» (ن-۱۳) استخراج شد: از ${p.letters} پیوست فقط ${p.letters_text} متن‌دار است (بقیه تصویر اسکن‌شده‌اند و OCR نشدند)؛ برای ${p.with_date} از ${p.events} رویداد سود نقدی (${p.symbols} نماد) تاریخ سجامی معتبر پیدا شد.
+    <b>میانهٔ تأخیر ${p.median} روز، میانگین ${p.mean}، چارک‌ها ${p.q25}–${p.q75}</b> — پراکندگی بزرگ است، پس مدل یک عدد ثابت نیست؛ گزینهٔ «توزیع واقعی تأخیر» را روشن کنید.` : 'تاریخ پرداخت هنوز در داده نیست؛ مدل تأخیر یکسان L را به کار می‌برد.'}
+    منبع: کدال ن-۱۳ و ن-۵۲؛ نمونه فقط ۳۰ شرکت بزرگ است و نمونه‌های متن‌دار ممکن است نمایندهٔ همهٔ ناشران نباشند [راستی‌آزمایی نشده].</div>
+  ${hist}${yr}
+  <div class="prose"><b>تکمیل داده:</b> رهاورد۳۶۵ برای همهٔ نمادها «تاریخ پرداخت» را دارد؛ ابتدا ساختار پاسخ شبکه را ثبت کنید (روی سیستم شما):<div class="cmdline">pip install playwright\npython tools/fetch_rahavard_dividends.py --capture فملی --log cap_rahavard.txt\ngit add -A; git commit -m "rahavard capture"; git push -u origin claude/charming-ptolemy-cyehmc</div>
+    خروجی: <code>data/corporate_actions/dividend_payment_lags.csv</code> (${p.events} رویداد) و <code>codal_payment_dates.csv</code>.</div>`;
 }
 function initDiv() {
   document.querySelectorAll('#dv-idx button').forEach(b => b.onclick = () => { dv.k = b.dataset.k; divRender(); });
   document.querySelectorAll('#dv-str button').forEach(b => b.onclick = () => { dv.s = b.dataset.s; divRender(); });
   $('dv-lag').oninput = e => { dv.lag = +e.target.value; divRender(); };
+  $('dv-emp').onchange = e => { dv.emp = e.target.checked; divRender(); };
   $('dv-rb').oninput = e => { dv.rb = +e.target.value; divRender(); };
   attachHover($('dv-chart'), divDraw, i => { dv.i = i; divDraw(); });
-  $('dv-csv').onclick = () => { const c = dv.cur; download(`div_lab_${dv.k}_L${dv.lag}${dv.s === 'B' ? '_rb' + dv.rb : ''}.csv`, [['date', 'tr_theory', 'nav', 'gap_pct'], ...c.S.dates.map((d, i) => [d, (c.trL[i] * 100).toFixed(3), (c.nav[i] * 100).toFixed(3), ((c.nav[i] / c.trL[i] - 1) * 100).toFixed(3)])]); };
-  $('dv-csv-b').onclick = () => download(`div_scenarios_${dv.k}.csv`, [['lag', 'A_gap', 'A_te', 'B25_gap', 'B25_te', 'B35_gap', 'B35_te'], ...X.divlab[dv.k].scenarios.map(r => [r.lag, r.A.gap_pct_yr, r.A.te_pct, r.B25.gap_pct_yr, r.B25.te_pct, r.B35.gap_pct_yr, r.B35.te_pct])]);
+  $('dv-csv').onclick = () => { const c = dv.cur; download(`div_lab_${dv.k}_${dv.emp ? 'emp' : 'L' + dv.lag}${dv.s === 'B' ? '_rb' + dv.rb : ''}.csv`, [['date', 'tr_theory', 'nav', 'gap_pct'], ...c.S.dates.map((d, i) => [d, (c.trL[i] * 100).toFixed(3), (c.nav[i] * 100).toFixed(3), ((c.nav[i] / c.trL[i] - 1) * 100).toFixed(3)])]); };
+  $('dv-csv-b').onclick = () => download(`div_scenarios_${dv.k}.csv`, [['lag', 'A_gap', 'A_te', 'B25_gap', 'B25_te', 'B35_gap', 'B35_te'], ...(X.divlab[dv.k].empirical ? [['empirical', ...['A', 'B25', 'B35'].flatMap(k => [X.divlab[dv.k].empirical[k].gap_pct_yr, X.divlab[dv.k].empirical[k].te_pct])]] : []), ...X.divlab[dv.k].scenarios.map(r => [r.lag, r.A.gap_pct_yr, r.A.te_pct, r.B25.gap_pct_yr, r.B25.te_pct, r.B35.gap_pct_yr, r.B35.te_pct])]);
   divPayPanel(); redraws.div = divDraw; divRender();
 }
 
@@ -247,7 +257,7 @@ function initQA() {
   $('qa-kpis').innerHTML = [['اعضای «شاخص كل»', u.k_members], ['با فایل قیمت', u.k_with_prices], ['نمادهای extras', u.extras], ['نماد در بازده', u.stocks_bourse_in_returns], ['ردیف قاعدهٔ ۸', rl.rule8]].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${fmt(v, 0)}</div></div>`).join('');
   $('qa-gaps').innerHTML = `<b>باز و شناخته‌شده</b><ul>
   <li><b>صنعت ۳۴ خودرو:</b> TE ۳٫۲٪ (همبستگی ۰٫۹۹۶)؛ فرضیهٔ زمان‌بندی/سهام شناور/توقف/فرابورس رد شد؛ خطا پراکنده است.</li>
-  <li><b>تاریخ پرداخت سود:</b> ${X.divlab.payment_data.agm_rows} مصوبهٔ مجمع و ${X.divlab.payment_data.rows} نامهٔ زمان‌بندی پرداخت از کدال جمع‌آوری شد؛ متن زمان‌بندی‌ها عمدتاً تصویر اسکن‌شده است، پس Dividend Lab با تأخیر یکسان L محاسبه می‌کند.</li>
+  <li><b>تاریخ پرداخت سود:</b> ${X.divlab.payment_data.agm_rows} مصوبهٔ مجمع و ${X.divlab.payment_data.rows} نامهٔ زمان‌بندی پرداخت از کدال جمع‌آوری شد؛ فقط ${X.divlab.payment_data.letters_text || 0} پیوست متن‌دار است و برای ${X.divlab.payment_data.with_date || 0} رویداد تاریخ پرداخت استخراج شد (میانهٔ تأخیر ${X.divlab.payment_data.median || '—'} روز)؛ بقیه (تصویر اسکن‌شده) با رهاورد۳۶۵ تکمیل می‌شود.</li>
   <li><b>هم‌وزن TR رسمی:</b> نسبت سطح بازسازی به رسمی ${fmt(D.stats.EW.all.cum_ratio, 3)}؛ تفاوت از تفکیک سود و افزایش سرمایه در رویدادهای ترکیبی است.</li>
   <li><b>سهام کاملاً حذف‌شده:</b> فقط آن‌هایی که با جست‌وجوی نام صنعت پیدا شده‌اند (۱۳۶ نماد extras)؛ جهان کامل نیست.</li>
   <li><b>۴ صنعت بدون عضو فعلی (۳۳، ۳۵، ۳۶، ۴۵)</b> و ۲۶ با کمتر از ۲۰۰ روز هم‌پوشانی: قابل مقایسه نیستند.</li></ul>`;
@@ -262,6 +272,7 @@ function initRep() {
     ['«كل (هم وزن)» TR فصلی شمسی', `همبستگی ${fmt(st.EW.all.corr, 4)} · TE ${fmt(st.EW.all.te)}٪ · نسبت سطح ${fmt(st.EW.all.cum_ratio, 3)}`, 'فصل ۳ §۳٫۴'],
     ['شاخص‌های صنعت', `${Q.comparable} قابل مقایسه · ${Q.n_corr99} با همبستگی ≥ ۰٫۹۹ · میانهٔ TE ${fmt(Q.median_te)}٪`, 'فصل ۳ §۳٫۴'],
     ['هزینهٔ تأخیر سود ۹۰ روزه (K / EW)', `${sgn(dvK.A.gap_pct_yr)}٪ / ${sgn(dvE.A.gap_pct_yr)}٪ در سال (بدون وام)`, 'فصل ۳ §۳٫۵'],
+    ...(X.divlab.K.empirical ? [['هزینهٔ تأخیر سود با توزیع واقعی (K / EW)', `${sgn(X.divlab.K.empirical.A.gap_pct_yr)}٪ / ${sgn(X.divlab.EW.empirical.A.gap_pct_yr)}٪ در سال (بدون وام؛ ${X.divlab.payment_data.with_date} رویداد کدال، میانگین ${X.divlab.payment_data.mean} روز)`, 'فصل ۳ §۳٫۵']] : []),
     ...[['مومنتوم ۱۲−۱', X.factor], ['کم‌نوسان ۲۵۲ روزه', X.factor_lowvol]].map(([n, G]) => { const N = facNet(G, 100), s = mstats(N.ex), a = mstats(N.net.Q5).ann - mstats(N.net.ALL).ann;
       return [n + ' (خالص ۱۰۰ bp)', `پنجک ۵ نسبت به همه ${sgn(a, 1)}٪ در سال · t نیوی‌وست ${fmt(s.t, 2)} · ${Math.abs(s.t) >= 1.96 ? 'معنادار' : 'غیرمعنادار'} در سطح ۵٪`, 'فصل ۵']; })];
   $('rp-sum').innerHTML = th([['نتیجه'], ['مقدار'], ['مرجع']]) + '<tbody>' + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="mute">${r[2]}</td></tr>`).join('') + '</tbody>';
@@ -479,7 +490,7 @@ function fnMethod(has) {
   <li>بازده روزانهٔ NAV صندوق روی روزهای معاملاتی شاخص؛ دو ماه اول عمر صندوق (تشکیل سبد) کنار می‌رود.</li>
   <li><b>TE هفتگی</b> = انحراف معیار بازده فعال ۵ روزهٔ غیرهم‌پوشان × √۵۲ (در بازه‌های کوتاه‌تر از ۸ هفته محاسبه نمی‌شود). چون NAV و شاخص در بورس تهران هم‌زمان منتشر نمی‌شوند، معیار اصلی است. <b>TE روزانه</b> برای مقایسه با ادبیات هم آمده است. <b>TE مقاوم</b> = ۱٫۴۸۲۶ × MAD بازده فعال ۵ روزه × √۵۲، که به چند هفتهٔ پرت حساس نیست.</li>
   <li><b>تفاوت تجمعی</b> بازده مرکب صندوق منهای مرجع در همان بازه؛ <b>TD سالانه</b> همان با سال تقویمی و فقط برای بازه‌های ۱۸۰ روز و بیشتر.</li>
-  <li><b>TD نسبت به ماکت</b> = بازده صندوق منهای ماکت سرمایه‌پذیر SIM (بازتولید کامل، بدون کارمزد، سود با تأخیر ${F.lag} روز)؛ بخش ساختاری TD را از سهم قابل‌انتساب به مدیر جدا می‌کند. ماکت فقط برای «شاخص كل» و هم‌وزن موجود است.</li>
+  <li><b>TD نسبت به ماکت</b> = بازده صندوق منهای ماکت سرمایه‌پذیر SIM (بازتولید کامل، بدون کارمزد، سود با ${F.lag_mode === 'empirical' ? `توزیع واقعی تأخیر پرداخت (کدال، ${F.lag_n} رویداد؛ میانگین ${F.lag} روز)` : `تأخیر ${F.lag} روز`})؛ بخش ساختاری TD را از سهم قابل‌انتساب به مدیر جدا می‌کند. ماکت فقط برای «شاخص كل» و هم‌وزن موجود است.</li>
   <li>جهش بازده فعال روزانه بیش از ۸٪ رویداد حساب و خنثی می‌شود؛ اگر چند صندوق در یک تاریخ رویداد دارند (مثلاً اردیبهشت ۱۴۰۵)، مسئله بازار یا زمان‌بندی NAV است نه صندوق خاص.</li>
   <li><b>برازش بهتر:</b> NAV هر صندوق در برابر هر سه شاخص سنجیده می‌شود؛ اگر شاخص دیگری TE کمتری بدهد، مرجع اعلام‌شده بازبینی شود. <b>حدسی</b> یعنی مرجع اعلام نشده است.</li>
   <li><b>پریمیوم لحظه‌ای</b> = قیمت پایانی بازار در روز آخرین NAV ابطال ÷ همان NAV − ۱. میانگین تاریخی گزارش نمی‌شود چون سطح NAV از بازده روزانه با بازگشت در زمان خطا انباشته می‌کند.</li></ol>
@@ -506,7 +517,7 @@ function fnHold(f) {
   const nm = { composition: 'ترکیب پرتفو', cash: 'نقد', lag: 'تأخیر سود', residual: 'باقیمانده (کارمزد، NAV، معاملات)' };
   const top = Object.entries(H.share).sort((a, b) => b[1] - a[1])[0];
   const rows = H.rows.map(r => `<tr><td class="num">${r.date}</td><td class="n ${cls(r.active)}">${sgn(r.active)}</td><td class="n">${sgn(r.composition)}</td><td class="n">${sgn(r.cash)}</td><td class="n">${sgn(r.lag)}</td><td class="n">${sgn(r.residual)}</td><td class="n mute">${fmt(r.coverage, 0)}</td></tr>`).join('');
-  return `<p><b>تجزیه با پرتفوی کدال — ${f.symbol}</b> <span class="mute">(${H.n} گزارش، ${H.from} تا ${H.to}، تأخیر سود ${H.lag} روز، پوشش نمادها ${fmt(H.coverage, 0)}٪، نقد ${fmt(H.cash_pct, 1)}٪)</span></p>
+  return `<p><b>تجزیه با پرتفوی کدال — ${f.symbol}</b> <span class="mute">(${H.n} گزارش، ${H.from} تا ${H.to}، تأخیر سود ${H.actual_dates ? 'تاریخ واقعی کدال یا میانگین ' + H.lag : H.lag} روز، پوشش نمادها ${fmt(H.coverage, 0)}٪، نقد ${fmt(H.cash_pct, 1)}٪)</span></p>
   ${H.n < 6 ? `<p class="mute"><b>نمونه کوچک:</b> فقط ${H.n} گزارش پرتفو؛ تا دریافت ماه‌های بیشتر (<code>python tools/fetch_fund_portfolio.py --collect 24</code>) نتیجه‌گیری نشود.</p>` : ''}<p>بزرگ‌ترین سهم از مجموع مربعات بازده فعال ماهانه: <b>${nm[top[0]]}</b> (${fmt(top[1] * 100, 0)}٪). ${top[0] === 'lag' ? 'فاصلهٔ پرداخت سود ریشهٔ اصلی خطاست.' : top[0] === 'residual' ? 'ریشه نه ترکیب پرتفوی و نه تأخیر سود است؛ کارمزد، قیمت‌گذاری NAV یا معاملات درون ماه باید بررسی شود.' : top[0] === 'composition' ? 'ریشه تفاوت سهام نگه‌داشته‌شده با شاخص است، نه فاصلهٔ پرداخت سود.' : 'ریشه نقد نگه‌داشته‌شده است.'}</p>
   <table class="dt"><thead><tr><th>گزارش</th><th class="n">فعال %</th><th class="n">ترکیب</th><th class="n">نقد</th><th class="n">تأخیر سود</th><th class="n">باقیمانده</th><th class="n">پوشش %</th></tr></thead><tbody>${rows}</tbody></table>`;
 }

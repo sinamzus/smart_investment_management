@@ -8,7 +8,8 @@
 برای هر گزارش در تاریخ D تا گزارش بعدی D′ (حداکثر ۴۵ روز تقویمی)، با وزن‌های D و خرید و نگهداری:
   hold_TR     : بازده کل (TR) سهام با وزن‌های پرتفو، نقد بدون بازده
   hold_TR_nc  : همان با وزن‌های بازنرمال‌شده بدون نقد
-  hold_lag    : سهام با بازده قیمتی (PR) + سودها L روز بعد از استحقاق دریافت می‌شوند (طلب بی‌بازده) + نقد بدون بازده
+  hold_lag    : سهام با بازده قیمتی (PR) + سودها دیرتر از استحقاق دریافت می‌شوند (طلب بی‌بازده) + نقد بدون بازده؛ تاریخ دریافت =
+                تاریخ واقعی پرداخت از نامهٔ ن-۱۳ کدال (dividend_payment_lags.csv) در صورت وجود، وگرنه تأخیر پیش‌فرض (میانگین تجربی همان جدول؛ ۹۰ اگر جدول نبود)
   b           : مرجع TR رسمی؛ f: NAV صندوق (همان بازده روزانه)
 اثرها (واحد درصد، مرکب روی بازه):
   ترکیب  = hold_TR_nc − b           ← سهام پرتفو با وزن واقعی در برابر شاخص، با فرض سود فوراً سرمایه‌گذاری و بدون نقد
@@ -29,8 +30,30 @@ import rebuild_ew_rebalanced as ewr
 
 ROOT = ew.ROOT
 FUNDS = Path(os.environ.get("SIM_FUNDS_DIR", ROOT / "data" / "funds"))
-LAG = 90
 MAXWIN = 45
+_PAY = {}
+
+
+def pay_map():
+    """نماد ← [(روز استحقاق، روز پرداخت واقعی)] و تأخیر پیش‌فرض (میانگین تجربی) از tools/parse_dividend_payments.py."""
+    if not _PAY:
+        f = ROOT / "data" / "corporate_actions" / "dividend_payment_lags.csv"
+        m, lags = {}, []
+        if f.exists():
+            E = pd.read_csv(f, dtype=str).fillna("")
+            E = E[(pd.to_numeric(E.dps_rial, errors="coerce") > 0) & (E.ex_date != "") & (E.eff != "")]
+            from fetch_corporate_actions import j2g
+            for _, r in E.iterrows():
+                ex = pd.Timestamp(r.ex_date)
+                pay = pd.Timestamp(j2g(*map(int, r.eff.split("/"))))
+                m.setdefault(norm(r.symbol), []).append((ex, max(pay, ex)))
+                lags.append((max(pay, ex) - ex).days)
+        _PAY["map"] = m
+        _PAY["default"] = int(round(float(np.mean(lags)))) if lags else 90
+    return _PAY["map"], _PAY["default"]
+
+
+LAG = None        # None ← تاریخ واقعی + میانگین تجربی
 
 
 def norm(t) -> str:
@@ -59,8 +82,11 @@ def load_holdings(sym: str) -> pd.DataFrame | None:
     return h
 
 
-def _window(h_d: pd.DataFrame, tr: pd.DataFrame, pr: pd.DataFrame, days: pd.DatetimeIndex, lag: int, total_pct: float, bench_cum: np.ndarray):
-    """سه مسیر بازده (TR، TR بدون نقد، قیمت+سود با تأخیر) روی روزهای days برای وزن‌های h_d."""
+def _window(h_d: pd.DataFrame, tr: pd.DataFrame, pr: pd.DataFrame, days: pd.DatetimeIndex, lag, total_pct: float, bench_cum: np.ndarray):
+    """سه مسیر بازده (TR، TR بدون نقد، قیمت+سود با تأخیر) روی روزهای days برای وزن‌های h_d.
+    lag: عدد (تأخیر یکسان) یا None (تاریخ واقعی پرداخت هر نماد در صورت وجود، وگرنه میانگین تجربی)."""
+    pmap, dlag = pay_map()
+    L0 = dlag if lag is None else lag
     h_d = h_d[h_d.symbol.isin(tr.columns)].groupby("symbol", as_index=False).weight_pct.sum()
     syms = list(h_d.symbol)
     w = h_d.set_index("symbol").weight_pct.astype(float) / 100
@@ -80,13 +106,18 @@ def _window(h_d: pd.DataFrame, tr: pd.DataFrame, pr: pd.DataFrame, days: pd.Date
     # قیمت + سود با تأخیر
     pos_p = w.values[None, :] * np.cumprod(1 + P, axis=0)
     div_cash = pos_p * Y                                   # سود روز t (به نسبت ارزش پایان روز؛ تقریب مرتبه اول)
-    paid = np.zeros(len(days))
     dts = days.values
     recv = np.zeros(len(days))                             # سود طلب‌شدهٔ هنوز نرسیده
     cum_pay = np.zeros(len(days))
-    for t in range(len(days)):
-        amt = div_cash[t].sum()
-        due = days[t] + pd.Timedelta(days=lag)
+    nz_t, nz_j = np.nonzero(div_cash)
+    for t, j in zip(nz_t, nz_j):
+        amt = div_cash[t, j]
+        due = days[t] + pd.Timedelta(days=L0)
+        if lag is None:
+            for ex, pay in pmap.get(syms[j], ()):
+                if abs((days[t] - ex).days) <= 3:
+                    due = max(pay, days[t])
+                    break
         k = np.searchsorted(dts, np.datetime64(due))
         recv[t:k] += amt                                   # تا روز پرداخت طلب است
         if k < len(days):
@@ -95,7 +126,7 @@ def _window(h_d: pd.DataFrame, tr: pd.DataFrame, pr: pd.DataFrame, days: pd.Date
     return v_tr, v_nc, v_lag, cov
 
 
-def analyze(sym: str, fund_ret: pd.Series, bench_ret: pd.Series, lag: int = LAG) -> dict | None:
+def analyze(sym: str, fund_ret: pd.Series, bench_ret: pd.Series, lag=LAG) -> dict | None:
     h = load_holdings(sym)
     if h is None or h.empty:
         return None
@@ -128,7 +159,7 @@ def analyze(sym: str, fund_ret: pd.Series, bench_ret: pd.Series, lag: int = LAG)
     comp = ["composition", "cash", "lag", "residual"]
     ss = {k: float((df[k] ** 2).sum()) for k in comp}
     tot = sum(ss.values()) or 1.0
-    return {"lag": lag, "n": len(df), "from": df.date.iloc[0], "to": df.date.iloc[-1],
+    return {"lag": pay_map()[1] if lag is None else lag, "actual_dates": lag is None and bool(pay_map()[0]), "n": len(df), "from": df.date.iloc[0], "to": df.date.iloc[-1],
             "mean": {k: round(float(df[k].mean()), 2) for k in comp + ["active"]},
             "rms": {k: round(float(np.sqrt((df[k] ** 2).mean())), 2) for k in comp + ["active"]},
             "share": {k: round(ss[k] / tot, 3) for k in comp},
