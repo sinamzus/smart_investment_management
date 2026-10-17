@@ -98,6 +98,23 @@ class Lab:
                 if method == "icir":
                     m = m / np.array([max(np.std(x, ddof=1), 1e-6) for x in h])
                 ws = ws * m / (np.abs(m).sum() + 1e-12) * len(m)
+        elif method == "topk_icir":
+            # انتخاب پویای معیار: k معیار با بیشترین |ICIR| در ۳۶ ماه گذشته (دست‌کم ۲۴ مشاهده)؛ علامت = علامت IC میانگین
+            k = int(spec.get("topk", 5))
+            names_ = [n for n, _ in sigs if n in self.S]
+            sc_ = []
+            for n in names_:
+                h = self.hist_ic(n, r)
+                if len(h) >= 24 and np.std(h, ddof=1) > 0:
+                    sc_.append((abs(np.mean(h) / np.std(h, ddof=1)), np.sign(np.mean(h))))
+                else:
+                    sc_.append((0.0, 0.0))
+            order = np.argsort([-x[0] for x in sc_])[:k]
+            ws = np.zeros(len(names_))
+            for j in order:
+                ws[j] = sc_[j][1]
+            if not ws.any():
+                return np.full(self.mk.k, np.nan)
         elif method in ("fm", "ridge") and r >= 12:
             ws = self._fm_weights(spec, r, [n for n, _ in sigs if n in self.S], ridge=(method == "ridge")) * np.sign(ws + 1e-12)
         if method == "rank":

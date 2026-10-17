@@ -578,24 +578,29 @@ $('cmd').addEventListener('keydown', e => {
 
 /* ══════════ Router ══════════ */
 const INIT = { div: initDiv, fac: initFac, reb: initReb, qa: initQA, rep: initRep, sym: initSym, pf: initPf, risk: initRisk, fnd: initFnd };
+const NV = window.SIM_NEWVIEWS || {};                                   // نماهای lab.js: Lab · Signals · Plan
+Object.keys(NV).forEach(k => { VIEWS[k] = NV[k].id; INIT[k] = NV[k].init; });
 function show(name) {
   if (!VIEWS[name]) return;
   Object.entries(VIEWS).forEach(([k, id]) => { $(id).hidden = k !== name; });
   document.querySelectorAll('#nav a').forEach(a => { if (a.dataset.view === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   if (X && INIT[name] && !inited[name]) { inited[name] = true; INIT[name](); }
-  requestAnimationFrame(() => { if (name === 'index') drawChart(); else if (redraws[name]) redraws[name](); });
+  requestAnimationFrame(() => { if (name === 'index') drawChart(); else if (redraws[name]) redraws[name](); else if (NV[name] && NV[name].redraw) NV[name].redraw(); });
+  window.SIM_CUR = name;
   history.replaceState(null, '', '#' + name); LS.set('view', name);
 }
+window.SIM_SHOW = show;
 document.querySelectorAll('#nav a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); show(a.dataset.view); }));
 addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || e.ctrlKey || e.metaKey) return;
   const n = '1234567890'.indexOf(e.key); if (n >= 0) show(Object.keys(VIEWS)[n]);
+  const lk = { l: 'lab', g: 'sig', a: 'plan' }[e.key.toLowerCase()]; if (lk && VIEWS[lk]) show(lk);
 });
 const _run = window.run;
 window.run = function (cmd) {
   const [c, a] = cmd.trim().toLowerCase().split(/\s+/);
   if (c === 'go' || c === 'view') { if (VIEWS[a]) { show(a); toast('نما: ' + a); } else toast('نما: ' + Object.keys(VIEWS).join(' · ')); return; }
-  if (c === 'help') { toast('GO INDEX|DIV|FAC|REB|QA|REP|SYM|PF|RISK|FND · SYM <نماد> · IDX K|EW · WIN 2014|2016 · THEME · DENSITY · ↑↓ تاریخچه'); return; }
+  if (c === 'help') { toast('GO INDEX|DIV|FAC|REB|QA|REP|SYM|PF|RISK|FND|LAB|SIG|PLAN · SYM <نماد> · IDX K|EW · WIN 2014|2016 · THEME · DENSITY · ↑↓ تاریخچه'); return; }
   if (c === 'sym' && a) { window.openSym(cmd.trim().split(/\s+/)[1]); return; }
   if (c === 'density') { $('density').click(); return; }
   if (c === 'idx' || c === 'win') show('index');

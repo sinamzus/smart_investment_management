@@ -1,0 +1,67 @@
+/* SIM — Lab · Signals · Plan  (تکمیلی روی components.css؛ فقط توکن‌های tokens.css) */
+.ngrp { font-size: var(--fs-2xs); color: var(--tx-3); padding: 0 var(--s-2) 0 var(--s-3); align-self: center; border-inline-start: var(--hair) solid var(--line-strong); margin-inline-start: var(--s-2); white-space: nowrap; }
+.nav .ngrp:first-child { border-inline-start: 0; margin-inline-start: 0; }
+
+.workspace.v-lab { grid-template-columns: minmax(300px, 340px) minmax(0, 1fr) minmax(300px, 360px); grid-template-rows: minmax(0, 1fr); }
+.workspace.v-sig { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.workspace.v-plan { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+
+.lb-body { padding: 0; }
+.lb-body details { border-bottom: var(--hair) solid var(--line); }
+.lb-body summary { cursor: pointer; padding: 6px var(--s-3); background: var(--bg-head); font-size: var(--fs-sm); font-weight: 600; color: var(--tx-1); list-style: none; position: sticky; top: 0; z-index: 2; }
+.lb-body summary::-webkit-details-marker { display: none; }
+.lb-body summary::before { content: '▾'; margin-inline-end: 6px; color: var(--tx-3); }
+.lb-body details:not([open]) summary::before { content: '◂'; }
+.lb-sec { padding: var(--s-3); display: flex; flex-direction: column; gap: var(--s-3); font-size: var(--fs-xs); color: var(--tx-2); }
+.lb-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.lb-row input[type=number], .lb-row select, .lb-add input, .ctl select, .ctl textarea, .ctl input[type=text] { background: var(--bg-app); border: var(--hair) solid var(--line-strong); color: var(--tx-1); border-radius: var(--radius); height: 24px; padding: 0 6px; font: var(--fs-xs) var(--font-ui); }
+.ctl textarea { height: auto; padding: 4px 6px; font-family: var(--font-num); direction: ltr; }
+.lb-row input[type=number] { width: 72px; direction: ltr; text-align: end; font-family: var(--font-num); }
+.lb-hint { font-size: var(--fs-2xs); color: var(--tx-3); line-height: 1.7; }
+.lb-presets { display: flex; flex-wrap: wrap; gap: 4px; padding: var(--s-3); border-bottom: var(--hair) solid var(--line); }
+.lb-presets .pre { border: var(--hair) solid var(--line-strong); background: var(--bg-app); color: var(--tx-2); height: 22px; padding: 0 8px; }
+.lb-presets .pre:hover { color: var(--tx-1); border-color: var(--accent); }
+.lb-sig { display: grid; grid-template-columns: 6px 1fr 90px 30px 20px; align-items: center; gap: 6px; padding: 3px 0; }
+.lb-sig .fam, .dt .fam { display: inline-block; width: 6px; height: 14px; border-radius: 1px; margin-inline-end: 6px; vertical-align: -3px; }
+.lb-sig .fam { margin: 0; }
+.lb-sig .nm { color: var(--tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-sig output { font: 11px var(--font-num); direction: ltr; text-align: end; color: var(--tx-2); }
+.lb-sig input[type=range] { width: 90px; accent-color: var(--accent); }
+.lb-add { display: flex; gap: 4px; }
+.lb-add input { flex: 1; }
+.lb-run { position: sticky; bottom: 0; display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3); background: var(--bg-head); border-top: var(--hair) solid var(--line-strong); }
+.lb-cnt { font-size: var(--fs-2xs); color: var(--tx-3); margin-inline-start: auto; }
+.btn { background: var(--accent); color: var(--tx-inv); border: 0; border-radius: var(--radius); height: 26px; padding: 0 18px; font: 600 var(--fs-sm) var(--font-ui); cursor: pointer; }
+.btn:hover { filter: brightness(1.12); }
+.lb-note { margin: var(--s-3); padding: var(--s-3) var(--s-4); background: var(--info-bg); border: var(--hair) solid var(--accent-dim); font-size: var(--fs-xs); line-height: 1.8; color: var(--tx-2); }
+.lb-note b { color: var(--tx-1); }
+.lb-grid2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1px; background: var(--line); }
+.lb-grid2 > div { background: var(--bg-panel); min-width: 0; overflow: auto; }
+.lb-main .panel-head .seg { margin-inline-start: var(--s-3); }
+.lb-side td.nm { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+.lb-bars { height: 230px; position: relative; margin: 0 var(--s-4); }
+.sb-wrap { position: absolute; inset: 14px 0 22px; display: flex; gap: 8px; }
+.sb { flex: 1; position: relative; }
+.sb .bar { position: absolute; left: 12%; right: 12%; background: var(--ch-2); }
+.sb .bar.neg { background: color-mix(in srgb, var(--down) 70%, var(--ch-2)); }
+.sb .bar.hi { background: var(--up); }
+.sb em { position: absolute; left: 0; right: 0; text-align: center; font: 500 var(--fs-2xs) var(--font-num); color: var(--tx-2); font-style: normal; }
+.sb span { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center; font-size: var(--fs-2xs); color: var(--tx-3); }
+.sb:hover .bar { filter: brightness(1.3); outline: 1px solid var(--accent); }
+.sb-zero { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line-strong); }
+.sb-base { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--warn); z-index: 1; }
+th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: var(--tx-1); } th.sorted { color: var(--accent-tx); }
+.heat-wrap { overflow: auto; padding: var(--s-3); }
+.heat .vt { writing-mode: vertical-rl; transform: rotate(180deg); height: 90px; font-size: 10px; white-space: nowrap; }
+.heat td { width: 22px; min-width: 22px; height: 20px; font-size: 8.5px; }
+.dt a.symlink { cursor: pointer; }
+.dt tr[data-s], .dt tr[data-id], .dt tr[data-i] { cursor: pointer; }
+.chip.ok { background: var(--up-bg); color: var(--up); } .chip.bad { background: var(--down-bg); color: var(--down); } .chip.warn { background: var(--warn-bg); color: var(--warn); }
+.legend i { display: inline-block; width: 14px; height: 2px; background: currentColor; margin-inline-end: 6px; vertical-align: middle; }
+#lb-chart, #lb-icchart { width: 100%; height: calc(100% - 28px); min-height: 360px; }
+.lb-main .panel-body { min-height: 0; }
+.lb-main .legend { padding: 4px var(--s-3); display: flex; flex-wrap: wrap; gap: var(--s-4); font-size: var(--fs-xs); color: var(--tx-2); }
+@media (max-width: 1100px) {
+  .workspace.v-lab, .workspace.v-sig, .workspace.v-plan { grid-template-columns: 1fr !important; }
+  .lb-grid2 { grid-template-columns: 1fr; }
+}

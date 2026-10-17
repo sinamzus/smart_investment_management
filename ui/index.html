@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="components.css">
+<link rel="stylesheet" href="lab.css">
 </head>
 <body>
 <div class="app">
@@ -15,16 +16,23 @@
   <header class="topbar">
     <div class="mark"><i></i>SIM</div>
     <nav class="nav" aria-label="بخش‌ها" id="nav">
+      <span class="ngrp">پژوهش</span>
+      <a href="#lab" data-view="lab">Lab<kbd>L</kbd></a>
+      <a href="#sig" data-view="sig">Signals<kbd>G</kbd></a>
+      <a href="#fac" data-view="fac">Factor Lab<kbd>3</kbd></a>
+      <span class="ngrp">اجرا</span>
+      <a href="#plan" data-view="plan">Plan<kbd>A</kbd></a>
+      <a href="#pf" data-view="pf">Fund<kbd>8</kbd></a>
+      <a href="#fnd" data-view="fnd">Index Funds<kbd>0</kbd></a>
+      <span class="ngrp">شاخص</span>
       <a href="#index" data-view="index" aria-current="page">Index Lab<kbd>1</kbd></a>
       <a href="#div" data-view="div">Dividend Lab<kbd>2</kbd></a>
-      <a href="#fac" data-view="fac">Factor Lab<kbd>3</kbd></a>
       <a href="#reb" data-view="reb">Rebalance<kbd>4</kbd></a>
       <a href="#qa" data-view="qa">Data QA<kbd>5</kbd></a>
-      <a href="#rep" data-view="rep">Reports<kbd>6</kbd></a>
+      <span class="ngrp">گزارش</span>
       <a href="#sym" data-view="sym">Symbol<kbd>7</kbd></a>
-      <a href="#pf" data-view="pf">Fund<kbd>8</kbd></a>
       <a href="#risk" data-view="risk">Risk<kbd>9</kbd></a>
-      <a href="#fnd" data-view="fnd">Index Funds<kbd>0</kbd></a>
+      <a href="#rep" data-view="rep">Reports<kbd>6</kbd></a>
     </nav>
     <label class="cmd">
       <span class="prompt">›</span>
@@ -265,6 +273,10 @@
       <div class="panel-body scroll"><div class="prose" id="fn-method"></div></div></section>
   </main>
 
+  <main class="workspace v-lab" id="v-lab" hidden></main>
+  <main class="workspace v-sig" id="v-sig" hidden></main>
+  <main class="workspace v-plan" id="v-plan" hidden></main>
+
   <footer class="statusbar" id="status"></footer>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -390,6 +402,8 @@ addEventListener('keydown', e => { const typing = ['INPUT', 'TEXTAREA'].includes
 
 render(); renderComp(); drawChart();
 </script>
+<script src="labengine.js"></script>
+<script src="lab.js"></script>
 <script src="views.js"></script>
 <script src="glossary.js"></script>
 <script src="tips.js"></script>

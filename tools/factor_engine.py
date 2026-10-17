@@ -157,6 +157,8 @@ def nw_t(x, L=3):
 
 def ann(x):
     x = np.asarray(x, float)
+    if len(x) == 0:
+        return float('nan')
     return float(((1 + x).prod() ** (12 / len(x)) - 1) * 100)
 
 

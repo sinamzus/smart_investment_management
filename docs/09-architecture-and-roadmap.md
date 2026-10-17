@@ -77,6 +77,28 @@ smart_investment_management/
 | `fee_schedule` | `(type, side, component, from)` | نرخ، حداقل/حداکثر |
 | `price_adj` | `(security_id, date)` | بازده تعدیل‌شده، TRI |
 
+### ۹.۲.۱ قرارداد رابط با سامانهٔ الگوریتمی (`sim.trade_plan/1`)
+
+نمای Plan فایل JSON با این ساختار می‌دهد؛ سامانهٔ الگوریتمی آن را می‌خواند و اجرا می‌کند. **تغییر ساختار = تغییر نسخهٔ `schema`.**
+
+```json
+{
+  "schema": "sim.trade_plan/1",
+  "plan_id": "hex از هش (هدف + تاریخ داده + سرمایه)",
+  "asof": "YYYY-MM-DD  (آخرین روز داده)",
+  "created": "ISO-8601",
+  "target": "نام استراتژی/شاخص",
+  "aum_rial": 1.0e11,
+  "cost_bp_roundtrip": 100,
+  "execution": {"convention": "signal at last trading day close; execute next trading day", "participation_cap": 0.1, "price_basis": "last_close_ref", "note": "..."},
+  "orders": [{"id": "hex(plan_id + symbol + side)", "symbol": "فولاد", "ins_code": "…", "side": "BUY|SELL", "qty": 120000, "ref_price": 3250, "split_days": 2, "type": "rebalance"}]
+}
+```
+- **Idempotency:** `plan_id` و `id` سفارش از هش محتوا ساخته می‌شوند؛ اجرای دوبارهٔ همان فایل نباید سفارش تکراری ثبت کند (سامانه باید `id` را به‌عنوان کلید یکتا نگه دارد).
+- **پیش‌بررسی سمت سامانه:** وضعیت نماد (توقف/صف)، دامنهٔ مجاز، موجودی نقد/سهم، حداکثر مشارکت؛ سفارش ناممکن رد و گزارش می‌شود، نه تغییر.
+- **بازخورد:** معاملات تحقق‌یافته (fills) باید با همان `id` برگردند تا پرتفوی فعلی در Plan به‌روز شود (فعلاً دستی: چسباندن نماد، تعداد).
+- **فاصلهٔ باز:** تقویم رویدادهای سرمایه (حق‌تقدم) و وضعیت زندهٔ نماد در رابط نیست.
+
 ## ۹.۳ نقشهٔ راه (Milestones)
 
 ### گام 0 — پایه (۲–۳ هفته)
