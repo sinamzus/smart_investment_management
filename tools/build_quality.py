@@ -56,6 +56,8 @@ def load_records() -> dict:
         x = L[m].sort_values(["audited", "represented"]).groupby(["ins_code", "fy_end"]).value.last().rename(k)   # حسابرسی‌شده/تجدیدارائه‌شده ترجیح دارد
         parts.append(x)
     P = pd.concat(parts, axis=1).reset_index()
+    if "equity" not in P:
+        P["equity"] = np.nan                       # دریافت فقط-نسبت‌ها (حالت nav): ترازنامه نیست
     P["avail"] = [first.get((c, f), pd.NaT) for c, f in zip(P.ins_code, P.fy_end)]
     P["avail"] = P.avail.fillna(P.fy_end + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1)
     return {c: g.sort_values("fy_end").reset_index(drop=True) for c, g in P.groupby("ins_code")}
@@ -67,9 +69,12 @@ def raw_components(rec: dict, when: pd.Timestamp):
     if g.empty:
         return None
     last = g.iloc[-1]
-    if (when - last.fy_end).days > STALE_DAYS or not (last.equity > 0):
+    def pos(x):                                    # بی‌ترازنامه: D/E منفی ⇒ حقوق منفی
+        eq = getattr(x, "equity", np.nan)
+        return eq > 0 if eq == eq else getattr(x, "de", np.nan) > 0
+    if (when - last.fy_end).days > STALE_DAYS or not pos(last):
         return None
-    h = g[g.equity > 0].roe.dropna().tail(5)
+    h = g[[bool(pos(r)) for r in g.itertuples()]].roe.dropna().tail(5)
     return last.roe, last.de, (h.std(ddof=1) if len(h) >= 3 else np.nan), last.fy_end
 
 

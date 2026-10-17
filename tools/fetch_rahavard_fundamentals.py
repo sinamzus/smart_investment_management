@@ -62,6 +62,7 @@ class Http:
     def __init__(self, browser: bool):
         self.mode = "browser" if browser else "requests"
         self.last = ""
+        self.nav = False          # True: جدول نسبت‌ها را از پاسخ خود صفحهٔ سایت می‌گیریم (fetch مستقیم 403 می‌گیرد)
         self.pw = self.page = None
         if self.mode == "requests":
             import requests
@@ -291,15 +292,51 @@ def fetch_asset(h: Http, aid: str, start: str = "2011-03-21"):
     return {"ratio": parse_table(res[0][1], "ratio"), "pl": parse_table(res[1][1], "pl"), "bs": parse_table(res[2][1], "bs"), "eps": parse_eps(res[3][1])}, sts, ""
 
 
+def nav_ratios(h: Http, aid: str):
+    """پاسخ company-financial-ratios را همان‌طور که خود صفحهٔ سایت می‌گیرد ضبط می‌کند (توکن/هدرهای SPA را خودش دارد)."""
+    try:
+        with h.page.expect_response(lambda r: "company-financial-ratios" in r.url and r.request.method == "GET", timeout=45000) as ri:
+            h.page.goto(f"{BASE}/asset/{aid}/financialratios", wait_until="domcontentloaded", timeout=60000)
+        r = ri.value
+        return r.status, (r.json() if r.status == 200 else None)
+    except Exception as e:  # noqa: BLE001
+        return 0, None
+
+
+def fetch_nav(h: Http, aid: str, diag: list):
+    st, j = nav_ratios(h, aid)
+    st_e, je = h.get(f"/api/v2/asset/{aid}/eps")
+    if st != 200 or st_e != 200:
+        diag.append(f"nav: ratios {st} eps {st_e}")
+        return None
+    return {"ratio": parse_table(j, "ratio"), "pl": [], "bs": [], "eps": parse_eps(je)}
+
+
 def fetch_robust(h: Http, aid: str, diag: list):
-    """چند راهبرد: بازهٔ بلند ← بازهٔ ۵ ساله مثل خود سایت ← (در requests) سوییچ به Chrome."""
+    """چند راهبرد: (۱) fetch با بازهٔ بلند ← (۲) بازهٔ ۵ ساله مثل سایت ← (۳) در 403 سوییچ به Chrome و fetch ← (۴) ضبط پاسخ خود صفحه.
+    (h, داده) برمی‌گرداند؛ h ممکن است عوض شده باشد."""
     five = date(date.today().year - 5, date.today().month, 1).isoformat()
-    for start in ("2011-03-21", five):
-        d, sts, body = fetch_asset(h, aid, start)
-        if d is not None:
-            return d
-        diag.append(f"start={start} وضعیت‌ها {sts} {body!r}")
-    return None
+    if not h.nav:
+        for start in ("2011-03-21", five):
+            d, sts, body = fetch_asset(h, aid, start)
+            if d is not None:
+                return h, d
+            diag.append(f"{h.mode} start={start} وضعیت‌ها {sts} {body!r}")
+            if not any(x in (401, 403, 0) for x in sts[:3]):
+                break
+        if h.mode == "requests":
+            print("  requests رد شد ← Chrome")
+            h = Http(True)
+            for start in ("2011-03-21", five):
+                d, sts, body = fetch_asset(h, aid, start)
+                if d is not None:
+                    return h, d
+                diag.append(f"browser start={start} وضعیت‌ها {sts} {body!r}")
+                if not any(x in (401, 403, 0) for x in sts[:3]):
+                    break
+        print("  fetch مستقیم رد شد ← ضبط پاسخ خود صفحه (کندتر: جدول سه‌گانهٔ نسبت‌ها فقط؛ ترازنامه/سود‌وزیان لازم نیست)")
+        h.nav = True
+    return h, fetch_nav(h, aid, diag)
 
 
 def run(h: Http, only: str, n: int, gap: float):
@@ -329,11 +366,7 @@ def run(h: Http, only: str, n: int, gap: float):
         if not row:
             wf.writerow([code, sym, "نگاشت شناسه نیست"]); miss += 1; continue
         diag = []
-        d = fetch_robust(h, row["asset_id"], diag)
-        if d is None and h.mode == "requests" and any(x in "".join(diag) for x in ("401", "403", "[0")):
-            print("  requests رد شد ← سوییچ به Chrome")
-            h = Http(True)
-            d = fetch_robust(h, row["asset_id"], diag)
+        h, d = fetch_robust(h, row["asset_id"], diag)
         if d is None:
             if miss < 6:
                 print(f"  ✖ {sym} (asset {row['asset_id']}):", " | ".join(diag))
@@ -376,7 +409,7 @@ def main() -> int:
     h = connect(a.browser)
     if a.test:
         diag = []
-        d = fetch_robust(h, "451", diag)
+        h, d = fetch_robust(h, "451", diag)
         if not d:
             sys.exit("دریافت فملی ناموفق: " + " | ".join(diag))
         print({k: len(v) for k, v in d.items()})
