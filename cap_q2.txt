@@ -1,0 +1,41 @@
+→ https://rahavard365.com/asset/451/financialratios
+    200     2301B hint=  0 html https://rahavard365.com/asset/451/financialratios
+    200     4632B hint=  0 json https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+    200       24B hint=  0 json https://rahavard365.com/api/v2/time/epoch
+    200       51B hint=  0 json https://rahavard365.com/api/v2/ip-check
+    200    17048B hint=  0 json https://rahavard365.com/api/v2/licenses
+    200      485B hint=  0 json https://rahavard365.com/api/v2/fundamental/currencies
+    200     1213B hint=  0 json https://rahavard365.com/api/v2/asset/451/header
+    200       14B hint=  0 json https://rahavard365.com/api/v2/page-settings?path=asset%2F451%2Ffinancialratios
+  ★ 200    15484B hint=  8 json https://rahavard365.com/api/v2/fundamental/company-financial-ratios?asset_id=451&report_type_id=1&view_currency_id=1&view_type_id=1&combinat
+    200      408B hint=  0 json https://rahavard365.com/api/v2/academy/featured-courses
+→ https://rahavard365.com/asset/451/profitloss
+    200     2291B hint=  0 html https://rahavard365.com/asset/451/profitloss
+    200       51B hint=  0 json https://rahavard365.com/api/v2/ip-check?ip=84.241.3.2&is_domestic_ip=true
+    200       14B hint=  0 json https://rahavard365.com/api/v2/page-settings?path=asset%2F451%2Fprofitloss
+  ★ 200    12697B hint= 14 json https://rahavard365.com/api/v2/fundamental/company-profit-losses?asset_id=451&report_type_id=1&view_currency_id=1&view_type_id=1&combination
+→ https://rahavard365.com/asset/451/balancesheet
+    200     2295B hint=  0 html https://rahavard365.com/asset/451/balancesheet
+    200       14B hint=  0 json https://rahavard365.com/api/v2/page-settings?path=asset%2F451%2Fbalancesheet
+  ★ 200    18956B hint=  7 json https://rahavard365.com/api/v2/fundamental/company-balance-sheets?asset_id=451&report_type_id=1&view_currency_id=1&view_type_id=1&combinatio
+→ https://rahavard365.com/asset/451/eps
+    200     2437B hint=  0 html https://rahavard365.com/asset/451/eps
+    200       14B hint=  0 json https://rahavard365.com/api/v2/page-settings?path=asset%2F451%2Feps
+  ★ 200     9771B hint= 45 json https://rahavard365.com/api/v2/asset/451/eps
+→ https://rahavard365.com/marketscreener
+    200     2827B hint=  0 html https://rahavard365.com/marketscreener
+    200       14B hint=  0 json https://rahavard365.com/api/v2/page-settings?path=marketscreener
+
+حالا تا 60 ثانیه فرصت دارید خودتان هم در همین مرورگر کار کنید (نماد را جست‌وجو کنید، تب سود/DPS را بزنید، صفحه‌بندی را ببینید).
+زودتر تمام کردید: در ترمینال Ctrl+C بزنید (ذخیره می‌شود).
+
+22 پاسخ (JSON/HTML) ذخیره شد در C:\Users\Part Laptop\smart_investment_management\data\raw\rahavard\quality2؛ فهرست همهٔ آدرس‌های دیده‌شده: all_urls.txt
+بیشترین نشانهٔ «پرداخت/سود»:
+  hint= 45  020_rahavard365_com_api_v2_asset_451_eps.json  https://rahavard365.com/api/v2/asset/451/eps
+  hint= 14  014_rahavard365_com_api_v2_fundamental_company_profit_losses.json  https://rahavard365.com/api/v2/fundamental/company-profit-losses?asset_id=451&report_type_id=1&view_currency_id=1&view_t
+  hint=  8  009_rahavard365_com_api_v2_fundamental_company_financial_ratios.json  https://rahavard365.com/api/v2/fundamental/company-financial-ratios?asset_id=451&report_type_id=1&view_currency_id=1&vie
+  hint=  7  017_rahavard365_com_api_v2_fundamental_company_balance_sheets.json  https://rahavard365.com/api/v2/fundamental/company-balance-sheets?asset_id=451&report_type_id=1&view_currency_id=1&view_
+  hint=  0  001_rahavard365_com_asset_451_financialratios.html  https://rahavard365.com/asset/451/financialratios
+  hint=  0  002_rahavard365_com_v2_statics_loaders_SplashScreen_json.json  https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+  hint=  0  003_rahavard365_com_api_v2_time_epoch.json  https://rahavard365.com/api/v2/time/epoch
+  hint=  0  004_rahavard365_com_api_v2_ip_check.json  https://rahavard365.com/api/v2/ip-check

@@ -1,0 +1,86 @@
+200	document	text/html	2301B	https://rahavard365.com/asset/451/financialratios
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	24B	https://rahavard365.com/api/v2/time/epoch
+200	xhr	application/json	51B	https://rahavard365.com/api/v2/ip-check
+401	xhr		0B	https://rahavard365.com/api/v2/accounts/access-token
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/top-banner
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	xhr	application/json	485B	https://rahavard365.com/api/v2/fundamental/currencies
+200	xhr	application/json	1213B	https://rahavard365.com/api/v2/asset/451/header
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/popup
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	14B	https://rahavard365.com/api/v2/page-settings?path=asset%2F451%2Ffinancialratios
+200	xhr	application/json	15484B	https://rahavard365.com/api/v2/fundamental/company-financial-ratios?asset_id=451&report_type_id=1&view_currency_id=1&view_type_id=1&combination_state_id=2&audit_state_id=2&representation_state_id=2&start_date=2021-10-17T12:36:55.139Z&end_date=2026-10-17T12:36:55.139Z&fiscal_year_order=ASC&font_type=FA&detail_state=detailed&ratio_category_ids=1,2,3,4&sale_type_ids=4&detail_type_id=1&no_change_in_view_type=true
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	408B	https://rahavard365.com/api/v2/academy/featured-courses
+200	document	text/html	2291B	https://rahavard365.com/asset/451/profitloss
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	51B	https://rahavard365.com/api/v2/ip-check?ip=84.241.3.2&is_domestic_ip=true
+401	xhr		0B	https://rahavard365.com/api/v2/accounts/access-token
+200	xhr	application/json	24B	https://rahavard365.com/api/v2/time/epoch
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/top-banner
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/popup
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	xhr	application/json	485B	https://rahavard365.com/api/v2/fundamental/currencies
+200	xhr	application/json	1213B	https://rahavard365.com/api/v2/asset/451/header
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	xhr	application/json	408B	https://rahavard365.com/api/v2/academy/featured-courses
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	14B	https://rahavard365.com/api/v2/page-settings?path=asset%2F451%2Fprofitloss
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	12697B	https://rahavard365.com/api/v2/fundamental/company-profit-losses?asset_id=451&report_type_id=1&view_currency_id=1&view_type_id=1&combination_state_id=2&audit_state_id=2&representation_state_id=2&start_date=2021-10-17T12:37:09.281Z&end_date=2026-10-17T12:37:09.281Z&fiscal_year_order=ASC&font_type=FA&detail_state=summary&ratio_category_ids=1,2,3,4&sale_type_ids=4&detail_type_id=1&no_change_in_view_type=true
+200	document	text/html	2295B	https://rahavard365.com/asset/451/balancesheet
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+401	xhr		0B	https://rahavard365.com/api/v2/accounts/access-token
+200	xhr	application/json	24B	https://rahavard365.com/api/v2/time/epoch
+200	xhr	application/json	51B	https://rahavard365.com/api/v2/ip-check?ip=84.241.3.2&is_domestic_ip=true
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/top-banner
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	xhr	application/json	485B	https://rahavard365.com/api/v2/fundamental/currencies
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/popup
+200	xhr	application/json	1213B	https://rahavard365.com/api/v2/asset/451/header
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	xhr	application/json	408B	https://rahavard365.com/api/v2/academy/featured-courses
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	14B	https://rahavard365.com/api/v2/page-settings?path=asset%2F451%2Fbalancesheet
+200	xhr	application/json	18956B	https://rahavard365.com/api/v2/fundamental/company-balance-sheets?asset_id=451&report_type_id=1&view_currency_id=1&view_type_id=1&combination_state_id=2&audit_state_id=2&representation_state_id=2&start_date=2021-10-17T12:37:23.413Z&end_date=2026-10-17T12:37:23.413Z&fiscal_year_order=ASC&font_type=FA&detail_state=summary&ratio_category_ids=1,2,3,4&sale_type_ids=4&detail_type_id=1&no_change_in_view_type=true
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	document	text/html	2437B	https://rahavard365.com/asset/451/eps
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	51B	https://rahavard365.com/api/v2/ip-check?ip=84.241.3.2&is_domestic_ip=true
+401	xhr		0B	https://rahavard365.com/api/v2/accounts/access-token
+200	xhr	application/json	24B	https://rahavard365.com/api/v2/time/epoch
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/top-banner
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	xhr	application/json	1213B	https://rahavard365.com/api/v2/asset/451/header
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/popup
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	xhr	application/json	408B	https://rahavard365.com/api/v2/academy/featured-courses
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	14B	https://rahavard365.com/api/v2/page-settings?path=asset%2F451%2Feps
+200	xhr	application/json	9771B	https://rahavard365.com/api/v2/asset/451/eps
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	document	text/html	2827B	https://rahavard365.com/marketscreener
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+401	xhr		0B	https://rahavard365.com/api/v2/accounts/access-token
+200	xhr	application/json	51B	https://rahavard365.com/api/v2/ip-check?ip=84.241.3.2&is_domestic_ip=true
+200	xhr	application/json	24B	https://rahavard365.com/api/v2/time/epoch
+401	xhr		0B	https://rahavard365.com/api/v2/marketscreener/filters
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/popup
+404	xhr		0B	https://rahavard365.com/api/v2/marketing/top-banner
+200	xhr	application/json	14B	https://rahavard365.com/api/v2/page-settings?path=marketscreener
+200	xhr	application/json	17048B	https://rahavard365.com/api/v2/licenses
+200	fetch	application/json	4632B	https://rahavard365.com/v2/statics/loaders/SplashScreen.json
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
+200	xhr	application/json	408B	https://rahavard365.com/api/v2/academy/featured-courses
+200	other	image/png	text-failed:UnicodeDecodeError	https://rahavard365.com/v2/statics/images/favicon.png
