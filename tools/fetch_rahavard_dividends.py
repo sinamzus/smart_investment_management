@@ -45,31 +45,40 @@ class Saver:
         self.dir = OUT / sym
         self.dir.mkdir(parents=True, exist_ok=True)
         self.rows, self.n, self.seen = [], 0, set()
+        self.allf = open(self.dir / "all_urls.txt", "w", encoding="utf-8")   # هر پاسخ دیده‌شده، حتی اگر ذخیره نشود
 
-    def add(self, url: str, status: int, body: str) -> None:
-        if SKIP.search(url) or url in self.seen:
+    def log(self, url: str, status, ctype: str, rtype: str, note: str) -> None:
+        self.allf.write(f"{status}\t{rtype}\t{ctype[:40]}\t{note}\t{url}\n")
+        self.allf.flush()
+
+    def add(self, url: str, status: int, body: str, kind: str = "json") -> None:
+        if SKIP.search(url) or url in self.seen or not body:
             return
-        try:
-            json.loads(body)
-        except Exception:  # noqa: BLE001 — فقط JSON
-            return
+        if kind == "json":
+            try:
+                json.loads(body)
+            except Exception:  # noqa: BLE001
+                return
         self.seen.add(url)
         self.n += 1
         name = _slug(url, self.n)
+        if kind == "html":
+            name = name[:-5] + ".html"
         (self.dir / name).write_text(body, encoding="utf-8")
         hint = len(HINT.findall(body))
         self.rows.append({"file": name, "status": status, "bytes": len(body), "hint": hint, "url": url})
         flag = "★" if hint else " "
-        print(f"  {flag} {status} {len(body):8d}B hint={hint:3d}  {url[:150]}")
+        print(f"  {flag} {status} {len(body):8d}B hint={hint:3d} {kind:4s} {url[:140]}")
 
     def finish(self) -> None:
+        self.allf.close()
         with open(self.dir / "index.csv", "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=["file", "status", "bytes", "hint", "url"])
             w.writeheader()
             w.writerows(self.rows)
         top = sorted(self.rows, key=lambda r: -r["hint"])[:8]
-        print(f"\n{len(self.rows)} پاسخ JSON ذخیره شد در {self.dir}")
-        print("بیشترین نشانهٔ «پرداخت/سود» (این‌ها را بفرستید/push کنید):")
+        print(f"\n{len(self.rows)} پاسخ (JSON/HTML) ذخیره شد در {self.dir}؛ فهرست همهٔ آدرس‌های دیده‌شده: all_urls.txt")
+        print("بیشترین نشانهٔ «پرداخت/سود»:")
         for r in top:
             print(f"  hint={r['hint']:3d}  {r['file']}  {r['url'][:120]}")
 
@@ -89,13 +98,23 @@ def capture(sym: str) -> None:
         page = ctx.new_page()
 
         def on_resp(r):
+            url, status = r.url, r.status
             try:
                 ct = (r.headers.get("content-type") or "").lower()
-                if "json" in ct or r.request.resource_type in ("xhr", "fetch"):
-                    sv.add(r.url, r.status, r.text())
+                rt = r.request.resource_type
             except Exception:  # noqa: BLE001
-                pass
-        page.on("response", on_resp)
+                ct, rt = "", "?"
+            if rt in ("image", "font", "stylesheet", "media") or SKIP.search(url):
+                return
+            try:
+                body = r.text()
+            except Exception as e:  # noqa: BLE001
+                sv.log(url, status, ct, rt, "text-failed:" + type(e).__name__)
+                return
+            kind = "html" if ("html" in ct and len(body) < 3_000_000) else "json"
+            sv.log(url, status, ct, rt, f"{len(body)}B")
+            sv.add(url, status, body, kind)
+        ctx.on("response", on_resp)            # همهٔ تب‌ها و پنجره‌های باز‌شده
         page.goto("https://rahavard365.com/", wait_until="domcontentloaded")
         print(f"\nمرورگر باز شد. نماد «{sym}» را جست‌وجو کنید، صفحهٔ سهم را باز کنید و تب «سود نقدی / تقسیم سود / رویدادها» را بزنید.\n"
               "(اگر چند سال یا چند صفحه دارد، صفحه‌بندی/«نمایش بیشتر» را هم بزنید.) تمام که شد اینجا Enter بزنید.")
