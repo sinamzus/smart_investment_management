@@ -1,0 +1,8 @@
+    200     3202B hint=  0 html https://rahavard365.com/
+
+مرورگر باز شد. نماد «فملی» را جست‌وجو کنید، صفحهٔ سهم را باز کنید و تب «سود نقدی / تقسیم سود / رویدادها» را بزنید.
+(اگر چند سال یا چند صفحه دارد، صفحه‌بندی/«نمایش بیشتر» را هم بزنید.) تمام که شد اینجا Enter بزنید.
+
+1 پاسخ (JSON/HTML) ذخیره شد در C:\Users\Part Laptop\smart_investment_management\data\raw\rahavard\فملی؛ فهرست همهٔ آدرس‌های دیده‌شده: all_urls.txt
+بیشترین نشانهٔ «پرداخت/سود»:
+  hint=  0  001_rahavard365_com.html  https://rahavard365.com/
