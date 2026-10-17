@@ -1,0 +1,54 @@
+── شاخص‌های مرجع
+  نام شاخص ۳۰ شرکت (10523825119011581): «شاخص 30 شرکت بزرگ»
+    10523825119011581  شاخص 30 شرکت بزرگ
+    69932667409721265  شاخص قیمت 50 شرکت
+    46342955726788357  شاخص50شرکت فعالتر
+  endpoint موفق: Index/GetIndexB2History/{code}  | کلیدها: ['insCode', 'dEven', 'xNivInuClMresIbs', 'xNivInuPbMresIbs', 'xNivInuPhMresIbs']
+32097828799138957: 4306 ردیف، 2008-12-04 تا 2026-10-14، 4306 ردیف با close -> C:\Users\Part Laptop\smart_investment_management\data\indices\index_32097828799138957.csv
+  endpoint موفق: Index/GetIndexB2History/{code}  | کلیدها: ['insCode', 'dEven', 'xNivInuClMresIbs', 'xNivInuPbMresIbs', 'xNivInuPhMresIbs']
+67130298613737946: 3027 ردیف، 2014-03-19 تا 2026-10-14، 3027 ردیف با close -> C:\Users\Part Laptop\smart_investment_management\data\indices\index_67130298613737946.csv
+  endpoint موفق: Index/GetIndexB2History/{code}  | کلیدها: ['insCode', 'dEven', 'xNivInuClMresIbs', 'xNivInuPbMresIbs', 'xNivInuPhMresIbs']
+10523825119011581: 3895 ردیف، 2010-08-15 تا 2026-10-14، 3895 ردیف با close -> C:\Users\Part Laptop\smart_investment_management\data\indices\index_10523825119011581.csv
+  endpoint موفق: Index/GetIndexB2History/{code}  | کلیدها: ['insCode', 'dEven', 'xNivInuClMresIbs', 'xNivInuPbMresIbs', 'xNivInuPhMresIbs']
+5798407779416661: 4308 ردیف، 2008-12-04 تا 2026-10-14، 4308 ردیف با close -> C:\Users\Part Laptop\smart_investment_management\data\indices\index_5798407779416661.csv
+  endpoint موفق: Index/GetIndexB2History/{code}  | کلیدها: ['insCode', 'dEven', 'xNivInuClMresIbs', 'xNivInuPbMresIbs', 'xNivInuPhMresIbs']
+8384385859414435: 3027 ردیف، 2014-03-19 تا 2026-10-14، 3027 ردیف با close -> C:\Users\Part Laptop\smart_investment_management\data\indices\index_8384385859414435.csv
+
+── کشف صندوق‌های شاخصی
+  فیپیران fund/fundcompare: https://fund.fipiran.ir/api/v1/fund/fundcompare -> SSLError(MaxRetryError("HTTPSConnectionPool(host='fund.fipiran.ir', port=443): Max retries exceeded with url: /api/v1/fund/fundcompare (Caused by SSLError(SSLEO
+  فیپیران fund/getfundlist: https://fund.fipiran.ir/api/v1/fund/getfundlist -> SSLError(MaxRetryError("HTTPSConnectionPool(host='fund.fipiran.ir', port=443): Max retries exceeded with url: /api/v1/fund/getfundlist (Caused by SSLError(SSLEO
+  8 صندوق شاخصی: آرام(K)، فیروزه(I30)، هم تراز(EW)، هم وزن(EW)، همسنگ(EW؟)، هوشمند(K)، وبازار(K)، کاردان(K)
+
+── آرام · صندوق س شاخصی آرام مفید (مرجع: K)
+    قیمت بازار: 1100 روز
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── فیروزه · صندوق شاخص30 شرکت فیروزه- سهام (مرجع: I30)
+    قیمت بازار: 2824 روز
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── هم تراز · صندوق س شاخصی هم وزن تراز-سهام (مرجع: EW)
+    قیمت بازار: 263 روز
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── هم وزن · صندوق س. شاخصی کیان-س (مرجع: EW)
+    قیمت بازار: 1059 روز
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── همسنگ · صندوق س. شاخصی هم وزن همسنگ-س (مرجع: EW)
+    قیمت بازار: 223 روز
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── هوشمند · صندوق س شاخصی شفق رابین (مرجع: K)
+    قیمت بازار: 384 روز
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── وبازار · صندوق س شاخصی بازارآشنا (مرجع: K)
+    قیمت بازار: 1359 روز
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+── کاردان · صندوق س تجارت شاخصی کاردان (مرجع: K)
+    قیمت بازار: 2810 روز
+    NAV: دریافت نشد؛ پاسخ‌های خام در data/raw/funds/ ذخیره شد. اگر سایت صندوق را می‌دانید: --site نماد=آدرس
+
+خلاصه: 0/8 صندوق با NAV → C:\Users\Part Laptop\smart_investment_management\data\funds\funds.csv
