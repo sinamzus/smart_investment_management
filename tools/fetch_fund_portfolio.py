@@ -27,7 +27,7 @@ import fetch_dividend_payments as fdp   # فقط ابزارهای دریافت �
 ROOT = fdp.ROOT
 OUT = ROOT / "data" / "raw" / "codal" / "funds"
 FUND_SYMBOLS = ["کاردان", "آرام", "وبازار", "هوشمند", "هم وزن", "هم تراز", "همسنگ", "فیروزه"]
-KEYS = ("پرتفو", "پورتفو", "صورت وضعیت", "ترکیب دارایی", "ترکیب سبد", "اطلاعات و صورت")
+KEYS = ("صورت وضعیت پورتفوی", "صورت وضعیت پرتفوی")   # نامهٔ ماهانهٔ پرتفوی (پیوست Excel)؛ در probe روی کاردان دیده شد
 
 
 def list_all(sym: str) -> list:
@@ -52,7 +52,7 @@ def save_letter(sym: str, it: dict) -> None:
     d.mkdir(parents=True, exist_ok=True)
     tn = str(it.get("TracingNo"))
     stem = d / f"L_{tn}"
-    if (d / f"L_{tn}.html").exists():
+    if (d / f"L_{tn}.html").exists() and (any(d.glob(f"L_{tn}_att*")) or it.get("HasHtml")):
         return
     url = it.get("Url") or ""
     full = url if url.startswith("http") else "https://codal.ir" + url
@@ -60,10 +60,12 @@ def save_letter(sym: str, it: dict) -> None:
     (d / f"L_{tn}.html").write_bytes(r.content)
     (d / f"L_{tn}.meta.json").write_text(json.dumps({k: it.get(k) for k in ("Title", "LetterCode", "PublishDateTime", "SentDateTime", "TracingNo", "Url", "HasHtml", "HasAttachment")}, ensure_ascii=False), encoding="utf-8")
     if it.get("HasAttachment") and not it.get("HasHtml"):
-        ap = fdp.fetch(("https://codal.ir/Reports/Attachment.aspx?LetterSerial=" + (re.search(r"LetterSerial=([^&]+)", url) or [None, ""])[1]))
-        for k, link in enumerate(fdp.attachment_links(ap.text)[:3]):
+        # همان صفحهٔ Attachment.aspx پیوندها را دارد (یک درخواست کمتر)؛ تا اولین Excel دانلود می‌شود
+        for k, link in enumerate(fdp.attachment_links(r.text)[:3]):
             rr = fdp.fetch("https://codal.ir" + link)
-            fdp.save_attachment(rr, d / f"L_{tn}_att{k}")
+            path = fdp.save_attachment(rr, d / f"L_{tn}_att{k}")
+            if str(path).lower().endswith((".xlsx", ".xls")):
+                break
 
 
 def probe(sym: str, n_save: int) -> None:
@@ -114,7 +116,7 @@ def collect(n: int) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--probe", help="نماد صندوق (مثلاً کاردان)")
-    ap.add_argument("--collect", type=int, help="آخرین N نامهٔ پرتفو برای هر صندوق")
+    ap.add_argument("--collect", type=int, help="آخرین N نامهٔ پرتفو برای هر صندوق (پیشنهاد ۲۴ ≈ ۲ سال؛ ۲ درخواست برای هر نامه)")
     ap.add_argument("--save", type=int, default=3, help="در --probe چند نمونه ذخیره شود")
     ap.add_argument("--gap", type=float, default=8.0)
     ap.add_argument("--log", help="کپی خروجی در فایل UTF-8")

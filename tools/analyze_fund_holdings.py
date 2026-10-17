@@ -59,12 +59,14 @@ def load_holdings(sym: str) -> pd.DataFrame | None:
     return h
 
 
-def _window(h_d: pd.DataFrame, tr: pd.DataFrame, pr: pd.DataFrame, days: pd.DatetimeIndex, lag: int):
+def _window(h_d: pd.DataFrame, tr: pd.DataFrame, pr: pd.DataFrame, days: pd.DatetimeIndex, lag: int, total_pct: float, bench_cum: np.ndarray):
     """سه مسیر بازده (TR، TR بدون نقد، قیمت+سود با تأخیر) روی روزهای days برای وزن‌های h_d."""
-    syms = [s for s in h_d.symbol if s in tr.columns]
-    w = h_d.set_index("symbol").weight_pct.reindex(syms).astype(float) / 100
+    h_d = h_d[h_d.symbol.isin(tr.columns)].groupby("symbol", as_index=False).weight_pct.sum()
+    syms = list(h_d.symbol)
+    w = h_d.set_index("symbol").weight_pct.astype(float) / 100
     cov = float(w.sum())
-    cash = max(1 - float(h_d.weight_pct.sum()) / 100, 0.0)
+    cash = max(1 - total_pct / 100, 0.0)
+    unk = max(total_pct / 100 - cov, 0.0)                  # سهام ناشناخته (خارج از جهان ما): بازدهٔ مرجع فرض می‌شود
     if not syms:
         return None
     X = tr.loc[days, syms].fillna(0).values
@@ -72,10 +74,9 @@ def _window(h_d: pd.DataFrame, tr: pd.DataFrame, pr: pd.DataFrame, days: pd.Date
     Y = X - P                                              # بازده سود نقدی روزانه هر سهم
     # TR با نقد
     pos = (w.values[None, :] * np.cumprod(1 + X, axis=0))
-    v_tr = pos.sum(axis=1) + cash + (1 - cov - cash)       # سهام ناشناخته/باقیمانده بدون بازده
+    v_tr = pos.sum(axis=1) + cash + unk * bench_cum
     # بدون نقد
-    wn = w.values / cov
-    v_nc = (wn[None, :] * np.cumprod(1 + X, axis=0)).sum(axis=1)
+    v_nc = ((w.values[None, :] * np.cumprod(1 + X, axis=0)).sum(axis=1) + unk * bench_cum) / (cov + unk)
     # قیمت + سود با تأخیر
     pos_p = w.values[None, :] * np.cumprod(1 + P, axis=0)
     div_cash = pos_p * Y                                   # سود روز t (به نسبت ارزش پایان روز؛ تقریب مرتبه اول)
@@ -90,7 +91,7 @@ def _window(h_d: pd.DataFrame, tr: pd.DataFrame, pr: pd.DataFrame, days: pd.Date
         recv[t:k] += amt                                   # تا روز پرداخت طلب است
         if k < len(days):
             cum_pay[k:] += amt                             # از روز پرداخت، نقد (بی‌بازده)
-    v_lag = pos_p.sum(axis=1) + cash + (1 - cov - cash) + recv + cum_pay
+    v_lag = pos_p.sum(axis=1) + cash + unk * bench_cum + recv + cum_pay
     return v_tr, v_nc, v_lag, cov
 
 
@@ -109,7 +110,7 @@ def analyze(sym: str, fund_ret: pd.Series, bench_ret: pd.Series, lag: int = LAG)
         if len(days) < 8:
             continue
         hd = h[h.date == d]
-        res = _window(hd, tr, pr, days, lag)
+        res = _window(hd, tr, pr, days, lag, float(hd.weight_pct.sum()), (1 + bench_ret.reindex(days)).cumprod().values)
         if res is None:
             continue
         v_tr, v_nc, v_lag, cov = res
