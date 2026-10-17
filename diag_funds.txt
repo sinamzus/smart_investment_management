@@ -1,0 +1,14 @@
+── میزبان‌ها
+  خطا  https://fund.fipiran.ir/  ConnectionError: HTTPSConnectionPool(host='fund.fipiran.ir', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host
+  خطا  https://fund.fipiran.ir/api/v1/fund/fundcompare  ConnectionError: HTTPSConnectionPool(host='fund.fipiran.ir', port=443): Max retries exceeded with url: /api/v1/fund/fundcompare (Caused by NameResolutionErro
+  200  https://fipiran.ir/  [1532 بایت]  '<!doctype html><html lang="en"><head><meta charset="utf-8"/><link rel="icon" href="/favico'
+  خطا  https://www.fipiran.ir/  ReadTimeout: HTTPSConnectionPool(host='www.fipiran.ir', port=443): Read timed out. (read timeout=25)
+  200  https://cdn.tsetmc.com/api/Fund/GetETFByInsCode/65023851436340574  [119 بایت]  '{"etf":{"insCode":"65023851436340574","deven":20261017,"hEven":92604,"pRedTran":35991.0,"p'
+── مسیرهای محتمل تاریخچهٔ NAV در TSETMC [راستی‌آزمایی نشده]
+  404  https://cdn.tsetmc.com/api/Fund/GetETFHistory/65023851436340574  [0 بایت]  ''
+  404  https://cdn.tsetmc.com/api/Fund/GetETFNavHistory/65023851436340574  [0 بایت]  ''
+  404  https://cdn.tsetmc.com/api/Fund/GetFundHistory/65023851436340574  [0 بایت]  ''
+  404  https://cdn.tsetmc.com/api/Fund/GetETFByInsCode/65023851436340574/0  [0 بایت]  ''
+  502  https://cdn.tsetmc.com/api/ClosingPrice/GetClosingPriceHistory/65023851436340574/20260101  [559 بایت]  '<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.27.0</center>\r\n<'
+  200  https://old.tsetmc.com/tsev2/data/ETFHistory.aspx?i=65023851436340574  [1983 بایت]  '<!doctype html><html><head><title>.:TSETMC:. :: شرکت مدیریت فناوری بورس تهران</title><!-- Global site tag (gtag.js) - Google Analytics --><s'
+  200  https://old.tsetmc.com/Loader.aspx?ParTree=15131M&i=65023851436340574  [5530 بایت]  '<!doctype html><html><head><title>.:TSETMC:. :: شناسه نماد</title><!-- Global site tag (gtag.js) - Google Analytics --><script async src="ht'
