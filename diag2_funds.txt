@@ -5,4 +5,5 @@
   2 فایل js: ['/manifest.json', '/static/js/main.9c3c97d2.js']
   js 0 KB: /manifest.json
   js 7496 KB: /static/js/main.9c3c97d2.js
+  ذخیره شد: data/raw/funds/diag2_fipiran_main.js.gz
     https://www.fipiran.ir/
