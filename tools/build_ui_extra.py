@@ -200,8 +200,9 @@ def rebalance(R):
 
 
 # ── Factor Lab: بک‌تست پنج‌گانه‌ها (مومنتوم ۱۲−۱، کم‌نوسان) ────────────────────────────
-def factor(R, signal: str = "mom"):
-    """signal: mom = مومنتوم ۱۲−۱ (پنجک ۵ = قوی‌ترین)، lowvol = نوسان ۲۵۲ روزه (پنجک ۵ = کم‌نوسان‌ترین)."""
+def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
+    """signal: mom = مومنتوم ۱۲−۱ (پنجک ۵ = قوی‌ترین)، lowvol = نوسان ۲۵۲ روزه (پنجک ۵ = کم‌نوسان‌ترین)،
+    quality = امتیاز کیفیت رهاورد (tools/build_quality.py؛ پنجک ۵ = باکیفیت‌ترین)؛ qscore: DataFrame[تاریخ ریبالانس × ins_code]."""
     M = R.pivot_table(index="date", columns="ins_code", values="r_tr", aggfunc="last")
     M = M[M.index >= "2012-01-01"]
     dates = M.index
@@ -225,10 +226,15 @@ def factor(R, signal: str = "mom"):
     for a, b in zip(month_end[:-1], month_end[1:]):
         if a < 252 + 21 or a < start - 1:
             continue
-        i1, i0 = (a + 1 - 21, a + 1 - 252) if signal == "mom" else (a + 1, a + 1 - 252)   # mom: [t−252, t−21)؛ lowvol: [t−252, t)
+        i1, i0 = (a + 1 - 21, a + 1 - 252) if signal in ("mom", "quality") else (a + 1, a + 1 - 252)   # mom: [t−252, t−21)؛ lowvol: [t−252, t)؛ quality: همان پنجرهٔ قیمتی برای واجدیت
         ok = ((have[i1] - have[i0]) >= 0.8 * (i1 - i0)) & ((nz[i1] - nz[i0]) >= 0.5 * (i1 - i0)) & ~np.isnan(X[a + 1]) & ~np.isnan(X[min(b, len(dates) - 1)])
         ok &= ~np.isnan(X[a])
-        if signal == "mom":
+        if signal == "quality":
+            if dates[a] not in qscore.index:
+                continue
+            score = qscore.loc[dates[a]].reindex(M.columns).values.astype(float)
+            ok &= ~np.isnan(score)
+        elif signal == "mom":
             score = cum[i1] - cum[i0]
         else:
             nn = np.maximum(have[i1] - have[i0], 1)
@@ -286,6 +292,10 @@ def factor(R, signal: str = "mom"):
     res["q5_monthly_turnover_pct"] = r(np.mean(ch) * 100, 1)
     res["from"], res["to"] = str(S.index[0].date()), str(S.index[-1].date())
     res["signal"] = signal
+    if signal == "quality":
+        cnt = qscore.reindex(columns=M.columns).notna().sum(axis=1)
+        cnt = cnt[cnt > 0]
+        res["coverage"] = {"first": str(cnt.index[0].date()), "min": int(cnt.min()), "median": int(cnt.median()), "max": int(cnt.max())}
     # سری ماهانه (از ۱۳۹۵/۰۱) برای هزینه و آزمون آماری در UI
     keep = [i for i, d in enumerate(mret_start) if d >= pd.Timestamp("2016-03-20")]
     res["monthly"] = {"end": [str(mret_end[i].date()) for i in keep],
@@ -312,6 +322,25 @@ def factor(R, signal: str = "mom"):
     res["t_nw_gross"] = {"Q5_ALL": nw_t(Mq["Q5"] - Mq["ALL"]), "Q5_Q1": nw_t(Mq["Q5"] - Mq["Q1"])}
     res["n_months"] = n
     return res
+
+
+def factor_quality(R, info):
+    """فاکتور کیفیت از صورت‌های مالی رهاورد؛ بدون data/fundamentals/rahavard_long.csv چیزی برنمی‌گرداند (UI حالت «دادهٔ بنیادی لازم است»)."""
+    import build_quality as bq
+    if not bq.available():
+        print("factor_quality: دادهٔ رهاورد نیست؛ رد شد")
+        return None
+    M = R.pivot_table(index="date", columns="ins_code", values="r_tr", aggfunc="last")
+    M = M[M.index >= "2012-01-01"]
+    dts = M.index
+    jm = np.array([ewr.g2j(d.year, d.month, d.day)[0] * 100 + ewr.g2j(d.year, d.month, d.day)[1] for d in dts])
+    me = dts[np.where(jm[1:] != jm[:-1])[0]]
+    sector = info.drop_duplicates("ins_code").set_index("ins_code").sector_name.astype(str).str.strip()
+    S = bq.scores(me, M.columns, sector)
+    print("quality coverage:", bq.coverage(S))
+    if not S.notna().any().any():
+        return None
+    return factor(R, "quality", S)
 
 
 # ── Risk ─────────────────────────────────────────────────────────────────
@@ -438,6 +467,9 @@ def main():
     data = {"built": datetime.now().strftime("%Y-%m-%d %H:%M"), "divlab": divlab(), "rebalance": rebalance(R),
             "factor": factor(R), "factor_lowvol": factor(R, "lowvol"), "risk": risk(R, info), "fund": fund(R, info),
             "qa": qa(panel, info, R), "reports": reports()}
+    fq = factor_quality(R, info)
+    if fq:
+        data["factor_quality"] = fq
     OUT.write_text("window.SIM_EXTRA = " + json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str) + ";\n", encoding="utf-8")
     print(f"ذخیره شد: {OUT} ({OUT.stat().st_size/1e3:.0f} KB)")
     print("factor:", json.dumps({k: v for k, v in data["factor"].items() if k not in ("curve", "yearly", "monthly")}, ensure_ascii=False))

@@ -105,8 +105,10 @@ function initDiv() {
 const facState = { i: null, sig: 'mom', cost: 100 };
 const FAC_LAB = {
   mom: { title: 'مومنتوم ۱۲−۱ · پنج‌گانه‌ها', Q1: 'پنجک ۱ (ضعیف‌ترین مومنتوم)', Q5: 'پنجک ۵ (قوی‌ترین مومنتوم)', file: 'momentum' },
-  lowvol: { title: 'کم‌نوسان ۲۵۲ روزه · پنج‌گانه‌ها', Q1: 'پنجک ۱ (پرنوسان‌ترین)', Q5: 'پنجک ۵ (کم‌نوسان‌ترین)', file: 'lowvol' }
+  lowvol: { title: 'کم‌نوسان ۲۵۲ روزه · پنج‌گانه‌ها', Q1: 'پنجک ۱ (پرنوسان‌ترین)', Q5: 'پنجک ۵ (کم‌نوسان‌ترین)', file: 'lowvol' },
+  quality: { title: 'کیفیت (ROE · اهرم · ثبات سود) · پنج‌گانه‌ها', Q1: 'پنجک ۱ (کم‌کیفیت‌ترین)', Q5: 'پنجک ۵ (باکیفیت‌ترین)', file: 'quality' }
 };
+const facData = sig => sig === 'mom' ? X.factor : sig === 'lowvol' ? X.factor_lowvol : X.factor_quality;
 function initFac() {
   document.querySelectorAll('#fc-sig button').forEach(b => b.onclick = () => { facState.sig = b.dataset.s; facState.i = null; renderFacSig(); });
   $('fc-cost').oninput = e => { facState.cost = Math.max(0, +e.target.value || 0); renderFacSig(); };
@@ -129,18 +131,18 @@ function facNet(F, bp = facState.cost) {
 }
 function renderFacSig() {
   document.querySelectorAll('#fc-sig button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === facState.sig));
-  const qual = facState.sig === 'quality';
+  const qual = facState.sig === 'quality' && !X.factor_quality;
   $('fc-ctl').hidden = qual;
   if (qual) {
-    $('fc-title').textContent = 'کیفیت'; $('fc-chip').textContent = 'دادهٔ بنیادی لازم است';
+    $('fc-title').textContent = 'کیفیت'; $('fc-chip').textContent = 'دادهٔ بنیادی هنوز دریافت نشده';
     ['fc-kpis', 'fc-legend', 'fc-chart', 'fc-bars', 'fc-year', 'fc-stats', 'fc-lineage', 'fc-lin-b'].forEach(k => $(k).innerHTML = ''); redraws.fac = null;
-    $('fc-method').innerHTML = `<p><b>وضعیت:</b> فاکتور کیفیت (سودآوری، اهرم، ثبات سود — مطابق روش MSCI Quality، فصل ۱۱) بر صورت‌های مالی بنا می‌شود. منبع آن صورت‌های مالی میاندوره‌ای و سالانهٔ کدال (ن-۱۰) است که هنوز در مخزن نیست؛ به همین دلیل این نما عددی نشان نمی‌دهد.</p>
-    <p><b>تعریف هدف:</b> امتیاز Z ترکیبی از بازده حقوق صاحبان سهام (ROE)، نسبت بدهی به حقوق صاحبان سهام (کمتر بهتر) و انحراف معیار رشد سود هر سهم در ۵ سال (کمتر بهتر)؛ پنج‌گانه‌ها و آزمون‌ها مثل مومنتوم و کم‌نوسان.</p>`;
+    $('fc-method').innerHTML = `<p><b>وضعیت:</b> فاکتور کیفیت (سودآوری، اهرم، ثبات سود — مطابق روش MSCI Quality، فصل ۱۱) بر صورت‌های مالی بنا می‌شود. منبع آن صورت‌های مالی سالانهٔ رهاورد۳۶۵ است (نسبت‌های مالی عمومی؛ <code>tools/fetch_rahavard_fundamentals.py</code>) که هنوز روی سیستم کاربر اجرا و در مخزن نیامده؛ به همین دلیل این نما عددی نشان نمی‌دهد.</p>
+    <p><b>تعریف:</b> میانگین Zِ درون‌صنعتی سه مؤلفه: بازده حقوق صاحبان سهام (ROE)، نسبت بدهی به حقوق صاحبان سهام (کمتر بهتر) و انحراف معیار ROE در ۵ سال مالی (کمتر بهتر؛ جایگزین رشد EPS که تورم اسمی آن را مخدوش می‌کند)؛ پنج‌گانه‌ها و آزمون‌ها مثل مومنتوم و کم‌نوسان.</p>`;
     return;
   }
-  const F = facState.sig === 'mom' ? X.factor : X.factor_lowvol, L = FAC_LAB[facState.sig];
+  const F = facData(facState.sig), L = FAC_LAB[facState.sig];
   $('fc-title').textContent = L.title;
-  $('fc-chip').textContent = `بک‌تست ماهانه · ${F.n_months} ماه · خالص هزینه`;
+  $('fc-chip').textContent = `بک‌تست ماهانه · ${F.n_months} ماه · خالص هزینه` + (F.coverage ? ` · ${F.coverage.median} سهم امتیازدار` : '');
   renderFac(F, L);
 }
 function renderFac(F, L) {
@@ -173,12 +175,12 @@ function renderFac(F, L) {
   const sigTxt = sig ? `در سطح ۵٪ معنادار است (|t| ≥ ۱٫۹۶)` : `در سطح ۵٪ معنادار نیست (|t| = ${fmt(Math.abs(S.Q5ALL.t), 2)} < ۱٫۹۶)`;
   const sign = S.Q5ALL.mu >= 0 ? 'بیشتر' : 'کمتر';
   $('fc-method').innerHTML = `<p><b>نتیجه:</b> پنجک ۵ پس از ${cost} bp هزینهٔ رفت‌وبرگشت، سالانه ${fmt(Math.abs(ann('Q5') - ann('ALL')), 1)} واحد درصد ${sign} از سبد هم‌وزن همهٔ واجدان شرایط بازده داده است؛ این تفاوت ${sigTxt}. ${facState.sig === 'lowvol' ? `نوسان پنجک ۵ (${fmt(mstats(N.net.Q5).vol, 1)}٪) از همه (${fmt(mstats(N.net.ALL).vol, 1)}٪) کمتر است؛ کاهش ریسک برقرار است حتی اگر بازده اضافه معنادار نباشد.` : 'الگوی پنجک‌ها کوهان‌شکل است: قوی‌ترین مومنتوم از میانهٔ بازار ضعیف‌تر است.'}</p>
-  <ol><li><b>سیگنال:</b> ${facState.sig === 'mom' ? 'بازدهٔ لگاریتمی TR از ۲۵۲ تا ۲۱ روز معاملاتی پیش از آخرین روز هر ماه شمسی (ماه آخر کنار گذاشته می‌شود).' : 'انحراف معیار بازدهٔ روزانهٔ TR در ۲۵۲ روز معاملاتی پیش از آخرین روز هر ماه شمسی؛ پنجک ۵ کم‌نوسان‌ترین است.'}</li>
+  <ol><li><b>سیگنال:</b> ${facState.sig === 'quality' ? `امتیاز ترکیبی ROE، D/E و ثبات ROE از آخرین سال مالی که تا آخرین روز ماه اعلام شده (تاریخ اعلام اولین EPS ۱۲‌ماهه؛ در نبود آن پایان سال مالی + ۱۲۰ روز)؛ Z درون صنعت، برش ±۳؛ پنجک ۵ باکیفیت‌ترین. دامنهٔ امتیازدار: از ${F.coverage ? F.coverage.first : '—'}، میانه ${F.coverage ? F.coverage.median : '—'} سهم در ماه.` : facState.sig === 'mom' ? 'بازدهٔ لگاریتمی TR از ۲۵۲ تا ۲۱ روز معاملاتی پیش از آخرین روز هر ماه شمسی (ماه آخر کنار گذاشته می‌شود).' : 'انحراف معیار بازدهٔ روزانهٔ TR در ۲۵۲ روز معاملاتی پیش از آخرین روز هر ماه شمسی؛ پنجک ۵ کم‌نوسان‌ترین است.'}</li>
   <li><b>واجد شرایط:</b> دست‌کم ۸۰٪ روزهای پنجره داده و دست‌کم ۵۰٪ روزهایی با بازده غیرصفر (حذف نمادهای عملاً متوقف)، و دادهٔ روز بعد.</li>
   <li><b>سبد:</b> هم‌وزن درون هر پنجک در روز ریبالانس (آخرین روز معاملاتی هر ماه شمسی)؛ تا ریبالانس بعد وزن‌ها با بازده رانش می‌کنند (خرید و نگهداری).</li>
   <li><b>هزینه:</b> گردش یک‌طرفهٔ واقعی هر ماه (½ Σ|وزن هدف − وزن رانش‌یافته|) × هزینهٔ رفت‌وبرگشت ورودی؛ ساخت اولیه حساب نمی‌شود. همین هزینه به سبد «همه» هم اعمال می‌شود.</li>
   <li><b>آزمون:</b> t با خطای معیار نیوی‌وست (۳ وقفه) چون بازده ماهانهٔ بازار ایران خودهمبستگی مثبت دارد؛ سالانه‌سازی بازده با ۱۲ ماه، نوسان با √۱۲.</li>
-  <li><b>بازه:</b> از ۱۳۹۵/۰۱؛ سیگنال از ۲۰۱۵ ساخته می‌شود.</li></ol>
+  <li><b>بازه:</b> ${facState.sig === 'quality' ? `از نخستین ماهی که دست‌کم ۳۰ سهم امتیاز دارند (${F.from})؛ عمق تاریخچه را صورت‌های مالی رهاورد تعیین می‌کند، نه قیمت‌ها` : 'از ۱۳۹۵/۰۱؛ سیگنال از ۲۰۱۵ ساخته می‌شود'}.</li></ol>
   <p><b>محدودیت‌ها:</b> جهان شامل اعضای فعلی «شاخص كل» و ${X.qa.universe.extras} نماد حذف‌شدهٔ بازیابی‌شده است، نه همهٔ نمادهای تاریخی؛ «پنجک ۵ − پنجک ۱» به فروش استقراضی نیاز دارد که در بورس تهران عملاً در دسترس نیست و فقط شاخص تشخیصی فاکتور است؛ مدل هزینه خطی است و صف خرید/فروش و دامنهٔ نوسان را در نظر نمی‌گیرد (فصل ۶).</p>`;
   $('fc-csv').onclick = () => download(`factor_${L.file}_monthly_net_${cost}bp.csv`, [['month_end', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL', 'to_Q5_pct', 'to_ALL_pct'], ...M.end.map((d, i) => [d, ...q.map(k => (N.net[k][i] * 100).toFixed(3)), M.to.Q5[i] ?? '', M.to.ALL[i] ?? ''])]);
 }
@@ -234,7 +236,7 @@ function initRep() {
     ['شاخص‌های صنعت', `${Q.comparable} قابل مقایسه · ${Q.n_corr99} با همبستگی ≥ ۰٫۹۹ · میانهٔ TE ${fmt(Q.median_te)}٪`, 'فصل ۳ §۳٫۴'],
     ['هزینهٔ تأخیر سود ۹۰ روزه (K / EW)', `${sgn(dvK.A.gap_pct_yr)}٪ / ${sgn(dvE.A.gap_pct_yr)}٪ در سال (بدون وام)`, 'فصل ۳ §۳٫۵'],
     ...(X.divlab.K.empirical ? [['هزینهٔ تأخیر سود با توزیع واقعی (K / EW)', `${sgn(X.divlab.K.empirical.A.gap_pct_yr)}٪ / ${sgn(X.divlab.EW.empirical.A.gap_pct_yr)}٪ در سال (بدون وام؛ ${X.divlab.payment_data.with_ex} رویداد، میانگین وزنی ${X.divlab.payment_data.k.mean} / ${X.divlab.payment_data.ew.mean} روز)`, 'فصل ۳ §۳٫۵']] : []),
-    ...[['مومنتوم ۱۲−۱', X.factor], ['کم‌نوسان ۲۵۲ روزه', X.factor_lowvol]].map(([n, G]) => { const N = facNet(G, 100), s = mstats(N.ex), a = mstats(N.net.Q5).ann - mstats(N.net.ALL).ann;
+    ...[['مومنتوم ۱۲−۱', X.factor], ['کم‌نوسان ۲۵۲ روزه', X.factor_lowvol], ...(X.factor_quality ? [['کیفیت (رهاورد)', X.factor_quality]] : [])].map(([n, G]) => { const N = facNet(G, 100), s = mstats(N.ex), a = mstats(N.net.Q5).ann - mstats(N.net.ALL).ann;
       return [n + ' (خالص ۱۰۰ bp)', `پنجک ۵ نسبت به همه ${sgn(a, 1)}٪ در سال · t نیوی‌وست ${fmt(s.t, 2)} · ${Math.abs(s.t) >= 1.96 ? 'معنادار' : 'غیرمعنادار'} در سطح ۵٪`, 'فصل ۵']; })];
   $('rp-sum').innerHTML = th([['نتیجه'], ['مقدار'], ['مرجع']]) + '<tbody>' + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="mute">${r[2]}</td></tr>`).join('') + '</tbody>';
   $('rp-text').innerHTML = `<b>وضعیت.</b> داده تا <span class="num">${D.meta.asof}</span>؛ ${fmt(D.meta.n_price_rows, 0)} ردیف قیمت. مرجع‌ها: «شاخص كل» و «كل (هم وزن)» رسمی. ماکت سرمایه‌پذیر با بازتولید کامل و بدون سقف سرمایه/وزن؛ تنها شکاف ساختاری، تأخیر پرداخت سود است و با تأخیر یکسان L مدل می‌شود. فاکتورها با بک‌تست ماهانهٔ خالص هزینه و آزمون نیوی‌وست سنجیده می‌شوند؛ بازده‌ها با سال تقویمی سالانه شده‌اند. «چاپ» ← PDF.`;
