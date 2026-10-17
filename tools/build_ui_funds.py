@@ -95,10 +95,19 @@ def analyze_fund(m: dict, bench: dict, repl: dict) -> dict | None:
     nd = load_nav(sym)
     if nd is None or nd.empty:
         return None
-    col = "nav_cancel" if nd.get("nav_cancel") is not None and nd.nav_cancel.notna().sum() > 30 else "nav_stat"
+    has = lambda c: nd.get(c) is not None and nd[c].notna().sum() > 30
+    col = "nav_cancel" if has("nav_cancel") else "nav_stat" if has("nav_stat") else "ret_daily" if has("ret_daily") else None
+    if col is None:
+        return None
     k = m["benchmark"]
     btr = bench[k]
-    fr = fund_returns(nd[col], btr.index)
+    if col == "ret_daily":      # بازده روزانهٔ منتشرشدهٔ فیپیران (dailyEfficiency)؛ مقیاس خودکار: درصد یا کسر
+        x = nd.ret_daily.dropna()
+        x = x / 100 if x.abs().median() > 0.05 else x
+        x = x[x.index >= x.index[0] + pd.Timedelta(days=WARMUP_DAYS)]
+        fr = x.reindex(btr.index.intersection(x.index))
+    else:
+        fr = fund_returns(nd[col], btr.index)
     # رویدادهای واحد
     a = (fr - btr.reindex(fr.index)).dropna()
     ev = a[a.abs() > EVENT]
@@ -144,7 +153,7 @@ def analyze_fund(m: dict, bench: dict, repl: dict) -> dict | None:
     out["curve"] = cur
     # قیمت بازار در برابر NAV
     pr = load_price(sym)
-    if pr is not None and not pr.empty:
+    if pr is not None and not pr.empty and col != "ret_daily":
         px = pr.close.where(pr.close > 0)
         nv = nd[col].reindex(px.index.union(nd.index)).ffill(limit=3).reindex(px.index)
         prem = (px / nv - 1).dropna()
@@ -158,6 +167,8 @@ def analyze_fund(m: dict, bench: dict, repl: dict) -> dict | None:
             prr = px.pct_change().dropna()
             prr = prr[prr.index.isin(fr.index)]
             out["price_te"] = metrics(prr, btr).get("te_w")
+    if col == "ret_daily":
+        out["nav_col_note"] = "dailyEfficiency"
     if nd.get("aum") is not None and nd.aum.notna().any():
         out["aum_bn"] = r(nd.aum.dropna().iloc[-1] / 1e9, 0)          # خالص دارایی، میلیارد ریال
     return out

@@ -9,12 +9,12 @@
 برای هر صندوق:
   ۱. کد ابزار (insCode)
   ۲. قیمت روزانهٔ بازار (ClosingPriceDailyList) → data/funds/price_<نماد>.csv
-  ۳. NAV روزانه (ابطال، صدور، آماری) و خالص دارایی از فیپیران؛ اگر نشد، از سایت خود صندوق (سامانهٔ رایان)
+  ۳. بازده روزانهٔ NAV (dailyEfficiency) و در صورت وجود NAV از API فیپیران (fipiran.ir/services)؛ اگر نشد، از سایت خود صندوق (سامانهٔ رایان)
      → data/funds/nav_<نماد>.csv
   ۴. شاخص‌های مرجع (كل، هم‌وزن، ۳۰ شرکت بزرگ) به‌روز می‌شوند؛ نام شاخص ۳۰ شرکت چاپ می‌شود تا کد تأیید شود.
 
 همهٔ پاسخ‌های خام در data/raw/funds/ ذخیره می‌شوند؛ اگر قالب پاسخی عوض شده باشد، با همان‌ها اصلاح می‌کنیم.
-مسیرهای فیپیران و رایان از حافظه‌اند [راستی‌آزمایی نشده]؛ اسکریپت چند مسیر را امتحان می‌کند و گزارش می‌دهد.
+مسیرهای فیپیران از JS خود سایت استخراج شدند (آزموده‌نشده روی پاسخ)؛ مسیرهای رایان از حافظه‌اند [راستی‌آزمایی نشده]؛ اسکریپت چند مسیر را امتحان می‌کند و گزارش می‌دهد.
 
 استفاده
 -------
@@ -53,7 +53,8 @@ INDEX_CODES = {"K": "32097828799138957", "EW": "67130298613737946", "I30": "1052
                "K_PR": "5798407779416661", "EW_PR": "8384385859414435"}
 
 CDN = "https://cdn.tsetmc.com/api"
-FIPIRAN = "https://fund.fipiran.ir/api/v1"
+# آدرس واقعی API از بستهٔ جاوااسکریپت سایت fipiran.ir استخراج شد (baseURL="/services")؛ www گاهی timeout می‌دهد
+FIPIRAN_BASES = ["https://fipiran.ir/services", "https://www.fipiran.ir/services"]
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
@@ -222,23 +223,38 @@ def tse_etf(ins: str, symbol: str) -> dict:
 
 # ── فیپیران ──────────────────────────────────────────────────────────────
 _FIP_LIST = None
+_FIP_BASE = None
+
+
+def fip_get(path: str, retries: int = 1):
+    """GET از API فیپیران؛ میزبان کارا یک‌بار پیدا و نگه داشته می‌شود."""
+    global _FIP_BASE
+    last = None
+    for b in ([_FIP_BASE] if _FIP_BASE else FIPIRAN_BASES):
+        try:
+            d = get(f"{b}/{path}", "https://fipiran.ir/", retries=retries)
+            _FIP_BASE = b
+            return d
+        except Exception as e:  # noqa: BLE001
+            last = e
+    raise last
 
 
 def fipiran_list():
     global _FIP_LIST
     if _FIP_LIST is None:
         _FIP_LIST = []
-        for ep in ("fund/fundcompare", "fund/getfundlist"):
+        for ep in ("fund/fundlistbrief", "fund/fundlistissue", "efficiency/fundlist"):
             try:
-                d = get(f"{FIPIRAN}/{ep}", "https://fund.fipiran.ir/")
+                d = fip_get(ep)
                 save_raw(f"fipiran_{ep.replace('/', '_')}.json", d)
                 rows = find_list(d)
                 if rows:
                     print(f"  فیپیران {ep}: {len(rows)} صندوق؛ کلیدها: {list(rows[0].keys())[:25]}")
-                    _FIP_LIST = rows
-                    break
+                    if len(rows) > len(_FIP_LIST):
+                        _FIP_LIST = rows
             except Exception as e:  # noqa: BLE001
-                print(f"  فیپیران {ep}: {e}")
+                print(f"  فیپیران {ep}: {str(e)[:200]}")
     return _FIP_LIST
 
 
@@ -310,27 +326,42 @@ def parse_nav_rows(rows: list[dict]) -> list[dict]:
 
 
 def fipiran_nav(f: dict, row: dict) -> list[dict]:
+    """سری بازده روزانهٔ صندوق از /efficiency/fundefficiencylist (کلیدهای dailyEfficiency و priceEfficiency در JS سایت دیده شد).
+    مقیاس (درصد یا کسر) و تعریف دقیق فیلدها در پاسخ خام بررسی می‌شود؛ build_ui_funds.py مقیاس را خودکار تشخیص می‌دهد."""
     reg = _pick(row, "regNo", "regno", "fundRegNo", "regNumber")
     if not reg:
         print("    فیپیران: شمارهٔ ثبت (regNo) در ردیف نیست")
         return []
-    navs = []
-    for ep in (f"chart/getfundchart?regno={reg}", f"chart/getfundnetassetchart?regno={reg}", f"fund/getfundnav?regno={reg}&page=1&pageSize=5000"):
+    best = []
+    for ep in (f"efficiency/fundefficiencylist?showAll=true&regNos={reg}", f"chart/fundefficiencychart?regno={reg}&showAll=true&groupId=0"):
         try:
-            d = get(f"{FIPIRAN}/{ep}", "https://fund.fipiran.ir/")
+            d = fip_get(ep)
         except Exception as e:  # noqa: BLE001
-            print(f"    فیپیران {ep.split('?')[0]}: {e}")
+            print(f"    فیپیران {ep.split('?')[0]}: {str(e)[:160]}")
             continue
         save_raw(f"fipiran_{ep.split('?')[0].replace('/', '_')}_{f['symbol']}.json", d)
-        rows = parse_nav_rows(find_list(d))
-        print(f"    فیپیران {ep.split('?')[0]}: {len(rows)} ردیف NAV")
-        if len(rows) > len(navs):
-            navs = rows
-        elif rows and navs:   # سری خالص دارایی را به ردیف‌های NAV بچسبان
-            aum = {r["date"]: r["aum"] or r["nav_cancel"] for r in rows}
-            for n in navs:
-                n["aum"] = n["aum"] or aum.get(n["date"])
-    return navs
+        items = []
+        for blk in (d if isinstance(d, list) else [d]):
+            if isinstance(blk, dict) and isinstance(blk.get("items"), list):
+                items += blk["items"]
+        if not items:
+            items = find_list(d)
+        rows = {}
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            dd = to_date(it.get("date") or it.get("Date"))
+            if not dd:
+                continue
+            rows[dd] = {"date": dd, "ret_daily": num(it.get("dailyEfficiency")), "ret_price": num(it.get("priceEfficiency")),
+                        "nav_cancel": num(it.get("cancelNav")), "nav_issue": num(it.get("issueNav")), "nav_stat": num(it.get("statisticalNav")),
+                        "aum": num(it.get("netAsset") or it.get("netAssetValue"))}
+        out = sorted(rows.values(), key=lambda r: r["date"])
+        keys = sorted({k for it in items[:50] if isinstance(it, dict) for k in it})
+        print(f"    فیپیران {ep.split('?')[0]}: {len(out)} روز؛ کلیدها: {keys[:20]}")
+        if len(out) > len(best):
+            best = out
+    return best
 
 
 # ── سایت صندوق (سامانهٔ رایان هم‌افزا) ─────────────────────────────────
@@ -374,7 +405,7 @@ def site_nav(f: dict, site: str) -> list[dict]:
 def write_nav(symbol: str, rows: list[dict], source: str) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     with (OUT / f"nav_{symbol}.csv").open("w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=["date", "nav_cancel", "nav_issue", "nav_stat", "aum", "source"])
+        w = csv.DictWriter(fh, fieldnames=["date", "ret_daily", "ret_price", "nav_cancel", "nav_issue", "nav_stat", "aum", "source"], restval="")
         w.writeheader()
         for r in rows:
             w.writerow({**r, "source": source})
