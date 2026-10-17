@@ -13,49 +13,9 @@ if (!X) {
   ['v-div', 'v-fac', 'v-reb', 'v-qa', 'v-rep', 'v-pf', 'v-risk'].forEach(id => { $(id).innerHTML = '<p style="padding:24px">ui/data/extra.js پیدا نشد. اجرا کنید: <code>python tools/build_ui_extra.py</code></p>'; });
 }
 
-/* ── نمودار چندپنلی ───────────────────────────────────── */
-function paneChart(svg, dates, panes, st) {
-  const W = svg.clientWidth || 800, H = svg.clientHeight || 300, m = { l: 8, r: 58, t: 30, b: 20 }, gap = 18;
-  const N = dates.length, avail = H - m.t - m.b - gap * (panes.length - 1);
-  const x = i => m.l + (W - m.l - m.r) * i / (N - 1);
-  let out = '', top = m.t;
-  panes.forEach(p => {
-    const h = avail * p.frac, vals = p.series.flatMap(s => s.v.filter(v => v != null && isFinite(v)));
-    let lo = Math.min(...vals), hi = Math.max(...vals);
-    if (p.zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
-    const T = p.log ? Math.log : (v => v);
-    const a = T(lo), b = T(hi), pad = (b - a) * .06 || 1;
-    const y = v => top + h * (1 - (T(v) - (a - pad)) / ((b - a) + 2 * pad));
-    let tv = [];
-    if (p.log) { for (let e = Math.floor(Math.log10(lo)) - 1; e <= Math.ceil(Math.log10(hi)) + 1; e++) [1, 2, 5].forEach(mu => { const v = mu * 10 ** e; if (v >= lo * 0.97 && v <= hi * 1.03) tv.push(v); }); if (tv.length > 6) tv = tv.filter(v => Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9); }
-    else { const raw = (hi - lo) / 4 || 1, p10 = 10 ** Math.floor(Math.log10(raw)), step = [1, 2, 2.5, 5, 10].map(q => q * p10).find(q => q >= raw); for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) tv.push(Math.abs(v) < 1e-9 ? 0 : v); }
-    tv.forEach(v => { const yy = y(v); out += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}"/><text x="${W - m.r + 6}" y="${yy + 3}">${p.fmt ? p.fmt(v) : fmt(v, 1)}</text>`; });
-    if (p.zero) { const z = y(0); out += `<line class="axis" x1="${m.l}" x2="${W - m.r}" y1="${z}" y2="${z}"/>`; }
-    p.series.forEach(s => {
-      let d = '', pen = false;
-      s.v.forEach((v, i) => { if (v == null || !isFinite(v)) { pen = false; return; } d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1); pen = true; });
-      out += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.w || 1.4}" ${s.dash ? 'stroke-dasharray="3 2"' : ''}/>`;
-    });
-    top += h + gap;
-  });
-  let last = null, tk = '';
-  dates.forEach((d, i) => { const k = jyear.format(new Date(d + 'T00:00:00Z')); if (k !== last) { last = k; const xx = x(i); if (xx > m.l + 24 && xx < W - m.r - 10) tk += `<line class="axis" x1="${xx}" x2="${xx}" y1="${H - m.b}" y2="${H - m.b + 4}"/><text x="${xx}" y="${H - 5}" text-anchor="middle">${k}</text>`; } });
-  const hv = st && st.i != null ? `<line class="axis" x1="${x(st.i)}" x2="${x(st.i)}" y1="${m.t}" y2="${H - m.b}" stroke-dasharray="2 2"/>` : '';
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  svg.innerHTML = out + tk + hv;
-  svg._geom = { m, W, N };
-}
-function attachHover(svg, draw, onIdx) {
-  svg.addEventListener('mousemove', e => {
-    const g = svg._geom; if (!g) return; const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * (g.W / r.width);
-    const i = Math.max(0, Math.min(g.N - 1, Math.round((px - g.m.l) / (g.W - g.m.l - g.m.r) * (g.N - 1)))); onIdx(i);
-  });
-  svg.addEventListener('mouseleave', () => onIdx(null));
-}
-function bars(el, labels, values, f, mark) {
-  const mx = Math.max(...values.map(v => Math.abs(v || 0)), 1e-9);
-  el.innerHTML = values.map((v, i) => `<div class="b" style="height:${Math.max(1, Math.abs(v || 0) / mx * 78)}%;${mark && mark(i, v) ? 'background:var(--lg-c)' : ''}"><em>${f(v)}</em><span>${labels[i]}</span></div>`).join('');
-}
+/* ── نمودار: موتور مشترک ui/chartkit.js (زوم، جابه‌جایی، هوور با برچسب روی محورها) ── */
+const { paneChart, bars } = window.ChartKit;
+const chartOn = (id, st, redraw, opts) => window.ChartKit.attach($(id), st, redraw, opts);
 
 /* ══════════ Dividend Lab ══════════ */
 const dv = { k: 'K', s: 'A', lag: 90, rb: 25, emp: false, i: null, cur: null };
@@ -88,8 +48,8 @@ function divDraw() {
   const c = dv.cur, S = c.S, svg = $('dv-chart');
   const nav = Array.from(c.nav).map(v => v * 100), trl = Array.from(c.trL).map(v => v * 100), gp = Array.from(c.nav).map((v, i) => (v / c.trL[i] - 1) * 100);
   paneChart(svg, S.dates, [
-    { frac: .68, log: true, series: [{ v: trl, color: 'var(--ch-2)', w: 1.6 }, { v: nav, color: 'var(--ch-1)', w: 1.1 }], fmt: v => fmt(v, 0) },
-    { frac: .32, zero: true, series: [{ v: gp, color: 'var(--ch-3)', dash: true }], fmt: v => fmt(v, 1) + '%' }], dv);
+    { frac: .68, log: true, series: [{ v: trl, color: 'var(--ch-2)', w: 1.6, name: 'TR نظری', fmt: v => fmt(v, 2) }, { v: nav, color: 'var(--ch-1)', w: 1.1, name: 'NAV قابل‌اجرا', fmt: v => fmt(v, 2) }], fmt: v => fmt(v, 0) },
+    { frac: .32, zero: true, series: [{ v: gp, color: 'var(--ch-3)', dash: true, name: 'شکاف', fmt: v => sgn(v, 2) + '%' }], fmt: v => fmt(v, 1) + '%' }], dv);
   $('dv-readout').innerHTML = dv.i == null ? '' : `<b>${S.dates[dv.i]}</b> · ${jd(S.dates[dv.i])} &nbsp; TR نظری <b>${fmt(trl[dv.i], 1)}</b> &nbsp; NAV <b>${fmt(nav[dv.i], 1)}</b> &nbsp; شکاف <b>${sgn(gp[dv.i], 2)}%</b>`;
 }
 function divRender() {
@@ -135,7 +95,7 @@ function initDiv() {
   $('dv-lag').oninput = e => { dv.lag = +e.target.value; divRender(); };
   $('dv-emp').onchange = e => { dv.emp = e.target.checked; divRender(); };
   $('dv-rb').oninput = e => { dv.rb = +e.target.value; divRender(); };
-  attachHover($('dv-chart'), divDraw, i => { dv.i = i; divDraw(); });
+  chartOn('dv-chart', dv, divDraw);
   $('dv-csv').onclick = () => { const c = dv.cur; download(`div_lab_${dv.k}_${dv.emp ? 'emp' : 'L' + dv.lag}${dv.s === 'B' ? '_rb' + dv.rb : ''}.csv`, [['date', 'tr_theory', 'nav', 'gap_pct'], ...c.S.dates.map((d, i) => [d, (c.trL[i] * 100).toFixed(3), (c.nav[i] * 100).toFixed(3), ((c.nav[i] / c.trL[i] - 1) * 100).toFixed(3)])]); };
   $('dv-csv-b').onclick = () => download(`div_scenarios_${dv.k}.csv`, [['lag', 'A_gap', 'A_te', 'B25_gap', 'B25_te', 'B35_gap', 'B35_te'], ...(X.divlab[dv.k].empirical ? [['empirical', ...['A', 'B25', 'B35'].flatMap(k => [X.divlab[dv.k].empirical[k].gap_pct_yr, X.divlab[dv.k].empirical[k].te_pct])]] : []), ...X.divlab[dv.k].scenarios.map(r => [r.lag, r.A.gap_pct_yr, r.A.te_pct, r.B25.gap_pct_yr, r.B25.te_pct, r.B35.gap_pct_yr, r.B35.te_pct])]);
   divPayPanel(); redraws.div = divDraw; divRender();
@@ -193,9 +153,9 @@ function renderFac(F, L) {
   $('fc-legend').innerHTML = ['Q1', 'Q3', 'Q5', 'ALL'].map(q => `<span><i style="color:${col[q]}"></i>${lab[q]}</span>`).join('') + '<span class="readout" id="fc-readout"></span>';
   const curve = {}; ['Q1', 'Q3', 'Q5', 'ALL'].forEach(q => { let c = 100; curve[q] = [100, ...N.net[q].map(r => (c *= 1 + r))]; });
   const dates = [F.from, ...M.end], st = facState;
-  const draw = () => { paneChart($('fc-chart'), dates, [{ frac: 1, log: true, series: ['Q1', 'Q3', 'Q5', 'ALL'].map(q => ({ v: curve[q], color: col[q], w: q === 'ALL' ? 1.6 : 1.2 })), fmt: v => fmt(v, 0) }], st);
+  const draw = () => { paneChart($('fc-chart'), dates, [{ frac: 1, log: true, series: ['Q1', 'Q3', 'Q5', 'ALL'].map(q => ({ v: curve[q], color: col[q], w: q === 'ALL' ? 1.6 : 1.2, name: lab[q], fmt: v => fmt(v, 1) })), fmt: v => fmt(v, 0) }], st);
     $('fc-readout').innerHTML = st.i == null ? '' : `<b>${dates[st.i]}</b> &nbsp; Q1 <b>${fmt(curve.Q1[st.i], 0)}</b> &nbsp; Q5 <b>${fmt(curve.Q5[st.i], 0)}</b> &nbsp; همه <b>${fmt(curve.ALL[st.i], 0)}</b>`; };
-  if (!$('fc-chart')._hov) { $('fc-chart')._hov = true; attachHover($('fc-chart'), null, i => { facState.i = i; redraws.fac && redraws.fac(); }); }
+  chartOn('fc-chart', facState, () => redraws.fac && redraws.fac());
   redraws.fac = draw; draw();
   $('fc-lineage').innerHTML = `<span><b>بازه</b> <span class="num">${F.from}</span> → <span class="num">${F.to}</span></span><span><b>بازده</b> TR، خرید و نگهداری در ماه</span><span><b>هزینه</b> ${cost} bp رفت‌وبرگشت × گردش واقعی</span><span><b>مبنا</b> فصل ۰۴ · ۰۵</span>`;
   const q = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL'];
@@ -306,7 +266,7 @@ function initSym() {
     $('sy-hint').textContent = `${S.n} نماد · داده تا ${S.asof} · یا روی نماد در جدول‌های دیگر کلیک کنید`;
     $('sy-q').onchange = e => setSym(e.target.value.trim());
     document.querySelectorAll('#sy-ser button').forEach(b => b.onclick = () => { sy.ser = b.dataset.s; drawSym(); });
-    attachHover($('sy-chart'), null, i => { sy.i = i; drawSym(); });
+    chartOn('sy-chart', sy, () => drawSym());
     $('sy-csv').onclick = () => { const d = S.symbols[sy.s]; if (d) download(`symbol_${sy.s}.csv`, [['date', 'tr_level', 'pr_level'], ...d.d.map((x, i) => [x, d.tr[i], d.pr[i]])]); };
     redraws.sym = drawSym;
     if (!sy.s) setSym(Object.entries(S.symbols).filter(([, v]) => v.w_k != null).sort((a, b) => b[1].w_k - a[1].w_k)[0][0]);
@@ -342,9 +302,9 @@ function drawSym() {
   let p = 0; const kv = d.d.map(x => { while (p < kd.length - 1 && kd[p + 1] <= x) p++; return kd[p] <= x ? k.K_off[p] : null; });
   const k0 = kv.find(v => v != null), t0 = d.tr[kv.indexOf(k0)] || d.tr[0];
   const kRel = kv.map(v => v == null ? null : v / k0 * t0);
-  const ser = [{ v: kRel, color: 'var(--ch-3)', w: 1, dash: true }];
-  if (sy.ser !== 'pr') ser.push({ v: d.tr, color: 'var(--ch-2)', w: 1.6 });
-  if (sy.ser !== 'tr') ser.push({ v: d.pr, color: 'var(--ch-1)', w: 1.2 });
+  const ser = [{ v: kRel, color: 'var(--ch-3)', w: 1, dash: true, name: '«شاخص كل» (هم‌مبدأ)', fmt: v => fmt(v, 1) }];
+  if (sy.ser !== 'pr') ser.push({ v: d.tr, color: 'var(--ch-2)', w: 1.6, name: 'بازده کل', fmt: v => fmt(v, 2) });
+  if (sy.ser !== 'tr') ser.push({ v: d.pr, color: 'var(--ch-1)', w: 1.2, name: 'قیمت تعدیل‌شده', fmt: v => fmt(v, 2) });
   paneChart($('sy-chart'), d.d, [{ frac: 1, log: true, series: ser, fmt: v => fmt(v, v < 10 ? 1 : 0) }], sy);
   $('sy-legend').innerHTML = `<span><i style="color:var(--ch-2)"></i>بازده کل</span><span><i style="color:var(--ch-1)"></i>قیمت تعدیل‌شده</span><span><i style="color:var(--ch-3);border-top-style:dashed"></i>«شاخص كل» رسمی (هم‌مبدأ)</span><span class="readout">${sy.i == null ? '' : `<b>${d.d[sy.i]}</b> · ${jd(d.d[sy.i])} &nbsp; TR <b>${fmt(d.tr[sy.i], 2)}</b> &nbsp; PR <b>${fmt(d.pr[sy.i], 2)}</b>`}</span>`;
 }
@@ -390,7 +350,7 @@ function initPf() {
 const rk = { k: 'K', i: null };
 function drawRisk() {
   const R = X.risk[rk.k];
-  paneChart($('rk-chart'), R.dates, [{ frac: .55, zero: true, series: [{ v: R.dd, color: 'var(--down)', w: 1.3 }], fmt: v => fmt(v, 0) + '%' }, { frac: .45, zero: true, series: [{ v: R.vol, color: 'var(--ch-2)', w: 1.2 }], fmt: v => fmt(v, 0) + '%' }], rk);
+  paneChart($('rk-chart'), R.dates, [{ frac: .55, zero: true, series: [{ v: R.dd, color: 'var(--down)', w: 1.3, name: 'افت از اوج', fmt: v => fmt(v, 2) + '%' }], fmt: v => fmt(v, 0) + '%' }, { frac: .45, zero: true, series: [{ v: R.vol, color: 'var(--ch-2)', w: 1.2, name: 'نوسان ۶۳ روزه', fmt: v => fmt(v, 2) + '%' }], fmt: v => fmt(v, 0) + '%' }], rk);
   $('rk-readout').innerHTML = rk.i == null ? '' : `<b>${R.dates[rk.i]}</b> · ${jd(R.dates[rk.i])} &nbsp; افت <b>${fmt(R.dd[rk.i], 1)}%</b> &nbsp; نوسان <b>${fmt(R.vol[rk.i], 1)}%</b>`;
 }
 function renderRisk() {
@@ -404,7 +364,7 @@ function renderRisk() {
 }
 function initRisk() {
   document.querySelectorAll('#rk-idx button').forEach(b => b.onclick = () => { rk.k = b.dataset.k; rk.i = null; renderRisk(); });
-  attachHover($('rk-chart'), null, i => { rk.i = i; drawRisk(); });
+  chartOn('rk-chart', rk, drawRisk);
   const C = X.risk.sector_corr;
   $('rk-cchip').textContent = C.months + ' ماه';
   const col = v => `background:color-mix(in srgb, var(--accent) ${Math.round(Math.max(0, v) * 85)}%, var(--bg-panel));color:${v > .6 ? 'var(--tx-1)' : 'var(--tx-2)'}`;
@@ -560,12 +520,10 @@ function fnRender() {
   let cf = 100, cb = 100, cr = 100;
   for (let i = lo; i <= hi; i++) { cf *= 1 + D.f[i]; cb *= 1 + D.b[i]; if (D.r && D.r[i] != null) cr *= 1 + D.r[i]; if ((i - lo) % step === step - 1 || i === hi) { dates.push(y2i(D.d[i])); lf.push(cf); lb.push(ref === 'r' && D.r ? cr : cb); lr.push(cr); te.push(f._te63[i]); } }
   $('fn-legend').innerHTML = `<span><i style="color:var(--ch-1)"></i>صندوق (NAV)</span><span><i style="color:var(--ch-2)"></i>${nm.replace(/[«»]/g, '')}</span>${D.r && ref === 'b' ? '<span><i style="color:var(--ch-3);border-top-style:dashed"></i>ماکت سرمایه‌پذیر</span>' : ''}<span><i style="color:var(--down)"></i>TE ۶۳ روزه (٪)</span><span class="readout" id="fn-readout"></span>`;
-  const ser = [{ v: lf, color: 'var(--ch-1)', w: 1.5 }, { v: lb, color: 'var(--ch-2)', w: 1.3 }]; if (D.r && ref === 'b') ser.push({ v: lr, color: 'var(--ch-3)', w: 1.1, dash: true });
+  const ser = [{ v: lf, color: 'var(--ch-1)', w: 1.5, name: 'صندوق', fmt: v => fmt(v, 2) }, { v: lb, color: 'var(--ch-2)', w: 1.3, name: nm.replace(/[«»]/g, ''), fmt: v => fmt(v, 2) }]; if (D.r && ref === 'b') ser.push({ v: lr, color: 'var(--ch-3)', w: 1.1, dash: true, name: 'ماکت سرمایه‌پذیر', fmt: v => fmt(v, 2) });
   const st = fn;
   const draw = () => {
-    paneChart($('fn-chart'), dates, [{ frac: .65, log: true, series: ser, fmt: v => fmt(v, 0) }, { frac: .35, zero: true, series: [{ v: te, color: 'var(--down)', w: 1.2 }], fmt: v => fmt(v, 1) + '%' }], st);
-    const svg = $('fn-chart'), g = svg._geom;
-    if (fn.drag && g) { const x = i => g.m.l + (g.W - g.m.l - g.m.r) * i / (g.N - 1), x0 = x(Math.min(fn.drag.i0, fn.drag.i1)), x1 = x(Math.max(fn.drag.i0, fn.drag.i1)); svg.insertAdjacentHTML('beforeend', `<rect x="${x0}" y="${g.m.t}" width="${Math.max(1, x1 - x0)}" height="${svg.clientHeight - g.m.t - g.m.b}" fill="var(--accent)" opacity=".18" stroke="var(--accent)" stroke-width="1"/>`); }
+    paneChart($('fn-chart'), dates, [{ frac: .65, log: true, series: ser, fmt: v => fmt(v, 0) }, { frac: .35, zero: true, series: [{ v: te, color: 'var(--down)', w: 1.2, name: 'TE₆₃ (٪ سالانه)', fmt: v => fmt(v, 2) + '%' }], fmt: v => fmt(v, 1) + '%' }], st);
     $('fn-readout').innerHTML = st.i == null ? '' : `<b>${dates[st.i]}</b> · ${jd(dates[st.i])} &nbsp; صندوق <b>${fmt(lf[st.i], 1)}</b> &nbsp; مرجع <b>${fmt(lb[st.i], 1)}</b> &nbsp; TE₆₃ <b>${te[st.i] == null ? '—' : fmt(te[st.i], 2) + '%'}</b>`;
   };
   fn._dates = dates;
@@ -577,25 +535,6 @@ function fnRender() {
   $('fn-method').innerHTML = fnRoot(f) + evs + miss + fnMethod(true);
   if (f.season && $('fn-season')) bars($('fn-season'), JM.map(x => x.slice(0, 3)), f.season.mean_bp.map(v => v ?? 0), v => fmt(v, 0), i => i >= 2 && i <= 4);
 }
-function fnBrush() {
-  const svg = $('fn-chart');
-  const idxAt = e => { const g = svg._geom; if (!g) return null; const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * (g.W / r.width); return Math.max(0, Math.min(g.N - 1, Math.round((px - g.m.l) / (g.W - g.m.l - g.m.r) * (g.N - 1)))); };
-  svg.addEventListener('mousedown', e => { const i = idxAt(e); if (i == null) return; fn.drag = { i0: i, i1: i, on: true }; e.preventDefault(); });
-  addEventListener('mousemove', e => { if (fn.drag && fn.drag.on) { const i = idxAt(e); if (i != null) { fn.drag.i1 = i; redraws.fnd && redraws.fnd(); } } });
-  addEventListener('mouseup', () => {
-    if (!fn.drag || !fn.drag.on) return; const d = fn.drag; fn.drag = null;
-    const lo = Math.min(d.i0, d.i1), hi = Math.max(d.i0, d.i1), ds = fn._dates;
-    if (ds && hi - lo >= 5) fnSetRange(i2y(ds[lo]), i2y(ds[hi])); else redraws.fnd && redraws.fnd();
-  });
-  svg.addEventListener('dblclick', () => fnSetRange(null, null));
-  svg.addEventListener('wheel', e => {
-    if (innerWidth <= 1000 || !fn._dates) return; e.preventDefault();
-    const ds = fn._dates, i = idxAt(e); if (i == null) return; const n = ds.length, k = e.deltaY < 0 ? 0.7 : 1 / 0.7;
-    const lo = Math.max(0, Math.round(i - (i) * k)), hi = Math.min(n - 1, Math.round(i + (n - 1 - i) * k));
-    if (hi - lo < 10 && k < 1) return; if (hi - lo >= n - 2 && k > 1) return fnSetRange(null, null);
-    fnSetRange(i2y(ds[lo]), i2y(ds[hi]), true);
-  }, { passive: false });
-}
 function initFnd() {
   document.querySelectorAll('#fn-pre button').forEach(b => b.onclick = () => fnPreset(b.dataset.k));
   document.querySelectorAll('#fn-ref button').forEach(b => b.onclick = () => { fn.ref = b.dataset.r; fnRender(); });
@@ -606,8 +545,16 @@ function initFnd() {
     const F = window.SIM_FUNDS; if (!F.funds.length) return download('index_funds_candidates.csv', [['symbol', 'name', 'benchmark'], ...F.missing.map(m => [m.symbol, m.name, m.benchmark])]);
     download(`index_funds_tracking_${fn.r0 || 'all'}_${fn.r1 || 'all'}.csv`, [['symbol', 'benchmark', 'from', 'to', 'days', 'te_weekly_pct', 'te_robust_pct', 'te_daily_pct', 'cum_diff_pct', 'td_pct', 'td_vs_replica_pct', 'corr_weekly', 'beta'], ...fnRows().map(({ f, m }) => [f.symbol, f.benchmark, m.from, m.to, m.n, m.te_w ?? '', m.te_rob ?? '', m.te_d, m.diff, m.td ?? '', m.td_rep ?? '', m.corr_w ?? '', m.beta])]);
   };
-  attachHover($('fn-chart'), null, i => { if (fn.drag) return; fn.i = i; redraws.fnd && redraws.fnd(); });
-  fnBrush(); redraws.fnd = null; fnRender();
+  chartOn('fn-chart', fn, () => redraws.fnd && redraws.fnd(), {
+    onZoom: (lo, hi) => {                              // زوم = بازهٔ تازه؛ همهٔ آمار و جدول‌ها از نو محاسبه می‌شود (خارج از بازهٔ فعلی با درون‌یابی تاریخ)
+      const ds = fn._dates; if (!ds) return; const n = ds.length, t0 = Date.parse(ds[0]), t1 = Date.parse(ds[n - 1]), dt = (t1 - t0) / (n - 1);
+      const at = i => i <= 0 ? t0 + i * dt : i >= n - 1 ? t1 + (i - (n - 1)) * dt : Date.parse(ds[i]);
+      const iso = t => new Date(t).toISOString().slice(0, 10);
+      if (hi - lo >= (n - 1) * 3) return fnSetRange(null, null);
+      fnSetRange(i2y(iso(at(lo))), i2y(iso(at(hi))), true);
+    },
+    onReset: () => fnSetRange(null, null) });
+  redraws.fnd = null; fnRender();
 }
 
 /* ══════════ تراکم، حافظهٔ تنظیمات، تاریخچهٔ فرمان، کلیک روی نماد ══════════ */
