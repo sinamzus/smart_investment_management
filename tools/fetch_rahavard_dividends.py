@@ -3,13 +3,13 @@
 """ثبت پاسخ‌های JSON رهاورد۳۶۵ برای پیداکردن منبع «تاریخ پرداخت سود» (روی سیستم شما اجرا شود؛ محیط ابری به رهاورد دسترسی ندارد).
 
 ساختار API رهاورد را نمی‌دانیم و حدس‌زدن آدرس‌ها ما را به 404 می‌رساند؛ پس مثل کدال اول «probe» می‌کنیم: مرورگر واقعی را باز می‌کنیم،
-شما نماد را جست‌وجو و صفحهٔ سود نقدی/تقسیم سود (اطلاعات سود) را باز می‌کنید، و این ابزار فقط پاسخ‌های JSON شبکه را ذخیره می‌کند.
+ابزار خودش صفحهٔ https://rahavard365.com/dps را (در اجرای اول دیده شد: رهاورد صفحهٔ /dps و /asset/<id>/dps دارد) باز می‌کند و پاسخ‌های JSON/HTML شبکه را ذخیره می‌کند؛ شما هم می‌توانید در همان مرورگر نماد را جست‌وجو کنید.
 با آن آدرس دقیق API و ستون‌های «تاریخ پرداخت» معلوم می‌شود و collector نوشته می‌شود.
 
     pip install playwright          # فقط همین؛ مرورگر Chrome نصب‌شده روی ویندوز استفاده می‌شود (لازم به playwright install نیست)
     python tools/fetch_rahavard_dividends.py --capture فملی --log cap_rahavard.txt
-        ← Chrome باز می‌شود؛ نماد را جست‌وجو کنید، صفحهٔ سهم را باز کنید و تب مربوط به «سود نقدی / تقسیم سود / رویدادهای سرمایه‌ای» را بزنید
-          (۱ تا ۲ دقیقه کافی است)؛ سپس در ترمینال Enter بزنید.
+        ← Chrome باز می‌شود، صفحهٔ /dps را خودکار می‌رود و ۹۰ ثانیه باز می‌ماند (--seconds)؛ در این مدت می‌توانید نماد را جست‌وجو و تب سود را باز کنید.
+          آدرس دلخواه: --goto https://rahavard365.com/asset/<id>/dps (چند بار قابل‌تکرار)
     python tools/fetch_rahavard_dividends.py --har rahavard.har
         ← روش جایگزین بدون playwright: در Chrome → F12 → Network → (Preserve log) کار بالا را انجام دهید → راست‌کلیک → «Save all as HAR with content».
 
@@ -83,7 +83,10 @@ class Saver:
             print(f"  hint={r['hint']:3d}  {r['file']}  {r['url'][:120]}")
 
 
-def capture(sym: str) -> None:
+def capture(sym: str, urls: list, seconds: int) -> None:
+    """مرورگر را باز می‌کند، خودش آدرس‌های urls را می‌رود و تا seconds ثانیه (یا Ctrl+C) پاسخ‌ها را ذخیره می‌کند.
+    نکته: input() نباید استفاده شود؛ در playwright همگام، رویدادها فقط وقتی پردازش می‌شوند که خود playwright منتظر باشد
+    (page.wait_for_timeout) و در غیر این صورت بدنهٔ پاسخ‌ها بعد از بسته‌شدن مرورگر خوانده می‌شود (TargetClosedError)."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -104,7 +107,7 @@ def capture(sym: str) -> None:
                 rt = r.request.resource_type
             except Exception:  # noqa: BLE001
                 ct, rt = "", "?"
-            if rt in ("image", "font", "stylesheet", "media") or SKIP.search(url):
+            if rt in ("image", "font", "stylesheet", "media", "script") or SKIP.search(url) or "_next/static" in url:
                 return
             try:
                 body = r.text()
@@ -115,11 +118,27 @@ def capture(sym: str) -> None:
             sv.log(url, status, ct, rt, f"{len(body)}B")
             sv.add(url, status, body, kind)
         ctx.on("response", on_resp)            # همهٔ تب‌ها و پنجره‌های باز‌شده
-        page.goto("https://rahavard365.com/", wait_until="domcontentloaded")
-        print(f"\nمرورگر باز شد. نماد «{sym}» را جست‌وجو کنید، صفحهٔ سهم را باز کنید و تب «سود نقدی / تقسیم سود / رویدادها» را بزنید.\n"
-              "(اگر چند سال یا چند صفحه دارد، صفحه‌بندی/«نمایش بیشتر» را هم بزنید.) تمام که شد اینجا Enter بزنید.")
-        input()
-        br.close()
+        try:
+            for u in urls:
+                print(f"→ {u}")
+                try:
+                    page.goto(u, wait_until="domcontentloaded", timeout=60000)
+                    page.wait_for_load_state("networkidle", timeout=30000)
+                except Exception as e:  # noqa: BLE001
+                    print("   (ادامه می‌دهیم)", type(e).__name__)
+                for _ in range(4):                                       # اسکرول برای بارگذاری تنبل
+                    page.mouse.wheel(0, 1500)
+                    page.wait_for_timeout(1500)
+            print(f"\nحالا تا {seconds} ثانیه فرصت دارید خودتان هم در همین مرورگر کار کنید (نماد را جست‌وجو کنید، تب سود/DPS را بزنید، صفحه‌بندی را ببینید)."
+                  "\nزودتر تمام کردید: در ترمینال Ctrl+C بزنید (ذخیره می‌شود).")
+            for _ in range(seconds):
+                page.wait_for_timeout(1000)                              # رویدادها را پردازش می‌کند
+        except KeyboardInterrupt:
+            print("\nپایان به درخواست شما.")
+        try:
+            br.close()
+        except Exception:  # noqa: BLE001
+            pass
     sv.finish()
 
 
@@ -138,7 +157,9 @@ def from_har(path: str, sym: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--capture", metavar="SYM", help="مرورگر را باز کن و پاسخ‌های JSON را ذخیره کن (نام پوشه = نماد)")
+    ap.add_argument("--capture", metavar="SYM", help="مرورگر را باز کن و پاسخ‌های JSON/HTML را ذخیره کن (نام پوشه = نماد)")
+    ap.add_argument("--goto", action="append", help="آدرسی که خودکار باز شود (چند بار قابل‌تکرار؛ پیش‌فرض: https://rahavard365.com/dps)")
+    ap.add_argument("--seconds", type=int, default=90, help="چند ثانیه مرورگر باز بماند تا خودتان هم کار کنید (پیش‌فرض ۹۰)")
     ap.add_argument("--har", help="به‌جای مرورگر، فایل HAR ذخیره‌شده از Chrome را بخوان")
     ap.add_argument("--sym", default="har", help="با --har: نام پوشهٔ خروجی")
     ap.add_argument("--log", help="کپی خروجی در فایل UTF-8")
@@ -148,7 +169,7 @@ def main() -> int:
         import fetch_dividend_payments as fdp
         sys.stdout = fdp.Tee(a.log)
     if a.capture:
-        capture(a.capture)
+        capture(a.capture, a.goto or ["https://rahavard365.com/dps"], a.seconds)
     elif a.har:
         from_har(a.har, a.sym)
     else:
