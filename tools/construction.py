@@ -34,6 +34,11 @@ def algo(name, fa, en, desc, ref, params):
     return deco
 
 
+def quant(z):
+    """Zِ کوانتیزه (۱/۴۰)؛ نمایش مشترک پایتون و مرورگر (Int8 در lab.js) تا نتیجه‌ها یکی باشند."""
+    return np.where(np.isnan(z), np.nan, np.clip(np.round(z * 40), -127, 127) / 40)
+
+
 class Lab:
     """بستهٔ داده برای بک‌تست: امتیازهای ماهانه، بازده آینده، واجدیت."""
 
@@ -58,7 +63,7 @@ class Lab:
         key = (name, r)
         if key not in self._z:
             ok = self.ok[r] if r in self.ok else mk_all_true(self.mk)
-            self._z[key] = sg.winsor_z(self.S[name][r], ok)
+            self._z[key] = quant(sg.winsor_z(self.S[name][r], ok))
         return self._z[key]
 
     def ic(self, name, r):
@@ -82,9 +87,9 @@ class Lab:
             if name not in self.S:
                 continue
             ok = self.ok[r] if r in self.ok else self.live_ok
-            z = sg.winsor_z(self.S[name][r], ok) if live or r not in self.ok else self.z(name, r)
+            z = quant(sg.winsor_z(self.S[name][r], ok)) if live or r not in self.ok else self.z(name, r)
             if neutral:
-                z = sg.neutral(np.nan_to_num(z, nan=0.0), self.sector) * np.where(np.isnan(z), np.nan, 1.0)
+                z = sg.neutral(z, self.sector)
             Zs.append(z)
             ws.append(w)
         if not Zs:

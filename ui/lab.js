@@ -92,13 +92,13 @@ function initLab() {
   <section class="panel lb-side" style="--lg:var(--lg-c)">
     <div class="panel-head"><span class="lg-badge">S</span><span class="panel-title">اجراها و کتابخانه</span>
       <div class="seg" id="lb-stabs"><button data-t="saved" aria-pressed="true">من</button><button data-t="lib" aria-pressed="false">کتابخانه</button></div></div>
-    <div class="ctl" id="lb-libctl" hidden><label>گروه <select id="lb-libgrp"><option value="">همه</option><option value="sig">تک‌معیار</option><option value="algo">الگوریتم‌ها</option><option value="combo">ترکیب‌ها</option><option value="sens">حساسیت‌ها</option></select></label>
+    <div class="ctl" id="lb-libctl" hidden><label>گروه <select id="lb-libgrp"><option value="">همه</option><option value="sig">تک‌معیار</option><option value="algo">الگوریتم‌ها</option><option value="combo">ترکیب‌ها</option><option value="sens">حساسیت‌ها</option><option value="ref">مرجع Factor Lab</option></select></label>
       <label>مرتب <select id="lb-libsort"><option value="t_net">t خالص</option><option value="excess_net">برتری خالص</option><option value="ir">IR</option><option value="turn_ann">گردش</option></select></label></div>
     <div class="panel-body scroll"><table class="dt" id="lb-list"></table></div>
     <div class="lineage" id="lb-side-lin"></div>
   </section>`;
   // پیش‌تنظیم‌ها
-  $('lb-presets').innerHTML = Object.keys(PRESETS).map(k => `<button class="tool pre" data-p="${esc(k)}">${esc(k)}</button>`).join('');
+  $('lb-presets').innerHTML = Object.keys(PRESETS).map(k => `<button class="tool pre" data-p="${esc(k)}" data-tip="پیش‌تنظیم «${esc(k)}»: معیارها و روش ترکیب را می‌چیند و اجرا می‌کند؛ بعد می‌توانید دست‌کاری کنید.">${esc(k)}</button>`).join('');
   $$$('#lb-presets .pre').forEach(b => b.onclick = () => applyPreset(b.dataset.p));
   $('lb-comb').innerHTML = COMB.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   $('lb-algo').innerHTML = L.algos.filter(a => E.JS_ALGOS.includes(a.name)).map(a => `<option value="${a.name}">${a.fa}</option>`).join('');
@@ -189,7 +189,7 @@ function renderKPIs() {
   const K = [['بازده خالص سالانه', f1(st.ann_net) + '٪', ''], ['مرجع (هم‌وزن واجدان)', f1(st.ann_all_net) + '٪', ''], ['برتری خالص', sg1(st.excess_net) + '٪', st.excess_net >= 0 ? 'up' : 'down'], ['t خالص (نیوی‌وست)', f1(st.t_net, 2), tcls(st.t_net)],
     ['IR', f1(st.ir, 2), ''], ['TE سالانه', f1(st.te) + '٪', ''], ['بیشترین افت فعال', f1(st.mdd_active) + '٪', 'down'], ['گردش سالانه', f1(st.turn_ann, 0) + '٪', ''], ['تعداد نماد', f1(st.names, 0), '']];
   $('lb-kpis').innerHTML = K.map(([k, x, c]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${x}</div></div>`).join('');
-  $('lb-title').textContent = lab.name || 'نتیجهٔ اجرا';
+  $('lb-title').textContent = lab.name || 'نتیجهٔ اجرا'; $('lb-title').dataset.tip = specText(lab.spec);
   $('lb-chip').textContent = v.v; $('lb-chip').className = 'chip ' + v.cls; $('lb-chip').dataset.tip = v.why;
   $('lb-lin').innerHTML = `<span><b>استراتژی</b> ${esc(specText(lab.spec))}</span><span><b>بازه</b> <span class="num">${lab.res.end[0]}</span> → <span class="num">${lab.res.end[lab.res.end.length - 1]}</span></span><span><b>هزینه</b> ${lab.cost} bp رفت‌وبرگشت</span><span><b>منبع</b> ${lab.lib ? 'کتابخانهٔ پایتون' : 'اجرا در مرورگر'}</span>`;
 }
@@ -282,7 +282,14 @@ function tabLive(host) {
   const tot = idx.reduce((s, i) => s + w[i], 0) || 1, effN = 1 / idx.reduce((s, i) => s + (w[i] / tot) ** 2, 0), top10 = idx.slice(0, 10).reduce((s, i) => s + w[i] / tot, 0) * 100;
   const sec = {}; idx.forEach(i => { const s = L.sectors[L.codes[i].sec]; sec[s] = (sec[s] || 0) + w[i] / tot * 100; });
   const aum = (+lab.aum || 100) * 1e9;
-  host.innerHTML = `<div class="ctl"><label>سرمایه (میلیارد ریال) <input type="number" id="lv-aum" value="${lab.aum || 100}" min="1" step="10"></label><span class="mute">برای محاسبهٔ روز لازم برای ساخت با ۱۰٪ مشارکت در ارزش معاملات روزانه</span>
+  let mon = '';
+  if (!lab.lib && lab.res.live && lab.res.live.drift) {                     // رصد: اگر امروز ریبالانس بود چه کسی وارد/خارج می‌شد
+    const dr = lab.res.live.drift, tg = lab.res.live.target, ent = [], ext = [];
+    for (let i = 0; i < k; i++) { if (tg[i] > 0 && !(dr[i] > 0)) ent.push(i); if (dr[i] > 0 && !(tg[i] > 0)) ext.push(i); }
+    const nm = a => a.slice(0, 14).map(i => L.codes[i].p || L.codes[i].s).join('، ') + (a.length > 14 ? ' …' : '') || '—';
+    mon = `<div class="lb-note"><b>رصد زنده:</b> اگر امروز ریبالانس بود، <b class="up">${ent.length} نماد وارد</b> و <b class="down">${ext.length} نماد خارج</b> می‌شد (بقیه می‌مانند). ورود: ${nm(ent) || '—'}. خروج: ${nm(ext) || '—'}. اقدام واقعی فقط در روز ریبالانس است (فصل ۵ §۵٫۸٫۳)؛ این فهرست برای برنامه‌ریزی نقدینگی و رصد پیش از روز ریبالانس است.</div>`;
+  }
+  host.innerHTML = mon + `<div class="ctl"><label>سرمایه (میلیارد ریال) <input type="number" id="lv-aum" value="${lab.aum || 100}" min="1" step="10"></label><span class="mute">برای محاسبهٔ روز لازم برای ساخت با ۱۰٪ مشارکت در ارزش معاملات روزانه</span>
     <span class="spacer"></span><button class="tool" id="lv-plan">ارسال به برنامهٔ اقدام ←</button><button class="tool" id="lv-csv">CSV</button></div>
     <div class="lb-note">وزن هدف بر پایهٔ آخرین روز داده (<span class="num">${L.asof}</span>) · ${idx.length} نماد · تعداد مؤثر ${f1(effN, 0)} · ۱۰ نماد برتر ${f1(top10, 0)}٪.</div>
     <div class="lb-grid2"><div><table class="dt" id="lv-tab">${th([['#'], ['نماد'], ['بازار'], ['صنعت'], ['وزن %', 'n'], ['امتیاز Z', 'n'], ['ارزش معاملات روزانه (میلیون ریال)', 'n'], ['روز لازم (۱۰٪)', 'n']])}<tbody>${idx.slice(0, 80).map((i, j) => {
@@ -359,7 +366,7 @@ function renderSigTable() {
   const val = (s, k) => { const z = L.zoo[s.name], f = (L.fm[s.name] || {}).fm || {}; return k === 'fa' ? s.fa : k === 'fm' ? f.t : k === 'fmp' ? f.premium_ann : z[k]; };
   rows.sort((a, b) => { const x = val(a, sg.sort), y = val(b, sg.sort); return ((typeof x === 'string' ? x.localeCompare(y) : (x ?? -1e9) - (y ?? -1e9))) * sg.dir; });
   const cols = [['fa', 'معیار', ''], ['names', 'نماد', 'n'], ['ic', 'IC', 'n'], ['ic_t', 't', 'n'], ['icir', 'ICIR', 'n'], ['ic_neutral_t', 't خنثی', 'n'], ['fmp', 'پریمیوم FM %', 'n'], ['fm', 't FM', 'n'], ['q5_excess_ann', 'پنجک ۵ − همه %', 'n'], ['q5_excess_t', 't پنجک', 'n'], ['q5_turn', 'گردش ماهانه %', 'n'], ['ic_h1', 'IC نیمهٔ ۱', 'n'], ['ic_h2', 'IC نیمهٔ ۲', 'n']];
-  $('sg-tab').innerHTML = `<thead><tr>${cols.map(([k, t, c]) => `<th class="${c} sortable ${sg.sort === k ? 'sorted' : ''}" data-k="${k}">${t}${sg.sort === k ? (sg.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>` + rows.map(s => {
+  $('sg-tab').innerHTML = `<thead><tr>${cols.map(([k, t, c]) => `<th class="${c} sortable ${sg.sort === k ? (sg.dir > 0 ? 'sorted asc' : 'sorted desc') : ''}" data-k="${k}">${t}</th>`).join('')}</tr></thead><tbody>` + rows.map(s => {
     const z = L.zoo[s.name], f = (L.fm[s.name] || {}).fm || {}, sig = Math.abs(z.ic_t) >= bt;
     const sameSign = (z.ic_h1 > 0) === (z.ic_h2 > 0);
     return `<tr data-s="${s.name}" ${sg.sel === s.name ? 'aria-selected="true"' : ''}><td><span class="fam" style="background:${FAMCOL[s.family]}"></span>${esc(s.fa)}</td><td class="n">${f1(z.names, 0)}</td><td class="n ${z.ic >= 0 ? 'up' : 'down'}">${f1(z.ic, 3)}</td><td class="n ${tcls(z.ic_t)}">${f1(z.ic_t, 2)}${sig ? ' ✓' : ''}</td><td class="n">${f1(z.icir, 2)}</td><td class="n ${tcls(z.ic_neutral_t)}">${f1(z.ic_neutral_t, 2)}</td><td class="n">${sg1(f.premium_ann)}</td><td class="n ${tcls(f.t)}">${f1(f.t, 2)}</td><td class="n ${z.q5_excess_ann >= 0 ? 'up' : 'down'}">${sg1(z.q5_excess_ann)}</td><td class="n ${tcls(z.q5_excess_t)}">${f1(z.q5_excess_t, 2)}</td><td class="n">${f1(z.q5_turn, 0)}</td><td class="n ${z.ic_h1 >= 0 ? 'up' : 'down'}">${f1(z.ic_h1, 3)}</td><td class="n ${sameSign ? (z.ic_h2 >= 0 ? 'up' : 'down') : 'warn'}">${f1(z.ic_h2, 3)}</td></tr>`;
@@ -373,7 +380,7 @@ function renderSigTable() {
 function selectSig(n) {
   sg.sel = n; $$$('#sg-tab tr[data-s]').forEach(tr => tr.setAttribute('aria-selected', tr.dataset.s === n ? 'true' : 'false'));
   const m = sigMeta(n), z = L.zoo[n], fm = L.fm[n] || {}, d = L.dec[n];
-  $('sg-title').textContent = `${m.fa} · ${m.en}`;
+  $('sg-title').textContent = `${m.fa} · ${m.en}`; $('sg-title').dataset.tip = `${m.fa} (${m.en}) — ${m.formula} · مرجع: ${m.ref}`;
   const corr = L.corr.names.indexOf(n), cr = corr >= 0 ? L.corr.m[corr].map((v, j) => [v, L.corr.names[j]]).filter(x => x[1] !== n && x[0] === x[0]).sort((a, b) => Math.abs(b[0]) - Math.abs(a[0])).slice(0, 5) : [];
   $('sg-detail').innerHTML = `<p><b>خانواده:</b> ${esc(FAM[m.family])} &nbsp; <b>داده لازم:</b> ${esc(m.needs)} &nbsp; <b>پنجره:</b> ${m.window} روز</p><p><b>تعریف:</b> ${esc(m.formula)}</p><p><b>مرجع:</b> ${esc(m.ref)}</p>
     <p><b>همبسته‌ترین‌ها:</b> ${cr.map(([v, nm]) => `<a class="symlink" data-s="${nm}">${esc(sigName(nm))}</a> (${f1(v, 2)})`).join(' · ') || '—'}</p>

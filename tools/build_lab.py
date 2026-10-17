@@ -58,6 +58,10 @@ def grid(S):
     G = []
     for n in S:                                         # الف) تک‌معیار
         G.append((f"sig:{n}", "sig", sg.REG[n]["fa"], spec_sig(n)))
+    for tag, nm, sigs in (("mom", "مرجع Factor Lab: مومنتوم ۱۲−۱ (پنجک ۵، بدون بافر)", [["mom_12_1", 1.0]]), ("lowvol", "مرجع Factor Lab: کم‌نوسان ۲۵۲ روزه (پنجک ۵، بدون بافر)", [["vol_252", 1.0]]),
+                          ("quality", "کیفیت (ROE + اهرم پایین)، پنجک ۵ بدون بافر", [["q_roe", 1.0], ["q_low_de", 1.0]])):
+        if all(n in S for n, _ in sigs):
+            G.append((f"ref:{tag}", "ref", nm, {"signals": sigs, "combine": "equal", "neutral": False, "algo": "topfrac", "params": {"entry": 0.2, "exit": 0.2}}))
     refs = {"vol_252": "کم‌نوسان", "q_roe": "ROE", "size": "اندازهٔ کوچک"}
     algos = [("topfrac", {"entry": 0.2, "exit": 0.3}), ("topn", {"N": 50, "buffer": 25}), ("score_tilt", {"lam": 1.0}), ("rank_weight", {}),
              ("msci_tilt", {}), ("inv_vol", {"entry": 0.3, "exit": 0.4}), ("min_var", {"entry": 0.4, "exit": 0.5, "max_w": 0.05}),
@@ -120,7 +124,7 @@ def run_all(lab: cn.Lab, S):
     for i, (rid, grp, name, spec) in enumerate(G):
         t1 = time.time()
         try:
-            res = cn.backtest(lab, spec, live=(grp != "sig"))
+            res = cn.backtest(lab, spec, live=True)
         except Exception as e:  # noqa: BLE001
             print(f"  خطا {rid}: {type(e).__name__} {e}")
             continue
@@ -235,9 +239,9 @@ def export(mk, lab, R):
     for n, M in S.items():
         Z = np.full((rows, k), -128, np.int8)
         for r in range(rows):
-            z = sg.winsor_z(M[r], ok[r].astype(bool))
+            z = cn.quant(sg.winsor_z(M[r], ok[r].astype(bool)))
             m = ~np.isnan(z)
-            Z[r, m] = np.clip(np.round(z[m] * 40), -127, 127).astype(np.int8)
+            Z[r, m] = np.round(z[m] * 40).astype(np.int8)
         meta = {c: v for c, v in sg.REG[n].items() if c != "fn"}
         sig.append({**meta, "z": b64(Z)})
     mcap = np.log(np.where(mk.mcap[lab.idx] > 0, mk.mcap[lab.idx], np.nan)).astype(np.float32)
@@ -275,7 +279,7 @@ def export(mk, lab, R):
                     "stats": {a: (None if (isinstance(b, float) and b != b) else b) for a, b in st.items()}, "ic": r["ic"], "dsr": r.get("dsr"), "verdict": r["verdict"],
                     "bhy": r.get("bhy"), "live": (top_holdings(lab, res) if r["group"] != "sig" else None), "ic_series": [None if x != x else round(float(x), 4) for x in res["ic"]]})
     data = {"use": [int(r) for r in lab.use], "built": time.strftime("%Y-%m-%d %H:%M"), "asof": str(mk.dates[-1].date()), "rows": rows, "k": k, "months_end": ends, "sig_dates": [str(mk.dates[a].date()) for a in lab.idx],
-            "codes": codes, "divs": divs, "px": [0 if x != x else float(x) for x in mk.close[-1]], "sectors": sectors, "ok": b64(ok), "fw": b64(np.nan_to_num(fw, nan=-9).astype(np.float32)), "mcap": b64(np.nan_to_num(mcap, nan=-1)),
+            "codes": codes, "divs": divs, "px": [0 if x != x else float(x) for x in mk.close[-1]], "sectors": sectors, "ok": b64(ok), "fw": b64(np.nan_to_num(fw, nan=-9).astype(np.float32)), "mcap": b64(np.nan_to_num(mcap, nan=-99)),
             "vol": b64(np.nan_to_num(vol, nan=-1)), "adv": b64(np.nan_to_num(adv, nan=-1)), "signals": sig,
             "zoo": R["zoo"], "fm": R["fm"], "corr": R["corr"], "dec": R["dec"], "library": lib, "multi": R["multi"], "cost_bp": COST,
             "algos": [{c: v for c, v in a.items() if c != "fn"} for a in cn.ALGOS.values()]}

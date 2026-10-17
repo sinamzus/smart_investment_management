@@ -65,3 +65,15 @@ th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: v
   .workspace.v-lab, .workspace.v-sig, .workspace.v-plan { grid-template-columns: 1fr !important; }
   .lb-grid2 { grid-template-columns: 1fr; }
 }
+
+th.sortable.asc::after { content: ' ▲'; } th.sortable.desc::after { content: ' ▼'; }
+
+/* ── نوار بالا: ۱۴ نما در چهار گروه، بدون بزرگ‌کردن صفحه ── */
+.app { grid-template-columns: minmax(0, 1fr); }
+.topbar > * { min-width: 0; }
+.nav { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; flex: 0 1 auto; }
+.nav a { white-space: nowrap; padding: 0 var(--s-3); }
+.nav a kbd { display: none; }
+@media (min-width: 1500px) { .nav a kbd { display: inline-block; } }
+.lb-bars { direction: ltr; }
+.lb-bars .sb span, .lb-bars .sb em { direction: ltr; }

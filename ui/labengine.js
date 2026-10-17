@@ -31,6 +31,11 @@ function rankPct(v, mask) { // رتبهٔ درصدی (۰..۱) برای عناص�
   let i = 0; while (i < n) { let j = i; while (j + 1 < n && v[idx[j + 1]] === v[idx[i]]) j++; const r = (i + j) / 2 + 0.5; for (let t = i; t <= j; t++) out[idx[t]] = r / n; i = j + 1; }
   return out;
 }
+function topPct(v, mask) { // رتبهٔ درصدی از بالا، ترتیبی (بدون میانگین پیوندها) — همان tools/construction.py
+  const idx = []; for (let i = 0; i < v.length; i++) if (mask[i] && !isNaN(v[i])) idx.push(i);
+  idx.sort((a, b) => v[a] - v[b] || a - b);
+  const out = new Float64Array(v.length).fill(NaNv), n = idx.length; for (let j = 0; j < n; j++) out[idx[n - 1 - j]] = (j + 0.5) / n; return out;
+}
 function spearman(x, y) {
   const m = new Uint8Array(x.length); let n = 0; for (let i = 0; i < x.length; i++) { m[i] = !isNaN(x[i]) && !isNaN(y[i]) ? 1 : 0; n += m[i]; }
   if (n < 20) return NaNv;
@@ -118,13 +123,14 @@ function capW(w, mx) {
 function selected(c, entry, exit) {
   const m = new Uint8Array(c.k); let n = 0; for (let i = 0; i < c.k; i++) { m[i] = c.ok[i] && !isNaN(c.score[i]) ? 1 : 0; n += m[i]; }
   if (n < 30) return [];
-  const pct = rankPct(c.score.map(x => -x), m), sel = [];     // رتبهٔ درصدی از بالا
+  const pct = topPct(c.score, m), sel = [];     // رتبهٔ درصدی از بالا
   for (let i = 0; i < c.k; i++) if (m[i] && ((c.held[i] && pct[i] <= exit) || pct[i] <= entry)) sel.push(i);
   return sel;
 }
 const ALGO = {
   quantile(c, p) { const G = p.G || 5, kk = p.k || G, m = []; for (let i = 0; i < c.k; i++) if (c.ok[i] && !isNaN(c.score[i])) m.push(i); const w = new Float64Array(c.k); if (m.length < 30) return w;
-    m.sort((a, b) => c.score[a] - c.score[b] || a - b); const sz = m.length / G, lo = Math.round((kk - 1) * sz), hi = Math.round(kk * sz); const g = m.slice(lo, hi); g.forEach(i => { w[i] = 1 / g.length; }); return w; },
+    m.sort((a, b) => c.score[a] - c.score[b] || a - b); const n = m.length, base = Math.floor(n / G), ex = n % G; let lo = 0; for (let g = 1; g < kk; g++) lo += base + (g - 1 < ex ? 1 : 0);
+    const sz = base + (kk - 1 < ex ? 1 : 0), grp = m.slice(lo, lo + sz); grp.forEach(i => { w[i] = 1 / grp.length; }); return w; },    // همان numpy.array_split
   topfrac(c, p) { const w = new Float64Array(c.k), sel = selected(c, p.entry ?? 0.2, Math.max(p.exit ?? 0.3, p.entry ?? 0.2)); sel.forEach(i => { w[i] = 1 / sel.length; }); return w; },
   topn(c, p) { let n = 0; for (let i = 0; i < c.k; i++) if (c.ok[i] && !isNaN(c.score[i])) n++; const N = p.N || 50, B = p.buffer ?? 25; return n < 30 ? new Float64Array(c.k) : ALGO.topfrac(c, { entry: Math.min(N / n, 1), exit: Math.min((N + B) / n, 1) }); },
   score_tilt(c, p) { const w = new Float64Array(c.k); let s = 0, n = 0; for (let i = 0; i < c.k; i++) if (c.ok[i] && !isNaN(c.score[i])) { w[i] = Math.exp((p.lam ?? 1) * Math.max(-3, Math.min(3, c.score[i]))); s += w[i]; n++; } if (n < 30) return new Float64Array(c.k); return w.map(x => x / s); },
@@ -151,7 +157,7 @@ function run(ctx, spec) {
     let w = prev, to = 0, sc = null;
     if (reb) {
       sc = score(ctx, spec, r);
-      const c = { k, score: sc, ok, held, mcap: ctx.mcap.subarray(r * k, (r + 1) * k).map(Math.exp), vol: ctx.vol.subarray(r * k, (r + 1) * k) };
+      const c = { k, score: sc, ok, held, mcap: ctx.mcap.subarray(r * k, (r + 1) * k).map(v => v < -40 ? 0 : Math.exp(v)), vol: ctx.vol.subarray(r * k, (r + 1) * k) };
       let wn = algo(c, p); let s = 0; for (const x of wn) s += x; if (s <= 0) continue;
       if (mx) wn = capW(wn, mx);
       if (kappa < 1 && !first) { wn = wn.map((x, i) => Math.max(prev[i] + kappa * (x - prev[i]), 0)); const t = wn.reduce((a, b) => a + b, 0); wn = wn.map(x => x / t); }
@@ -169,7 +175,7 @@ function run(ctx, spec) {
   }
   // وزن هدف زنده (آخرین سطر)
   const rl = ctx.rows - 1, okr = okAt(ctx, rl), okl = new Uint8Array(k); for (let i = 0; i < k; i++) okl[i] = okr[i] && mk.has(ctx.mkt[i]) && (minAdv == null || ctx.adv[rl * k + i] >= minAdv) ? 1 : 0;
-  const scl = score(ctx, spec, rl), cl = { k, score: scl, ok: okl, held, mcap: ctx.mcap.subarray(rl * k, (rl + 1) * k).map(Math.exp), vol: ctx.vol.subarray(rl * k, (rl + 1) * k) };
+  const scl = score(ctx, spec, rl), cl = { k, score: scl, ok: okl, held, mcap: ctx.mcap.subarray(rl * k, (rl + 1) * k).map(v => v < -40 ? 0 : Math.exp(v)), vol: ctx.vol.subarray(rl * k, (rl + 1) * k) };
   let wl = algo(cl, p); if (mx && wl.reduce((a, b) => a + b, 0) > 0) wl = capW(wl, mx);
   out.live = { target: wl, score: scl, drift: prev };
   return out;

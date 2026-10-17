@@ -33,7 +33,7 @@ def fama_macbeth(lab, name, controls=(), rows=None, use_neutral=False):
     for r in rows:
         zs = [lab.z(n, r) for n in (name, *controls)]
         if use_neutral:
-            zs = [_neu(np.nan_to_num(z), lab.sector) * np.where(np.isnan(z), np.nan, 1.0) for z in zs]
+            zs = [_neu(z, lab.sector) for z in zs]
         y = lab.fw[r]
         A = np.column_stack(zs)
         m = ~np.isnan(A).any(axis=1) & ~np.isnan(y) & lab.ok[r]
