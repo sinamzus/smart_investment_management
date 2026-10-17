@@ -55,6 +55,9 @@ ALIASES = {"سنگ آهن گهرزمین": "کگهر"}
 
 
 def match(name: str, names: dict) -> str:
+    m = re.search(r"\(([^()]+)\)\s*$", norm(name))
+    if m and key(m.group(1)) in names:                         # کیان و ...: «نام شرکت (نماد)»
+        return names[key(m.group(1))]
     k = key(name)
     for a, sym in ALIASES.items():
         if key(a) == k:
@@ -67,6 +70,44 @@ def match(name: str, names: dict) -> str:
     return names[cand[0]] if cand else ""
 
 
+_PX = {}
+
+
+def price_index():
+    """(تاریخ معاملاتی → {قیمت پایانی: [نماد…]}) از پنل سهام بورسی؛ برای تطبیق نام‌های کوتاه‌شدهٔ کدال با قیمت همان روز."""
+    if not _PX:
+        import build_ui_extra as bx
+        _, _, R = bx.base_panel()
+        R = R[R.date >= "2022-01-01"]
+        R = R.assign(sym=R.symbol.map(norm))
+        for d, g in R.groupby("date"):
+            m = {}
+            for sym, pc in zip(g.sym, g.pClosing):
+                m.setdefault(int(round(pc)), []).append(sym)
+            _PX[d] = m
+        _PX["_dates"] = sorted(k for k in _PX if k != "_dates")
+    return _PX
+
+
+def price_match(name: str, price, date_iso: str, inv_names: dict) -> str:
+    try:
+        pr = int(round(float(price)))
+    except (TypeError, ValueError):
+        return ""
+    import pandas as pd
+    px = price_index()
+    ds = [d for d in px["_dates"] if d <= pd.Timestamp(date_iso)]
+    for d in ds[-3:][::-1]:                               # آخرین روز معاملاتی تا ۲ روز قبل (روز تعطیل)
+        cand = px[d].get(pr, [])
+        if len(cand) == 1:
+            return cand[0]
+        if len(cand) > 1:
+            k = key(name)
+            best = max(cand, key=lambda c: difflib.SequenceMatcher(None, k, key(inv_names.get(c, c))).ratio())
+            return best
+    return ""
+
+
 def month_end(title: str):
     m = re.search(r"منتهی\s*به\s*([\d۰-۹]{4})/([\d۰-۹]{1,2})/([\d۰-۹]{1,2})", title.translate(FA).replace("‌", " "))
     if not m:
@@ -75,32 +116,72 @@ def month_end(title: str):
     return j2g(y, mo, d).isoformat()
 
 
+def read_sheets(path: Path) -> list:
+    """[(نام برگه، ردیف‌ها)] برای xlsx، xlsx با پسوند اشتباه (zip/30/…) و xls قدیمی؛ نوع فایل از امضای آن تشخیص داده می‌شود."""
+    import io
+    data = path.read_bytes()
+    if data[:2] == b"PK":
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        return [(ws.title, list(ws.iter_rows(values_only=True))) for ws in wb.worksheets]
+    if data[:4] == b"\xd0\xcf\x11\xe0":
+        import xlrd
+        wb = xlrd.open_workbook(file_contents=data)
+        return [(sh.name, [tuple(sh.row_values(r)) for r in range(sh.nrows)]) for sh in wb.sheets()]
+    return []
+
+
+MARKS = dict.fromkeys(map(ord, "\u202a\u202b\u202c\u202d\u202e\u200e\u200f\ufeff"))
+
+
+def clean(v) -> str:
+    return str(v).translate(MARKS).strip()
+
+
 def parse_xlsx(path: Path) -> list[dict]:
-    wb = openpyxl.load_workbook(path, data_only=True)
-    ws = wb["سهام"] if "سهام" in wb.sheetnames else wb.worksheets[0]
-    rows = list(ws.iter_rows(values_only=True))
-    hdr = next((i for i, r in enumerate(rows) if r and r[0] and "نام شرکت" in str(r[0])), None)
-    if hdr is None:
-        return []
-    h = rows[hdr]
-    last = lambda lab: max((j for j, v in enumerate(h) if v and lab in str(v)), default=None)
-    c_pct, c_price, c_qty = last("درصد به کل"), last("قیمت بازار"), last("تعداد")
-    out = []
-    for r in rows[hdr + 1:]:
-        if not r or r[0] is None:
+    """برگهٔ سهام: قالب صندوق‌ها فرق دارد (نام ستون «شرکت»/«نام شرکت»، ردیف سرستون ۶ تا ۹)؛ ستون «درصد … دارایی» از ۳ ردیف سرستون پیدا می‌شود."""
+    for title, rows in read_sheets(path):
+        hdr = None
+        for i, r in enumerate(rows[:40]):
+            cells = [clean(v) for v in (r or ()) if v is not None]
+            if any(c in ("شرکت", "نام شرکت", "نام سهام") for c in cells):
+                blk = [clean(v) for rr in rows[i:i + 3] for v in (rr or ()) if v is not None]
+                if any("درصد" in c and "دارایی" in c for c in blk) and "قیمت" in " ".join(blk):
+                    hdr = i
+                    break
+        if hdr is None:
             continue
-        nm = str(r[0]).strip()
-        if nm.startswith("جمع"):
-            break
-        v = r[c_pct] if c_pct is not None else None
-        if isinstance(v, (int, float)):
-            out.append({"name_fa": nm, "weight_pct": float(v), "qty": r[c_qty] if c_qty is not None else None,
-                        "price": r[c_price] if c_price is not None else None})
-    return out
+
+        def last(lab, both=None):
+            best = None
+            for rr in rows[hdr:hdr + 3]:
+                for j, v in enumerate(rr or ()):
+                    if v is not None and lab in clean(v) and (both is None or both in clean(v)):
+                        best = j if best is None else max(best, j)
+            return best
+        c_pct, c_price, c_qty = last("درصد", "دارایی"), last("قیمت بازار"), last("تعداد")
+        c_nm = next((j for j, v in enumerate(rows[hdr]) if v is not None and clean(v) in ("شرکت", "نام شرکت", "نام سهام")), 0)
+        out = []
+        for r in rows[hdr + 2:]:
+            if not r or c_nm >= len(r) or r[c_nm] is None or clean(r[c_nm]) == "":
+                continue
+            nm = clean(r[c_nm])
+            if nm.startswith("جمع"):
+                break
+            v = r[c_pct] if c_pct is not None and c_pct < len(r) else None
+            if isinstance(v, (int, float)):
+                out.append({"name_fa": nm, "weight_pct": float(v), "qty": r[c_qty] if c_qty is not None and c_qty < len(r) else None,
+                            "price": r[c_price] if c_price is not None and c_price < len(r) else None})
+        if out:
+            if sum(o["weight_pct"] for o in out) <= 1.5:          # برخی صندوق‌ها کسر (۰ تا ۱) می‌نویسند نه درصد
+                for o in out:
+                    o["weight_pct"] *= 100
+            return out
+    return []
 
 
 def main():
     names = load_names()
+    inv = {v: k for k, v in names.items()}
     OUT.mkdir(parents=True, exist_ok=True)
     unmatched = {}
     for fdir in sorted(p for p in RAW.iterdir() if p.is_dir()):
@@ -112,15 +193,27 @@ def main():
             if "پورتفوی" not in title and "پرتفوی" not in title:
                 continue
             d = month_end(title)
-            xs = sorted(fdir.glob(mp.name.replace(".meta.json", "_att*.xls*")))
+            xs = sorted(fdir.glob(mp.name.replace(".meta.json", "_att*")))
             if not d or not xs:
                 continue
+            pub = str(meta.get("PublishDateTime") or "").translate(FA)[:10].replace("/", "-")
+            if re.match(r"\d{4}-\d\d-\d\d", pub) and d > j2g(*(int(x) for x in pub.split("-"))).isoformat():
+                continue                                   # تاریخ آیندهٔ اشتباه در عنوان (مثلاً ۱۴۰۶ به‌جای ۱۴۰۵)
             for it in parse_xlsx(xs[0]):
-                s = match(it["name_fa"], names)
+                s = match(it["name_fa"], names) or price_match(it["name_fa"], it["price"], d, inv)
                 if not s:
                     unmatched[(sym, it["name_fa"])] = unmatched.get((sym, it["name_fa"]), 0) + 1
                 recs.append({"date": d, "symbol": s, "name_fa": it["name_fa"], "weight_pct": round(it["weight_pct"], 4),
                              "qty": it["qty"], "price": it["price"], "matched": int(bool(s))})
+        if not recs:
+            continue
+        tot = {}
+        for r in recs:
+            tot[r["date"]] = tot.get(r["date"], 0) + r["weight_pct"]
+        bad = sorted(d for d, v in tot.items() if not 50 <= v <= 106)   # مجموع سهام باید ۵۰ تا ~۱۰۵٪ دارایی باشد؛ غیر از این یعنی ستون/برگهٔ اشتباه خوانده شده
+        if bad:
+            print(f"  {sym}: {len(bad)} ماه با مجموع نامعتبر کنار گذاشته شد: " + "، ".join(f"{d} ({tot[d]:.0f}٪)" for d in bad[:6]))
+        recs = [r for r in recs if r["date"] not in bad]
         if not recs:
             continue
         recs.sort(key=lambda r: (r["date"], -r["weight_pct"]))
