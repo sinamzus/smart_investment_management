@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""دادهٔ نمای «نماد» در UI (ui/data/symbols.js = window.SIM_SYMBOLS): هر سهم بورسیِ جهان بازسازی.
+"""دادهٔ نمای «نماد» در UI (ui/data/symbols.js = window.SIM_SYMBOLS): هر سهم بورس و فرابورس.
 
     python tools/build_ui_symbols.py
 
@@ -26,8 +26,9 @@ def r(x, n=4):
 
 
 def main():
-    panel, info, R = bx.base_panel()
-    R = R[R.date >= START]
+    panel, info, Ra = bx.base_panel(bx.ALL_MARKETS)       # همهٔ سهام بورس + فرابورس؛ وزن‌های K/EW فقط برای بورس
+    Rb = bx.bourse_view(Ra)
+    R = Ra[Ra.date >= START]
     kret = ew.official("32097828799138957")
     sc = pd.read_csv(ROOT / "data/corporate_actions/share_change.csv", dtype={"ins_code": str})
     sc["date"] = pd.to_datetime(sc.dEven.astype(str), format="%Y%m%d")
@@ -40,7 +41,9 @@ def main():
     nm = info.set_index("ins_code")
     last_day = R.date.max()
     alive = set(R[R.date == last_day].ins_code)
-    n_alive = len(alive)
+    alive_b = set(Rb[Rb.date == last_day].ins_code)
+    wk = Rb[Rb.date == last_day].set_index("ins_code").wt
+    n_alive = len(alive_b)
     out = {}
     for code, g in R.groupby("ins_code"):
         g = g.sort_values("date")
@@ -70,8 +73,8 @@ def main():
             "name": str(g.name.iloc[-1] if "name" in g else ""), "sector": str(nm.sector_name.get(code, "") or "").strip(),
             "code": code, "alive": code in alive, "first": str(g.date.iloc[0].date()), "last": str(g.date.iloc[-1].date()),
             "d": [str(g.date.iloc[i].date()) for i in idx], "tr": [r(tr.iloc[i], 4) for i in idx], "pr": [r(pr.iloc[i], 4) for i in idx],
-            "price": r(lg.pClosing, 0), "mcap": r(lg.pClosing * lg.shares, 0), "w_k": r(lg.wt * 100, 4) if code in alive else None,
-            "w_ew": r(100 / n_alive, 4) if code in alive else None,
+            "price": r(lg.pClosing, 0), "mcap": r(lg.pClosing * lg.shares, 0), "w_k": r(wk.get(code) * 100, 4) if code in alive_b else None,
+            "w_ew": r(100 / n_alive, 4) if code in alive_b else None, "market": str(lg.market),
             "ret1y": r(((1 + y1).prod() - 1) * 100, 1), "ret3y_ann": r(((1 + y3).prod() ** (365 / max((y3.index[-1] - y3.index[0]).days, 1)) - 1) * 100, 1) if len(y3) > 200 else None,
             "vol1y": r(y1.std() * np.sqrt(252) * 100, 1), "mdd": r(dd * 100, 1), "beta1y": r(beta, 2),
             "nontraded1y": r((g[g.date > last_day - pd.Timedelta(days=365)].zTotTran == 0).mean() * 100, 1) if "zTotTran" in g else None,

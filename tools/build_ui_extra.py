@@ -116,17 +116,28 @@ def divlab():
 
 
 # ── پایهٔ مشترک: ماتریس بازده و وزن ──────────────────────────────────────
-def base_panel():
+ALL_MARKETS = ("bourse", "farabourse")      # جهان فاکتورها/نماد/تطبیق پرتفوی؛ بازسازی شاخص‌های رسمی (K, EW) فقط بورس است
+
+
+def base_panel(markets=("bourse",)):
+    """markets=("bourse",): جهان شاخص‌های رسمی «كل»؛ ALL_MARKETS: همهٔ سهام بورس+فرابورس (وزن wt نسبت به همان جهان است)."""
     sc = pd.read_csv(ROOT / "data/corporate_actions/share_change.csv", dtype={"ins_code": str})
     sc["date"] = pd.to_datetime(sc.dEven.astype(str), format="%Y%m%d")
     info = pd.read_csv(ROOT / "data/corporate_actions/instrument_info.csv", dtype={"ins_code": str})
     panel = ew.load_panel()
-    R = cw.classify_events(ew.daily_returns(panel), sc)
+    R = cw.classify_events(ew.daily_returns(panel, markets), sc)
     R["shares"] = cw.shares_timeline(R, sc, info)
     R = R.dropna(subset=["shares"]).copy()
     R["w"] = R.priceYesterday * R.shares
     R["wt"] = R.w / R.groupby("date").w.transform("sum")
     return panel, info, R
+
+
+def bourse_view(Ra):
+    """زیرمجموعهٔ بورس از پانل همهٔ بازارها؛ وزن ارزش بازاری (wt) نسبت به جهان بورس بازنرمال می‌شود (بازسازی شاخص‌های رسمی «كل» فقط بورس است)."""
+    R = Ra[Ra.market == "bourse"].copy()
+    R["wt"] = R.w / R.groupby("date").w.transform("sum")
+    return R
 
 
 # ── Rebalance ────────────────────────────────────────────────────────────
@@ -404,7 +415,7 @@ def fund(R, info):
 
 
 # ── Data QA ──────────────────────────────────────────────────────────────
-def qa(panel, info, R):
+def qa(panel, info, R, Ra=None):
     sec = cs.compute()
     nm = info.dropna(subset=["sector_name"]).assign(sec=lambda d: d.sector_code.astype(str).str.strip().str.lstrip("0")).drop_duplicates("sec").set_index("sec").sector_name
     sectors = [{"sector": s, "name": str(nm.get(s.lstrip("0"), "")).strip(), "n_last": int(a), "n_miss": int(b), "corr": r(c, 4), "te": r(d, 2), "cum": r(e, 3),
@@ -434,7 +445,10 @@ def qa(panel, info, R):
     return {"sectors": sectors, "glitches": glitches,
             "universe": {"k_members": len(kmem), "k_with_prices": len(kmem & have), "extras": int(len(ex)),
                          "instruments_with_prices": len(have), "live_instruments": int(len(live)),
-                         "stocks_bourse_in_returns": int(R.ins_code.nunique())},
+                         "stocks_bourse_in_returns": int(R.ins_code.nunique()),
+                         **({"stocks_farabourse_in_returns": int(Ra[Ra.market == "farabourse"].ins_code.nunique()),
+                             "stocks_all_in_returns": int(Ra.ins_code.nunique()),
+                             "factor_universe_last": int(Ra[Ra.date == Ra.date.max()].ins_code.nunique())} if Ra is not None else {})},
             "rules": rules,
             "sector_summary": {"comparable": int(sum(1 for s in sectors if s["te"] is not None)),
                                "median_te": r(np.nanmedian([min(x for x in (s["te"], s["te_all"]) if x is not None) for s in sectors if s["te"] is not None]), 2),
@@ -463,13 +477,16 @@ def reports():
 
 
 def main():
-    panel, info, R = base_panel()
+    panel, info, Ra = base_panel(ALL_MARKETS)       # جهان فاکتورها: بورس + فرابورس
+    R = bourse_view(Ra)                              # جهان شاخص‌های رسمی «كل»
     data = {"built": datetime.now().strftime("%Y-%m-%d %H:%M"), "divlab": divlab(), "rebalance": rebalance(R),
-            "factor": factor(R), "factor_lowvol": factor(R, "lowvol"), "risk": risk(R, info), "fund": fund(R, info),
-            "qa": qa(panel, info, R), "reports": reports()}
-    fq = factor_quality(R, info)
+            "factor": factor(Ra), "factor_lowvol": factor(Ra, "lowvol"), "risk": risk(R, info), "fund": fund(R, info),
+            "factor_b": factor(R), "factor_lowvol_b": factor(R, "lowvol"),
+            "qa": qa(panel, info, R, Ra), "reports": reports()}
+    fq = factor_quality(Ra, info)
     if fq:
         data["factor_quality"] = fq
+        data["factor_quality_b"] = factor_quality(R, info)
     OUT.write_text("window.SIM_EXTRA = " + json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str) + ";\n", encoding="utf-8")
     print(f"ذخیره شد: {OUT} ({OUT.stat().st_size/1e3:.0f} KB)")
     print("factor:", json.dumps({k: v for k, v in data["factor"].items() if k not in ("curve", "yearly", "monthly")}, ensure_ascii=False))

@@ -4,7 +4,7 @@
 
 ورودی:  data/corporate_actions/dividend_payment_lags.csv   (tools/parse_dividend_payments.py؛ تاریخ مؤثر = سجامی)
         data/corporate_actions/payment_dates_farabi.csv    (tools/parse_farabi_dividends.py؛ فقط ردیف‌های سجامی)
-        پانل بازده نمادها (build_ui_extra.base_panel) برای روز استحقاق و وزن.
+        پانل بازده نمادها (build_ui_extra.base_panel: بورس + فرابورس برای روز استحقاق؛ وزن فقط از بورس).
 خروجی:  data/corporate_actions/dividend_payment_events.csv
     symbol, agm_j, dps_rial, pay_j, pay_kind, source (codal|farabi|both|conflict→farabi), ex_date, lag_agm, lag_ex,
     y (بازده سود روز استحقاق = r_TR − r_PR), wt (وزن ارزشی نماد در «شاخص كل» همان روز), wK = wt·y (سهم از جریان سود شاخص كل), wEW = y
@@ -77,7 +77,7 @@ def attach_ex_and_weights(E: pd.DataFrame, R: pd.DataFrame) -> pd.DataFrame:
     R["y"] = R.r_tr - R.r_pr
     R = R[R.y > 1e-6]
     by = {s: x.sort_values("date") for s, x in R.groupby("sym")}
-    ex, y, wt = [], [], []
+    ex, y, wt, mk = [], [], [], []
     for _, r in E.iterrows():
         x = by.get(r.symbol)
         best = None
@@ -93,14 +93,14 @@ def attach_ex_and_weights(E: pd.DataFrame, R: pd.DataFrame) -> pd.DataFrame:
                 else:
                     best = w.loc[w.y.idxmax()]
         if best is None:
-            ex.append(""); y.append(np.nan); wt.append(np.nan)
+            ex.append(""); y.append(np.nan); wt.append(np.nan); mk.append("")
         else:
-            ex.append(str(best.date.date())); y.append(float(best.y)); wt.append(float(best.wt))
+            ex.append(str(best.date.date())); y.append(float(best.y)); wt.append(float(best.wt)); mk.append(str(best.market))
     E = E.copy()
-    E["ex_date"], E["y"], E["wt"] = ex, y, wt
+    E["ex_date"], E["y"], E["wt"], E["market"] = ex, y, wt, mk
     E["lag_ex"] = [(g(p) - pd.Timestamp(e)).days if e else np.nan for p, e in zip(E.pay_j, E.ex_date)]
     E["wK"] = E.wt * E.y
-    E["wEW"] = E.y
+    E["wEW"] = E.y.where(E.market == "bourse", 0.0)      # وزن‌ها فقط برای جهان شاخص‌های رسمی (بورس)؛ رویداد فرابورسی فقط آمار تأخیر/ماکت صندوق‌هاست
     return E
 
 
@@ -108,8 +108,11 @@ def main():
     import build_ui_extra as bx
     E = load_events()
     print(f"رویداد ادغام‌شده: {len(E)} ({E.symbol.nunique()} نماد)؛ منبع: {E.source.value_counts().to_dict()}")
-    _, _, R = bx.base_panel()
-    E = attach_ex_and_weights(E, R)
+    _, _, Ra = bx.base_panel(bx.ALL_MARKETS)        # روز استحقاق از بورس + فرابورس
+    R = bx.bourse_view(Ra)                          # وزن‌ها و پوشش نسبت به جهان شاخص‌های رسمی (بورس)
+    wmap = R.set_index(["ins_code", "date"]).wt
+    Ra["wt"] = wmap.reindex(pd.MultiIndex.from_frame(Ra[["ins_code", "date"]])).fillna(0).values
+    E = attach_ex_and_weights(E, Ra)
     E.to_csv(OUT, index=False, encoding="utf-8")
     m = E[E.ex_date != ""]
     print(f"با روز استحقاق و وزن در پانل: {len(m)} ({m.symbol.nunique()} نماد)")

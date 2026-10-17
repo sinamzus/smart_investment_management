@@ -69,7 +69,7 @@ _PANEL = {}
 
 def panel():
     if not _PANEL:
-        _, _, R = bx.base_panel()
+        _, _, R = bx.base_panel(bx.ALL_MARKETS)       # بورس + فرابورس
         R = R[R.date >= "2014-03-19"].copy()
         R["sym"] = R.symbol.map(norm)
         _PANEL["tr"] = R.pivot_table(index="date", columns="sym", values="r_tr", aggfunc="last")

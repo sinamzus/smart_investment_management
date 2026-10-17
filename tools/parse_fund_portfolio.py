@@ -77,7 +77,7 @@ def price_index():
     """(تاریخ معاملاتی → {قیمت پایانی: [نماد…]}) از پنل سهام بورسی؛ برای تطبیق نام‌های کوتاه‌شدهٔ کدال با قیمت همان روز."""
     if not _PX:
         import build_ui_extra as bx
-        _, _, R = bx.base_panel()
+        _, _, R = bx.base_panel(bx.ALL_MARKETS)       # بورس + فرابورس (صندوق‌ها فرابورسی هم نگه می‌دارند)
         R = R[R.date >= "2022-01-01"]
         R = R.assign(sym=R.symbol.map(norm))
         for d, g in R.groupby("date"):
@@ -140,7 +140,7 @@ def price_series() -> dict:
     """نماد ← سری قیمت پایانی (pClosing) از پنل بورسی؛ برای ردگیری نزدیک‌ترین قیمت هنگام تطبیق نام کوتاه."""
     if not _PS:
         import build_ui_extra as bx
-        _, _, R = bx.base_panel()
+        _, _, R = bx.base_panel(bx.ALL_MARKETS)
         R = R[R.date >= "2017-01-01"].assign(sym=lambda x: x.symbol.map(norm))
         for sym, g in R.groupby("sym"):
             _PS[sym] = g.set_index("date").pClosing.sort_index()

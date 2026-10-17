@@ -102,15 +102,16 @@ function initDiv() {
 }
 
 /* ══════════ Factor Lab ══════════ */
-const facState = { i: null, sig: 'mom', cost: 100 };
+const facState = { i: null, sig: 'mom', cost: 100, uni: 'all' };
 const FAC_LAB = {
   mom: { title: 'مومنتوم ۱۲−۱ · پنج‌گانه‌ها', Q1: 'پنجک ۱ (ضعیف‌ترین مومنتوم)', Q5: 'پنجک ۵ (قوی‌ترین مومنتوم)', file: 'momentum' },
   lowvol: { title: 'کم‌نوسان ۲۵۲ روزه · پنج‌گانه‌ها', Q1: 'پنجک ۱ (پرنوسان‌ترین)', Q5: 'پنجک ۵ (کم‌نوسان‌ترین)', file: 'lowvol' },
   quality: { title: 'کیفیت (ROE · اهرم · ثبات سود) · پنج‌گانه‌ها', Q1: 'پنجک ۱ (کم‌کیفیت‌ترین)', Q5: 'پنجک ۵ (باکیفیت‌ترین)', file: 'quality' }
 };
-const facData = sig => sig === 'mom' ? X.factor : sig === 'lowvol' ? X.factor_lowvol : X.factor_quality;
+const facData = sig => { const k = sig === 'mom' ? 'factor' : sig === 'lowvol' ? 'factor_lowvol' : 'factor_quality'; return (facState.uni === 'b' && X[k + '_b']) || X[k]; };
 function initFac() {
   document.querySelectorAll('#fc-sig button').forEach(b => b.onclick = () => { facState.sig = b.dataset.s; facState.i = null; renderFacSig(); });
+  document.querySelectorAll('#fc-uni button').forEach(b => b.onclick = () => { facState.uni = b.dataset.u; facState.i = null; renderFacSig(); });
   $('fc-cost').oninput = e => { facState.cost = Math.max(0, +e.target.value || 0); renderFacSig(); };
   renderFacSig();
 }
@@ -131,6 +132,7 @@ function facNet(F, bp = facState.cost) {
 }
 function renderFacSig() {
   document.querySelectorAll('#fc-sig button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === facState.sig));
+  document.querySelectorAll('#fc-uni button').forEach(b => b.setAttribute('aria-pressed', b.dataset.u === facState.uni));
   const qual = facState.sig === 'quality' && !X.factor_quality;
   $('fc-ctl').hidden = qual;
   if (qual) {
@@ -142,7 +144,7 @@ function renderFacSig() {
   }
   const F = facData(facState.sig), L = FAC_LAB[facState.sig];
   $('fc-title').textContent = L.title;
-  $('fc-chip').textContent = `بک‌تست ماهانه · ${F.n_months} ماه · خالص هزینه` + (F.coverage ? ` · ${F.coverage.median} سهم امتیازدار` : '');
+  $('fc-chip').textContent = `بک‌تست ماهانه · ${F.n_months} ماه · ${facState.uni === 'b' ? 'فقط بورس' : 'بورس + فرابورس'} · خالص هزینه` + (F.coverage ? ` · ${F.coverage.median} سهم امتیازدار` : '');
   renderFac(F, L);
 }
 function renderFac(F, L) {
@@ -181,7 +183,7 @@ function renderFac(F, L) {
   <li><b>هزینه:</b> گردش یک‌طرفهٔ واقعی هر ماه (½ Σ|وزن هدف − وزن رانش‌یافته|) × هزینهٔ رفت‌وبرگشت ورودی؛ ساخت اولیه حساب نمی‌شود. همین هزینه به سبد «همه» هم اعمال می‌شود.</li>
   <li><b>آزمون:</b> t با خطای معیار نیوی‌وست (۳ وقفه) چون بازده ماهانهٔ بازار ایران خودهمبستگی مثبت دارد؛ سالانه‌سازی بازده با ۱۲ ماه، نوسان با √۱۲.</li>
   <li><b>بازه:</b> ${facState.sig === 'quality' ? `از نخستین ماهی که دست‌کم ۳۰ سهم امتیاز دارند (${F.from})؛ عمق تاریخچه را صورت‌های مالی رهاورد تعیین می‌کند، نه قیمت‌ها` : 'از ۱۳۹۵/۰۱؛ سیگنال از ۲۰۱۵ ساخته می‌شود'}.</li></ol>
-  <p><b>محدودیت‌ها:</b> جهان شامل اعضای فعلی «شاخص كل» و ${X.qa.universe.extras} نماد حذف‌شدهٔ بازیابی‌شده است، نه همهٔ نمادهای تاریخی؛ «پنجک ۵ − پنجک ۱» به فروش استقراضی نیاز دارد که در بورس تهران عملاً در دسترس نیست و فقط شاخص تشخیصی فاکتور است؛ مدل هزینه خطی است و صف خرید/فروش و دامنهٔ نوسان را در نظر نمی‌گیرد (فصل ۶).</p>`;
+  <p><b>محدودیت‌ها:</b> ${facState.uni === 'b' ? `جهان فقط سهام بورس (${X.qa.universe.stocks_bourse_in_returns} نماد با بازده)` : `جهان همهٔ سهام بورس و فرابورس که قیمت دارند (${X.qa.universe.stocks_all_in_returns || '—'} نماد با بازده؛ عضویت در «شاخص كل» لازم نیست)`}، شامل نمادهای حذف‌شدهٔ بازیابی‌شده ولی نه لزوماً همهٔ نمادهای تاریخی؛ فرابورس سهام کم‌معامله بیشتری دارد و فقط فیلتر واجدیت (۸۰٪ روز داده، ۵۰٪ روز غیرصفر) اعمال می‌شود، نه حداقل ارزش معاملات؛ «پنجک ۵ − پنجک ۱» به فروش استقراضی نیاز دارد که در بورس تهران عملاً در دسترس نیست و فقط شاخص تشخیصی فاکتور است؛ مدل هزینه خطی است و صف خرید/فروش و دامنهٔ نوسان را در نظر نمی‌گیرد (فصل ۶).</p>`;
   $('fc-csv').onclick = () => download(`factor_${L.file}_monthly_net_${cost}bp.csv`, [['month_end', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL', 'to_Q5_pct', 'to_ALL_pct'], ...M.end.map((d, i) => [d, ...q.map(k => (N.net[k][i] * 100).toFixed(3)), M.to.Q5[i] ?? '', M.to.ALL[i] ?? ''])]);
 }
 
@@ -236,7 +238,7 @@ function initRep() {
     ['شاخص‌های صنعت', `${Q.comparable} قابل مقایسه · ${Q.n_corr99} با همبستگی ≥ ۰٫۹۹ · میانهٔ TE ${fmt(Q.median_te)}٪`, 'فصل ۳ §۳٫۴'],
     ['هزینهٔ تأخیر سود ۹۰ روزه (K / EW)', `${sgn(dvK.A.gap_pct_yr)}٪ / ${sgn(dvE.A.gap_pct_yr)}٪ در سال (بدون وام)`, 'فصل ۳ §۳٫۵'],
     ...(X.divlab.K.empirical ? [['هزینهٔ تأخیر سود با توزیع واقعی (K / EW)', `${sgn(X.divlab.K.empirical.A.gap_pct_yr)}٪ / ${sgn(X.divlab.EW.empirical.A.gap_pct_yr)}٪ در سال (بدون وام؛ ${X.divlab.payment_data.with_ex} رویداد، میانگین وزنی ${X.divlab.payment_data.k.mean} / ${X.divlab.payment_data.ew.mean} روز)`, 'فصل ۳ §۳٫۵']] : []),
-    ...[['مومنتوم ۱۲−۱', X.factor], ['کم‌نوسان ۲۵۲ روزه', X.factor_lowvol], ...(X.factor_quality ? [['کیفیت (رهاورد)', X.factor_quality]] : [])].map(([n, G]) => { const N = facNet(G, 100), s = mstats(N.ex), a = mstats(N.net.Q5).ann - mstats(N.net.ALL).ann;
+    ...[['مومنتوم ۱۲−۱ (بورس+فرابورس)', X.factor], ['کم‌نوسان ۲۵۲ روزه (بورس+فرابورس)', X.factor_lowvol], ...(X.factor_quality ? [['کیفیت (رهاورد؛ بورس+فرابورس)', X.factor_quality]] : [])].map(([n, G]) => { const N = facNet(G, 100), s = mstats(N.ex), a = mstats(N.net.Q5).ann - mstats(N.net.ALL).ann;
       return [n + ' (خالص ۱۰۰ bp)', `پنجک ۵ نسبت به همه ${sgn(a, 1)}٪ در سال · t نیوی‌وست ${fmt(s.t, 2)} · ${Math.abs(s.t) >= 1.96 ? 'معنادار' : 'غیرمعنادار'} در سطح ۵٪`, 'فصل ۵']; })];
   $('rp-sum').innerHTML = th([['نتیجه'], ['مقدار'], ['مرجع']]) + '<tbody>' + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="mute">${r[2]}</td></tr>`).join('') + '</tbody>';
   $('rp-text').innerHTML = `<b>وضعیت.</b> داده تا <span class="num">${D.meta.asof}</span>؛ ${fmt(D.meta.n_price_rows, 0)} ردیف قیمت. مرجع‌ها: «شاخص كل» و «كل (هم وزن)» رسمی. ماکت سرمایه‌پذیر با بازتولید کامل و بدون سقف سرمایه/وزن؛ تنها شکاف ساختاری، تأخیر پرداخت سود است و با تأخیر یکسان L مدل می‌شود. فاکتورها با بک‌تست ماهانهٔ خالص هزینه و آزمون نیوی‌وست سنجیده می‌شوند؛ بازده‌ها با سال تقویمی سالانه شده‌اند. «چاپ» ← PDF.`;
@@ -279,7 +281,7 @@ function setSym(s) {
   if (!d) { toast('نماد پیدا نشد: ' + s); return; }
   sy.s = s; sy.i = null; $('sy-q').value = s;
   $('sy-title').textContent = `${s} · ${d.name}`;
-  $('sy-chip').textContent = d.alive ? 'عضو «شاخص كل»' : 'حذف‌شده/غیرفعال تا ' + d.last; $('sy-chip').className = 'chip ' + (d.alive ? 'ok' : 'warn');
+  $('sy-chip').textContent = d.alive ? (d.w_k != null ? 'بورس · در بازسازی «شاخص كل»' : d.market === 'farabourse' ? 'فرابورس · فعال' : 'فعال') : 'حذف‌شده/غیرفعال تا ' + d.last; $('sy-chip').className = 'chip ' + (d.alive ? 'ok' : 'warn');
   $('sy-kpis').innerHTML = [['بازده ۱ سال', sgn(d.ret1y, 1) + '%', cls(d.ret1y)], ['بازده سالانهٔ ۳ سال', d.ret3y_ann == null ? '—' : sgn(d.ret3y_ann, 1) + '%', cls(d.ret3y_ann)], ['نوسان ۱ سال', fmt(d.vol1y, 1) + '%', ''], ['افت از اوج (از ۲۰۱۴)', fmt(d.mdd, 1) + '%', 'down'], ['بتا به «شاخص كل»', d.beta1y == null ? '—' : fmt(d.beta1y, 2), '']]
     .map(([k, v, c]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
   const divs = d.events.filter(e => e[1] === 'div').length, caps = d.events.length - divs;
@@ -288,7 +290,7 @@ function setSym(s) {
     const [dt, t, A, U] = e, isDiv = t === 'div';
     return `<tr><td class="num" title="${jd(dt)}">${dt}</td><td><span class="tag ${t}">${isDiv ? 'سود نقدی' : 'سرمایه'}</span></td><td class="n">${fmt(U, 0)}</td><td class="n">${fmt(A, 0)}</td><td class="n">${isDiv ? fmt(U - A, 0) : '×' + fmt(A / U, 3)}</td><td class="n">${isDiv ? fmt((U - A) / U * 100, 1) : '—'}</td></tr>`;
   }).join('') + '</tbody>';
-  $('sy-info').innerHTML = '<tbody>' + [['نام', d.name], ['صنعت', d.sector], ['کد (insCode)', `<span class="num">${d.code}</span>`], ['داده', `<span class="num">${d.first} → ${d.last}</span>`], ['قیمت پایانی', fmt(d.price, 0) + ' ریال'],
+  $('sy-info').innerHTML = '<tbody>' + [['نام', d.name], ['بازار', d.market === 'farabourse' ? 'فرابورس' : 'بورس'], ['صنعت', d.sector], ['کد (insCode)', `<span class="num">${d.code}</span>`], ['داده', `<span class="num">${d.first} → ${d.last}</span>`], ['قیمت پایانی', fmt(d.price, 0) + ' ریال'],
     ['ارزش بازار', fmt(d.mcap / 1e9, 0) + ' میلیارد ریال'], ['وزن در «شاخص كل» (بازسازی)', d.w_k == null ? '—' : fmt(d.w_k, 3) + '%'], ['وزن در هم‌وزن', d.w_ew == null ? '—' : fmt(d.w_ew, 3) + '%'], ['روزهای بدون معامله (۱ سال)', d.nontraded1y == null ? '—' : fmt(d.nontraded1y, 0) + '%']]
     .map(([k, v]) => `<tr><td class="mute">${k}</td><td>${v}</td></tr>`).join('') + '</tbody>';
   $('sy-agm').innerHTML = d.agm.length ? th([['سال مالی منتهی به'], ['تاریخ مجمع'], ['سود مصوب هر سهم (ریال)', 'n']]) + '<tbody>' + d.agm.slice().sort((a, b) => a[0] < b[0] ? 1 : -1).map(a => `<tr><td class="num">${a[0]}</td><td class="num">${a[1]}</td><td class="n">${a[2] ?? '—'}</td></tr>`).join('') + '</tbody>'

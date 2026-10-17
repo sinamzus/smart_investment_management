@@ -18,6 +18,7 @@ API عمومی (بدون ورود) که ضبط مرورگر نشان داد (dat
     python tools/fetch_rahavard_fundamentals.py --test                  # یک نماد (فملی) را کامل می‌گیرد و حالت اتصال را گزارش می‌کند
     python tools/fetch_rahavard_fundamentals.py --resolve --log r.txt   # نگاشت نماد ← شناسه
     python tools/fetch_rahavard_fundamentals.py --log f.txt             # دریافت همهٔ نمادها (قابل‌ادامه)
+    --resolve-missing   نمادهای بورس/فرابورس بی‌نگاشت را با slug پیدا کن (بعد از --resolve)
     --browser   اتصال از راه Chrome واقعی (اگر requests ساده 403/خالی گرفت؛ خودکار هم به آن برمی‌گردد)
 
 خروجی (قابل push):
@@ -267,13 +268,57 @@ def resolve(h: Http, lo: int, hi: int, gap: float):
 
 # ── دریافت ─────────────────────────────────────────────────────────────────────────
 def universe():
+    """همهٔ سهام بورس و فرابورس که قیمت دارند (+ نمادهای بازیابی‌شدهٔ خارج از MarketWatch و اعضای «شاخص كل»)؛ نمادهای رقم‌دار تکراری (سخزر3) حذف می‌شوند.
+    ترتیب: اعضای «كل» اول (که قبلاً گرفته شده‌اند)، بعد بقیه."""
+    import os
+    have = {f.split(".")[0] for f in os.listdir(ROOT / "data" / "prices")}
+    rows, seen = [], set()
+
+    def add(code, sym):
+        if code and code not in seen:
+            seen.add(code)
+            rows.append((code, sym))
     with (ROOT / "data" / "index_constituents.csv").open(encoding="utf-8") as fh:
-        seen, out = set(), []
         for r in csv.DictReader(fh):
-            if r["ins_code"] not in seen:
-                seen.add(r["ins_code"])
-                out.append((r["ins_code"], r["symbol"]))
-    return out
+            add(r["ins_code"], r["symbol"])
+    with (ROOT / "data" / "instruments.csv").open(encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            if r["type"] == "stock" and r["market"] in ("bourse", "farabourse") and r["ins_code"] in have:
+                add(r["ins_code"], r["symbol"])
+    ex = ROOT / "data" / "instruments_extra.csv"
+    if ex.exists():
+        with ex.open(encoding="utf-8") as fh:
+            for r in csv.DictReader(fh):
+                if r["ins_code"] in have:
+                    add(r["ins_code"], r["symbol"])
+    syms = {norm(sy) for _, sy in rows}
+    return [(c, sy) for c, sy in rows if not (re.search(r"\d+$", sy) and norm(re.sub(r"\d+$", "", sy)) in syms)]
+
+
+def resolve_missing(h: Http, gap: float):
+    """نمادهایی که در پیمایش شناسه نیامدند: رهاورد برای هر دارایی slug = نماد دارد (header.slug)؛ احتمالاً /asset/<نماد>/header هم جواب می‌دهد."""
+    from urllib.parse import quote
+    f = OUT / "rahavard_asset_ids.csv"
+    have = load_ids()
+    todo = [(c, sy) for c, sy in universe() if norm(sy) not in have]
+    print(f"نمادهای بی‌نگاشت: {len(todo)}")
+    n_ok, shown = 0, 0
+    with f.open("a", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        for k, (code, sym) in enumerate(todo, 1):
+            st, j = h.get(f"/api/v2/asset/{quote(sym)}/header")
+            asset = ((j or {}).get("data") or {}).get("asset")
+            if asset and asset.get("id") and norm(asset.get("trade_symbol", "")) == norm(sym):
+                w.writerow([asset["id"], asset["trade_symbol"], asset.get("name", ""), (asset.get("category") or {}).get("name", ""), ""])
+                n_ok += 1
+            elif shown < 5:
+                print(f"  ✖ {sym}: وضعیت {st}")
+                shown += 1
+            if k % 100 == 0:
+                fh.flush()
+                print(f"  [{k}/{len(todo)}] یافت‌شده {n_ok}")
+            time.sleep(gap)
+    print(f"با slug: {n_ok} از {len(todo)} نماد نگاشت شد")
 
 
 def fetch_asset(h: Http, aid: str, start: str = "2011-03-21"):
@@ -394,6 +439,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--test", action="store_true", help="فقط فملی (۴۵۱) را بگیر و خلاصه چاپ کن")
     ap.add_argument("--resolve", action="store_true", help="نگاشت نماد ← شناسه (جست‌وجو یا پیمایش شناسه‌ها)")
+    ap.add_argument("--resolve-missing", action="store_true", help="نگاشت نمادهای بورس/فرابورس که پیمایش شناسه نیاورد (از راه slug)")
     ap.add_argument("--id-from", type=int, default=1)
     ap.add_argument("--id-to", type=int, default=8000)
     ap.add_argument("--browser", action="store_true", help="اتصال با Chrome واقعی")
@@ -416,6 +462,9 @@ def main() -> int:
         for t, fy, sd, aud, rep, v in d["ratio"][:8]:
             print("  ", t, fy, sd, aud, rep, round(v, 2))
         print("EPS:", d["eps"][:3])
+        return 0
+    if a.resolve_missing:
+        resolve_missing(h, a.gap)
         return 0
     if a.resolve:
         tpl = try_search(h)
