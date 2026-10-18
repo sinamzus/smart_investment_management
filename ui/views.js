@@ -1,4 +1,4 @@
-/* SIM — نماهای دوم: Dividend Lab · Rebalance · Data QA · Reports · Symbol · Fund · Risk · Index Funds + روتر پنج‌بخشی
+/* ماکت — نماهای دوم: Dividend Lab · Rebalance · Data QA · Reports · Symbol · Fund · Risk · Index Funds + روتر پنج‌بخشی
    داده: window.SIM_EXTRA (tools/build_ui_extra.py) و window.SIM_DATA. هیچ عدد ثابتی در این فایل نیست مگر متن توضیحی. */
 (function () {
 const X = window.SIM_EXTRA;
@@ -363,7 +363,7 @@ function fnTable() {
     const p = f.premium || {}, auto = f.benchmark_src === 'auto', odd = f.best_fit !== f.benchmark, [a, b] = fnBounds(), ev = f.events.filter(e => i2y(e[0]) >= a && i2y(e[0]) <= b).length;
     return `<tr data-sym="${f.symbol}" ${f.symbol === fn.sym ? 'aria-selected="true"' : ''}><td><b>${f.symbol}</b></td><td>${fnBench(f.benchmark).replace(/[«»]/g, '')}${auto ? ' <span class="chip warn">حدسی</span>' : ''}${odd ? ` <span class="chip warn" data-tip="با این صندوق بهترین برازش را شاخص ${fnBench(f.best_fit)} دارد؛ مرجع اعلام‌شده را بررسی کنید.">برازش بهتر: ${fnBench(f.best_fit).replace(/[«»]/g, '')}</span>` : ''}</td><td class="num">${y2i(m.from)}</td><td class="n">${m.n}</td>${nf(m.te_w, 2, '')}${nf(m.te_rob)}${nf(m.te_d)}${sg(m.diff)}${sg(m.td)}${sg(m.td_rep)}${nf(m.corr_w, 4)}${nf(m.beta, 3)}${p.last == null ? na : `<td class="n ${cls(p.last)}">${sgn(p.last)}</td>`}<td class="n">${ev || ''}</td></tr>`;
   }).join('');
-  const refRows = F.reference.map(x => `<tr class="mute"><td>ماکت SIM</td><td>${fnBench(x.benchmark).replace(/[«»]/g, '')}</td><td class="num">${x.from}</td><td class="n">${x.n}</td><td class="n">${fmt(x.te_w)}</td><td class="n">${fmt(x.te_w_rob)}</td><td class="n">${fmt(x.te_d)}</td><td class="n">—</td><td class="n ${cls(x.td)}">${sgn(x.td)}</td><td class="n">—</td><td class="n">${fmt(x.corr_w, 4)}</td><td class="n">${fmt(x.beta, 3)}</td><td class="n">—</td><td class="n"></td></tr>`).join('');
+  const refRows = F.reference.map(x => `<tr class="mute"><td>ماکت سرمایه‌پذیر</td><td>${fnBench(x.benchmark).replace(/[«»]/g, '')}</td><td class="num">${x.from}</td><td class="n">${x.n}</td><td class="n">${fmt(x.te_w)}</td><td class="n">${fmt(x.te_w_rob)}</td><td class="n">${fmt(x.te_d)}</td><td class="n">—</td><td class="n ${cls(x.td)}">${sgn(x.td)}</td><td class="n">—</td><td class="n">${fmt(x.corr_w, 4)}</td><td class="n">${fmt(x.beta, 3)}</td><td class="n">—</td><td class="n"></td></tr>`).join('');
   $('fn-tab').innerHTML = th(th_) + '<tbody>' + body + refRows + '</tbody>';
   document.querySelectorAll('#fn-tab tr[data-sym]').forEach(tr => tr.onclick = () => { fn.sym = tr.dataset.sym; fn.i = null; fnRender(); });
 }
@@ -385,7 +385,7 @@ function fnMethod(has) {
   <li>بازده روزانهٔ NAV صندوق روی روزهای معاملاتی شاخص؛ دو ماه اول عمر صندوق (تشکیل سبد) کنار می‌رود.</li>
   <li><b>TE هفتگی</b> = انحراف معیار بازده فعال ۵ روزهٔ غیرهم‌پوشان × √۵۲ (در بازه‌های کوتاه‌تر از ۸ هفته محاسبه نمی‌شود). چون NAV و شاخص در بورس تهران هم‌زمان منتشر نمی‌شوند، معیار اصلی است. <b>TE روزانه</b> برای مقایسه با ادبیات هم آمده است. <b>TE مقاوم</b> = ۱٫۴۸۲۶ × MAD بازده فعال ۵ روزه × √۵۲، که به چند هفتهٔ پرت حساس نیست.</li>
   <li><b>تفاوت تجمعی</b> بازده مرکب صندوق منهای مرجع در همان بازه؛ <b>TD سالانه</b> همان با سال تقویمی و فقط برای بازه‌های ۱۸۰ روز و بیشتر.</li>
-  <li><b>TD نسبت به ماکت</b> = بازده صندوق منهای ماکت سرمایه‌پذیر SIM (بازتولید کامل، بدون کارمزد، سود با ${F.lag_mode === 'empirical' ? `توزیع واقعی تأخیر پرداخت (کدال و فارابی، ${F.lag_n} رویداد؛ میانگین وزنی ${F.lag} روز)` : `تأخیر ${F.lag} روز`})؛ بخش ساختاری TD را از سهم قابل‌انتساب به مدیر جدا می‌کند. ماکت فقط برای «شاخص كل» و هم‌وزن موجود است.</li>
+  <li><b>TD نسبت به ماکت</b> = بازده صندوق منهای ماکت سرمایه‌پذیر (بازتولید کامل، بدون کارمزد، سود با ${F.lag_mode === 'empirical' ? `توزیع واقعی تأخیر پرداخت (کدال و فارابی، ${F.lag_n} رویداد؛ میانگین وزنی ${F.lag} روز)` : `تأخیر ${F.lag} روز`})؛ بخش ساختاری TD را از سهم قابل‌انتساب به مدیر جدا می‌کند. ماکت فقط برای «شاخص كل» و هم‌وزن موجود است.</li>
   <li>جهش بازده فعال روزانه بیش از ۸٪ رویداد حساب و خنثی می‌شود؛ اگر چند صندوق در یک تاریخ رویداد دارند (مثلاً اردیبهشت ۱۴۰۵)، مسئله بازار یا زمان‌بندی NAV است نه صندوق خاص.</li>
   <li><b>برازش بهتر:</b> NAV هر صندوق در برابر هر سه شاخص سنجیده می‌شود؛ اگر شاخص دیگری TE کمتری بدهد، مرجع اعلام‌شده بازبینی شود. <b>حدسی</b> یعنی مرجع اعلام نشده است.</li>
   <li><b>پریمیوم لحظه‌ای</b> = قیمت پایانی بازار در روز آخرین NAV ابطال ÷ همان NAV − ۱. میانگین تاریخی گزارش نمی‌شود چون سطح NAV از بازده روزانه با بازگشت در زمان خطا انباشته می‌کند.</li></ol>
@@ -441,7 +441,7 @@ function fnRender() {
   if (!rows.find(r => r.f.symbol === fn.sym)) fn.sym = rows[0].f.symbol;
   $('fn-chip').textContent = rows.length + ' صندوق' + (fn.r0 || fn.r1 ? ' · ' + jd(y2i(fn.r0 || rows[0].m.from)) + ' ← ' + jd(y2i(fn.r1 || last)) : '');
   fnTable();
-  $('fn-lin-a').innerHTML = `<span><b>مرتب</b> بر پایهٔ TE هفتگی (کمتر بهتر)</span><span><b>بازه</b> ${fn.r0 || fn.r1 ? 'انتخابی' : 'کل عمر هر صندوق'}</span><span><b>ردیف خاکستری</b> ماکت SIM در ۳ سال اخیر؛ کف ساختاری</span><span><b>ساخت</b> <span class="num">${F.built}</span></span>`;
+  $('fn-lin-a').innerHTML = `<span><b>مرتب</b> بر پایهٔ TE هفتگی (کمتر بهتر)</span><span><b>بازه</b> ${fn.r0 || fn.r1 ? 'انتخابی' : 'کل عمر هر صندوق'}</span><span><b>ردیف خاکستری</b> ماکت سرمایه‌پذیر در ۳ سال اخیر؛ کف ساختاری</span><span><b>ساخت</b> <span class="num">${F.built}</span></span>`;
   const f = rows.find(r => r.f.symbol === fn.sym).f, [lo, hi] = fnIdx(f, a, b), ref = fn.ref === 'rep' && f.daily.r ? 'r' : 'b', m = fnStats(f, lo, hi, ref);
   const nm = ref === 'r' ? 'ماکت سرمایه‌پذیر ' + fnBench(f.benchmark) : fnBench(f.benchmark);
   $('fn-title').textContent = `${f.symbol} · ${f.name}`;
