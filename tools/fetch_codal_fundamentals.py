@@ -8,7 +8,7 @@
     python tools/fetch_codal_fundamentals.py --test فملی             # یک نماد را کامل می‌گیرد و گزارش می‌دهد
     python tools/fetch_codal_fundamentals.py --log c.txt             # نمادهای فهرست شکاف (data/research/fund_gap_active_operating.csv)
     python tools/fetch_codal_fundamentals.py --symbols-file x.csv    # فهرست دلخواه با ستون‌های ins_code,symbol
-    --delay 3        فاصلهٔ ثانیه‌ای بین درخواست‌ها (کدال پس از ~۴۰ درخواست پیاپی ۴۲۹ می‌دهد؛ مقدار پایین‌تر از ۲ توصیه نمی‌شود)
+    --delay 2.5      فاصلهٔ ثانیه‌ای بین درخواست‌ها (کدال پس از ~۴۰ درخواست پیاپی ۴۲۹ می‌دهد؛ مقدار پایین‌تر از ۲ توصیه نمی‌شود)
 
 مسیر (API عمومی search.codal.ir، سند: amirziveh/codal-skill و mostafaasadi/codaler؛ هر دو [راستی‌آزمایی نشده] روی این مخزن):
     GET /api/search/v2/q?Symbol=…&Category=1&LetterCode=ن-10&Length=12&Childs=false&Mains=true&…   فهرست «صورت مالی سالانه» (Accept: application/json)
@@ -254,11 +254,15 @@ def append(path, header, rows):
         w.writerows(rows)
 
 
-def do_symbol(h, ins, sym, dry=False):
-    ls = pick(list_letters(h, sym))
-    print(f"{sym}: {len(ls)} سال مالی", flush=True)
+def do_symbol(h, ins, sym, dry=False, since=1396):
+    ls = [L for L in pick(list_letters(h, sym)) if int(L["fy_end"][:4]) >= since]
+    # هر فایل ستون سال قبل را هم دارد ← یک‌درمیان دانلود می‌کنیم (نیمی از درخواست‌ها)؛ فهرست نامه‌ها (تاریخ انتشار) برای همهٔ سال‌ها ذخیره می‌شود
+    dl = {L["fy_end"] for L in ls[::-1][::2]}
+    print(f"{sym}: {len(ls)} سال مالی، {len(dl)} فایل", flush=True)
     longs = []
     for L in ls:
+        if L["fy_end"] not in dl:
+            continue
         c = h.get(L["excel_url"], binary=True)
         if not c:
             print(f"   {L['fy_end']}: دریافت ناموفق", flush=True)
@@ -280,7 +284,8 @@ def main():
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--test", metavar="SYMBOL")
     ap.add_argument("--symbols-file")
-    ap.add_argument("--delay", type=float, default=3.0)
+    ap.add_argument("--delay", type=float, default=2.5)
+    ap.add_argument("--since", type=int, default=1396, help="قدیمی‌ترین سال مالی (جلالی)؛ ۱۳۹۶ برای ثبات ROE پنج‌ساله تا ۱۴۰۰ کافی است")
     ap.add_argument("--log")
     a = ap.parse_args()
     if a.selftest:
@@ -290,7 +295,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     h = Http(a.delay)
     if a.test:
-        n = do_symbol(h, "", a.test, dry=True)
+        n = do_symbol(h, "", a.test, dry=True, since=a.since)
         print("نتیجه:", "کدال پاسخ داد" if n else "هیچ نامه‌ای نیامد (مسدودی/نماد/پارامتر)؛ خروجی بالا را بفرستید")
         return
     src = Path(a.symbols_file) if a.symbols_file else GAP
@@ -302,7 +307,7 @@ def main():
     print(f"{len(todo)} نماد برای دریافت ({len(done)} قبلاً انجام شده)", flush=True)
     for i, r in enumerate(todo, 1):
         print(f"[{i}/{len(todo)}]", end=" ", flush=True)
-        do_symbol(h, r["ins_code"], r["symbol"])
+        do_symbol(h, r["ins_code"], r["symbol"], since=a.since)
 
 
 if __name__ == "__main__":
