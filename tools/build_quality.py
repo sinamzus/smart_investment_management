@@ -33,6 +33,46 @@ def available() -> bool:
     return (FUND / "rahavard_long.csv").exists() and (FUND / "rahavard_eps.csv").exists()
 
 
+def safe_fy_date(s: str) -> pd.Timestamp:
+    try:
+        return fy_date(s)
+    except Exception:                              # noqa: BLE001  — روز ۳۰ اسفند در سال کبیسه‌نبودن
+        y, m, d = s.split("/")
+        return fy_date(f"{y}/{m}/{min(int(d), 29)}")
+
+
+def load_codal(skip: set) -> dict:
+    """نمادهایی که رهاورد ندارند ولی tools/fetch_codal_fundamentals.py گرفته است (ins_code ∉ skip) → همان قالب load_records.
+    ROE = سود خالص ÷ حقوق مالکانهٔ پایان سال؛ D/E = جمع بدهی ÷ حقوق مالکانه. تاریخ دانستن = نخستین انتشار کدال + ۱ روز."""
+    fl, fo = FUND / "codal_long.csv", FUND / "codal_letters.csv"
+    if not (fl.exists() and fo.exists()):
+        return {}
+    L = pd.read_csv(fl, dtype={"ins_code": str})
+    Lt = pd.read_csv(fo, dtype={"ins_code": str})
+    L = L[~L.ins_code.isin(skip)]
+    if L.empty:
+        return {}
+    L["pref"] = (L.col == "cur").astype(int)
+    V = (L.sort_values("pref").groupby(["ins_code", "fy_year", "key"]).value.last().unstack("key"))
+    pub = Lt.groupby(["ins_code", Lt.fy_end.str[:4].astype(int)]).first_published.min()
+    md = Lt.sort_values("fy_end").groupby("ins_code").fy_end.last().str[5:]
+    recs = {}
+    for ins, g in V.groupby(level=0):
+        rows = []
+        for (_i, fy), r in g.iterrows():
+            eq = r.get("equity", np.nan)
+            if not eq == eq or "net_income" not in r or not r["net_income"] == r["net_income"] or eq == 0:
+                continue
+            fe = safe_fy_date(f"{int(fy)}/{md.get(ins, '12/29')}")
+            a = pub.get((ins, int(fy)))
+            avail = (safe_fy_date(a) if isinstance(a, str) and a[:2] == "14" else fe + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1)
+            rows.append({"ins_code": ins, "fy_end": fe, "roe": 100.0 * r["net_income"] / eq,
+                         "de": (r.get("liabilities", np.nan) / eq), "equity": eq, "avail": avail})
+        if rows:
+            recs[ins] = pd.DataFrame(rows).sort_values("fy_end").reset_index(drop=True)
+    return recs
+
+
 def fy_date(s: str) -> pd.Timestamp:
     y, m, d = map(int, s.split("/"))
     return pd.Timestamp(str(j2g(y, m, d))[:10])
@@ -60,7 +100,10 @@ def load_records() -> dict:
         P["equity"] = np.nan                       # دریافت فقط-نسبت‌ها (حالت nav): ترازنامه نیست
     P["avail"] = [first.get((c, f), pd.NaT) for c, f in zip(P.ins_code, P.fy_end)]
     P["avail"] = P.avail.fillna(P.fy_end + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1)
-    return {c: g.sort_values("fy_end").reset_index(drop=True) for c, g in P.groupby("ins_code")}
+    recs = {c: g.sort_values("fy_end").reset_index(drop=True) for c, g in P.groupby("ins_code")}
+    for c, g in load_codal(set(recs)).items():     # نمادهای بدون رهاورد، از کدال (اگر جمع شده باشد)
+        recs[c] = g
+    return recs
 
 
 def raw_components(rec: dict, when: pd.Timestamp):

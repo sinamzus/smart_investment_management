@@ -116,6 +116,9 @@ def divlab():
 
 
 # ── پایهٔ مشترک: ماتریس بازده و وزن ──────────────────────────────────────
+# ابزارهای غیرشرکتی که TSETMC «سهام» ثبت کرده: صندوق‌ها (ص.س.، ص.ج.، ص.خ.)، امتیاز تسهیلات مسکن، گواهی اعتبار مولد، مرابحه، تامین مالی جمعی، سلف، اختیار…
+# توجه: «ص.» به‌تنهایی مخفف «صنایع/صنعتی» است (ص.چاپ، ص.معدنی…)، پس فقط ص.س / ص.ج / ص.خ حذف می‌شود.
+NONOP = re.compile(r"^\s*ص\.\s?(?:س|ج|خ)[\. ]|^\s*صندوق|^\s*امتیاز|^\s*گواهی|^\s*مراحبه|^\s*مرابحه|^\s*تامین مالی جمعی|^\s*اختیار|^\s*سلف|^\s*اوراق|^\s*اجاره|^\s*صکوک|^\s*ETF")
 ALL_MARKETS = ("bourse", "farabourse")      # جهان فاکتورها/نماد/تطبیق پرتفوی؛ بازسازی شاخص‌های رسمی (K, EW) فقط بورس است
 
 
@@ -130,7 +133,13 @@ def base_panel(markets=("bourse",)):
     R = R.dropna(subset=["shares"]).copy()
     R["w"] = R.priceYesterday * R.shares
     R["wt"] = R.w / R.groupby("date").w.transform("sum")
+    R["operating"] = ~R["name"].fillna("").str.contains(NONOP)
     return panel, info, R
+
+
+def operating_view(Ra):
+    """فقط شرکت‌های عملیاتی (بدون صندوق/گواهی/امتیاز…) برای فاکتورها، Lab و Plan؛ وزن‌های K/EW از bourse_view(Ra) (بدون فیلتر) می‌آید تا بازسازی رسمی دست نخورد."""
+    return Ra[Ra.operating].copy()
 
 
 def bourse_view(Ra):
@@ -477,16 +486,18 @@ def reports():
 
 
 def main():
-    panel, info, Ra = base_panel(ALL_MARKETS)       # جهان فاکتورها: بورس + فرابورس
-    R = bourse_view(Ra)                              # جهان شاخص‌های رسمی «كل»
+    panel, info, Ra0 = base_panel(ALL_MARKETS)      # جهان فاکتورها: بورس + فرابورس (فقط شرکت‌های عملیاتی)
+    R = bourse_view(Ra0)                             # جهان شاخص‌های رسمی «كل» (بدون فیلتر؛ بازسازی رسمی)
+    Ra = operating_view(Ra0)
+    Rb = bourse_view(Ra)                             # فاکتورهای «فقط بورس»
     data = {"built": datetime.now().strftime("%Y-%m-%d %H:%M"), "divlab": divlab(), "rebalance": rebalance(R),
             "factor": factor(Ra), "factor_lowvol": factor(Ra, "lowvol"), "risk": risk(R, info), "fund": fund(R, info),
-            "factor_b": factor(R), "factor_lowvol_b": factor(R, "lowvol"),
+            "factor_b": factor(Rb), "factor_lowvol_b": factor(Rb, "lowvol"),
             "qa": qa(panel, info, R, Ra), "reports": reports()}
     fq = factor_quality(Ra, info)
     if fq:
         data["factor_quality"] = fq
-        data["factor_quality_b"] = factor_quality(R, info)
+        data["factor_quality_b"] = factor_quality(Rb, info)
     OUT.write_text("window.SIM_EXTRA = " + json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str) + ";\n", encoding="utf-8")
     print(f"ذخیره شد: {OUT} ({OUT.stat().st_size/1e3:.0f} KB)")
     print("factor:", json.dumps({k: v for k, v in data["factor"].items() if k not in ("curve", "yearly", "monthly")}, ensure_ascii=False))

@@ -35,6 +35,7 @@ REP = {"momentum": "mom_12_1", "risk": "vol_252", "liquidity": "size", "yield": 
 
 def get_lab():
     _, info, Ra = bx.base_panel(bx.ALL_MARKETS)
+    Ra = bx.operating_view(Ra)                      # بدون صندوق/گواهی/امتیاز تسهیلات (فصل ۲ §۲٫۰)
     mk = sg.Market(Ra, info)
     mk.fund = sg.load_fund(mk.cols, mk.dates)
     CACHE.mkdir(parents=True, exist_ok=True)
