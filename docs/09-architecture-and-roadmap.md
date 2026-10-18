@@ -79,6 +79,8 @@ smart_investment_management/
 
 ### ۹.۲.۱ قرارداد رابط با سامانهٔ الگوریتمی (`sim.trade_plan/1`)
 
+> **افزوده ۲۰۲۶-۱۰-۱۸:** `tools/live_ledger.py orders` همین طرح را از سمت پایتون تولید می‌کند، با فیلدهای افزودهٔ اختیاری `strategy`، `spec_hash`، `code_commit`، `official_month_end`، `cold_start`، `kappa` و در هر سفارش `market`، `value_rial`، `w_now_pct`، `w_target_pct`، `adv_participation` (فصل ۱۴ §۱۴٫۹٫۱). فیلدهای افزوده طرح را نمی‌شکنند (مصرف‌کننده باید فیلد ناشناخته را نادیده بگیرد).
+
 نمای Plan فایل JSON با این ساختار می‌دهد؛ سامانهٔ الگوریتمی آن را می‌خواند و اجرا می‌کند. **تغییر ساختار = تغییر نسخهٔ `schema`.**
 
 ```json
