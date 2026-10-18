@@ -18,6 +18,7 @@ const METRICS = [['te_vs_official_pct', 'TE در برابر شاخص رسمی (�
   ['gap_pct', 'فاصلهٔ بازده سالانه (واحد درصد)', 'بازده سالانهٔ نمونه منهای شاخص رسمی؛ منفی یعنی عقب‌ماندن. این فاصله ریسک نیست و ممکن است به‌علت حذف دم کوچک‌ها سیستماتیک باشد.']];
 const STEPS = [
   ['وزن هدف', 'ارزش بازار نمادهای واجد بورس ÷ مجموع؛ تقریب وزن «شاخص كل» (شناور آزاد نداریم).'],
+  ['فیلتر نقدشوندگی', 'فقط نمادهای نقدشونده نامزد نگهداری‌اند (روزهای معامله از ۶۳ روز و صدک میانهٔ ارزش معاملات)؛ وزن هدف همچنان از کل واجدان است.'],
   ['انتخاب N سهم', 'N بزرگ‌ترین؛ یا طبقه‌ای (سهم هر صنعت از N ∝ وزنش)؛ یا بهینه‌سازی: min (w−b)ᵀΣ(w−b) روی ۳N بزرگ‌ترین، فقط‌خرید، Σ انقباضی Ledoit–Wolf روی ۲۵۲ روز، سپس N وزن برتر و حل دوباره.'],
   ['وام / اهرم', 'بدون وام (L = ۱)، یا «تراز بتا»: L = ۱/β با β نمونه روی شاخص (بُرش ۰٫۷ تا ۱٫۵). L > ۱ وام است با نرخ سالانه؛ L < ۱ بخشی نقد بدون بهره.'],
   ['ریبالانس', 'هر پایان ماه جلالی؛ وزن‌ها بین ریبالانس‌ها با بازده رانش می‌کنند؛ وام و L هر ماه بازتنظیم می‌شود.'],
@@ -33,8 +34,9 @@ function initSam() {
     <div class="panel-head"><span class="lg-badge">1</span><span class="panel-title"${tip('بازسازی «شاخص كل» بدون خرید همهٔ سهام: چند سهم لازم است، چه روشی، و وام چه کاری می‌کند. مراحل به ترتیب اجرا در هر ماه.')}>مراحل بازسازی «شاخص كل» با نمونهٔ کوچک</span></div>
     <div class="lb-flow">${STEPS.map(([t, d], i) => `<div class="lb-step static" data-tip="${esc(d)}"><span class="no">${i + 1}</span><b>${t}</b><small>${esc(d)}</small></div>`).join('')}</div>
   </section>
+  <div id="rb-host"></div>
   <section class="panel" style="--lg:var(--lg-b)">
-    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('خطای ردیابی در برابر تعداد سهام نمونه، برای هر روش و حالت اهرم.')}>نتیجه · خطای ردیابی در برابر تعداد سهام</span><span class="chip" id="sm-chip"${tip('بازه، نرخ وام و هزینه‌ای که نتایج با آن محاسبه شده‌اند.')}></span></div>
+    <div class="panel-head"><span class="lg-badge">5</span><span class="panel-title"${tip('خطای ردیابی در برابر تعداد سهام نمونه، برای هر روش و حالت اهرم.')}>نتیجه · خطای ردیابی در برابر تعداد سهام</span><span class="chip" id="sm-chip"${tip('بازه، نرخ وام و هزینه‌ای که نتایج با آن محاسبه شده‌اند.')}></span></div>
     <div class="ctl">
       <label${tip('کدام معیار روی نمودار و ستون برجسته نشان داده شود.')}>معیار <select id="sm-metric">${METRICS.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
       <label${tip('روش انتخاب سهام؛ «همه» هر سه را روی نمودار نشان می‌دهد.')}>روش <span class="seg" id="sm-method"><button data-v="all" aria-pressed="false"${tip('هر سه روش را با هم نشان بده.')}>همه</button>${Object.entries(METHODS).map(([k, t]) => `<button data-v="${k}" aria-pressed="false"${tip('روش انتخاب: ' + t)}>${t}</button>`).join('')}</span></label>
@@ -45,6 +47,7 @@ function initSam() {
     <div class="panel-body scroll" style="max-height:340px"><table class="dt" id="sm-table"></table></div>
     <div class="lineage" id="sm-read"></div>
   </section>`;
+  if (window.SIM_RB_MOUNT) window.SIM_RB_MOUNT($('rb-host'));
   const set = (id, key) => $(id).querySelectorAll('button').forEach(b => { b.onclick = () => { sam[key] = b.dataset.v; renderSam(); }; });
   set('sm-method', 'method'); set('sm-lev', 'lev');
   $('sm-metric').onchange = e => { sam.metric = e.target.value; renderSam(); };

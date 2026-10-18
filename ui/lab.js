@@ -32,6 +32,7 @@ function ensureData(cb) {
   s.onerror = () => { pending = null; ['v-lab', 'v-sig', 'v-plan'].forEach(id => { const m = $(id); if (m && !m.dataset.ready) m.innerHTML = '<p style="padding:24px">ui/data/lab.js پیدا نشد. اجرا کنید: <code>python tools/build_lab.py</code></p>'; }); };
   document.head.appendChild(s);
 }
+window.SIM_ENSURE_LAB = ensureData;                                     // برای نماهای دیگر که به شبکهٔ نمادهای Lab نیاز دارند (ماکت‌ساز)
 const toRes = r => ({ cap: r.cap || [], toCap: (r.to_cap || []).map(v => v == null ? NaN : v), impact: (L.aums || []).map(a => ((r.impact || {})[String(a)] || []).map(v => v == null ? NaN : v)), end: r.end, ret: r.ret, all: r.all, to: r.to.map(v => v == null ? NaN : v), toAll: (r.to_all || r.all.map(() => 0)).map(v => v == null ? NaN : v), n: r.ret.map(() => r.stats.names), ic: (r.ic_series || r.ret.map(() => NaN)).map(v => v == null ? NaN : v) });
 const sigName = n => (L.signals.find(s => s.name === n) || {}).fa || n;
 const sigMeta = n => L.signals.find(s => s.name === n);

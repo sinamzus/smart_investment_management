@@ -49,7 +49,9 @@ pip install pandas numpy
 python tools/build_ui_data.py     # → ui/data/data.js   (Index Lab)
 python tools/build_ui_extra.py    # → ui/data/extra.js  (Dividend، Rebalance، Data QA، Reports، Fund، Risk)
 python tools/build_ui_symbols.py  # → ui/data/symbols.js (نمای نماد)
-python tools/build_ui_live.py     # → ui/data/live.js (نمونهٔ کوچک + وام · دفتر زنده)
+python tools/build_ui_live.py     # → ui/data/live.js (جدول N × روش · دفتر زنده)
+python tools/build_replica_panel.py   # → ui/data/replica.js (ماکت‌ساز: فیلتر نقدشوندگی، نقد/وام، گذشته؛ ≈ ۲۰ دقیقه)
+node tools/replica_selftest.js        # هم‌ارزی موتور مرورگر ماکت‌ساز با پایتون
 pip install cvxpy scikit-learn scipy   # فقط برای ساخت کتابخانهٔ Lab (بهینه‌سازها)
 python tools/build_lab.py         # → ui/data/lab.js (Lab · Signals · Plan؛ ۳۰–۶۰ دقیقه)
 node tools/lab_selftest.js        # هم‌ارزی موتور مرورگر با پایتون
