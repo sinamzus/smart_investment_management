@@ -11,6 +11,7 @@
 خروجی (data/corporate_actions/):
   fundai_dividends.csv  — symbol, slug, fy_end_j, agm_j, pay_from_j, pay_to_j, dps_rial
   fundai_done.csv       — slug های انجام‌شده (برای ادامه)
+  fundai_raw.csv.gz     — slug, symbol, متن خام ردیف‌های جدول (برای --reparse)
 داده ثانویه است: پیش از استفاده با کدال/راهاورد سنجیده شود (tools/audit_corporate_actions.py).
 """
 import argparse
@@ -87,6 +88,11 @@ def to_text(html):
     return h.translate(DIG)
 
 
+def table_text(html):
+    """متن ردیف‌های جدول (برای ذخیرهٔ خام و تجزیهٔ دوباره بدون خزش)."""
+    return "\n".join(l for l in (re.sub(r"[ \t]+", " ", x).strip() for x in to_text(html).split("\n")) if "|" in l and ("سال مالی" in l or l.startswith(("تاریخ مجمع", "زمان پرداخت", "سود نقدی", "| تاریخ", "| زمان", "| سود"))))
+
+
 def parse(html, slug):
     """-> (symbol, rows) ؛ هر ردیف یک سال مالی."""
     t = to_text(html)
@@ -99,7 +105,7 @@ def parse(html, slug):
     fys = re.findall(r"منتهی به\s*(\d{4}/\d{1,2}/\d{1,2})", hdr)
 
     def cells(key):
-        l = next((x for x in lines if x.startswith(key) or x.startswith("| " + key)), None)
+        l = next((x for x in lines if "|" in x and (x.startswith(key) or x.startswith("| " + key))), None)   # فقط ردیف جدول، نه زیرعنوان صفحه
         if not l:
             return [None] * len(fys)
         c = [x.strip() for x in l.split("|") if x.strip()][1:]
@@ -116,7 +122,7 @@ def parse(html, slug):
     return symbol, rows
 
 
-SAMPLE = """<html><head><title>مجمع و پرداخت سود ملی صنایع مس ایران (فملی) | فاندای</title></head><body><h1>x</h1>
+SAMPLE = """<html><head><title>مجمع و پرداخت سود ملی صنایع مس ایران (فملی) | فاندای</title></head><body><h1>x</h1><p>تاریخ مجمع سالیانه، زمان پرداخت سود نقدی و فاصله میان آن دو در هر سال</p>
 <table><tr><th>عنوان</th><th>سال مالی منتهی به ۱۴۰۴/۱۲/۲۹</th><th>سال مالی منتهی به ۱۴۰۳/۱۲/۳۰</th><th>سال مالی منتهی به ۱۴۰۲/۱۲/۲۹</th></tr>
 <tr><td>تاریخ مجمع</td><td>۱۴۰۵/۰۴/۳۱</td><td>۱۴۰۴/۰۴/۳۱</td><td>۱۴۰۳/۰۴/۳۱</td></tr>
 <tr><td>زمان پرداخت سود</td><td>۱۴۰۵/۰۶/۲۵</td><td>۱۴۰۴/۰۷/۰۱ تا ۱۴۰۴/۰۷/۳۰</td><td>-</td></tr>
@@ -133,16 +139,31 @@ def selftest():
     print("selftest OK")
 
 
+def reparse():
+    fr, fo = OUT / "fundai_raw.csv.gz", OUT / "fundai_dividends.csv"
+    n = 0
+    with gzip.open(fr, "rt", encoding="utf-8", newline="") as z, open(fo, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, FIELDS); w.writeheader()
+        for sl, sym, txt in csv.reader(z):
+            _, rows = parse("<table>" + "".join(f"<tr><td>{l}</td></tr>" for l in txt.split("\\n")) + "</table>", sl)
+            for r in rows:
+                r["symbol"] = sym; w.writerow(r); n += 1
+    print(f"تجزیهٔ دوباره: {n} ردیف")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--test", action="store_true")
     ap.add_argument("--delay", type=float, default=1.5)
     ap.add_argument("--log", default=None)
+    ap.add_argument("--reparse", action="store_true", help="فقط از fundai_raw.csv.gz دوباره تجزیه کن (بدون شبکه)")
     ap.add_argument("--limit", type=int, default=0, help="فقط N صفحهٔ اول (برای آزمون)")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.reparse:
+        return reparse()
     if a.log:
         sys.stdout = open(a.log, "a", encoding="utf-8", buffering=1)
     slugs, urls = company_pages()
@@ -155,7 +176,7 @@ def main():
             print(sl, "->", (parse(h, sl) if h else "صفحه خوانده نشد"))
         return
     OUT.mkdir(parents=True, exist_ok=True)
-    fo, fd = OUT / "fundai_dividends.csv", OUT / "fundai_done.csv"
+    fo, fd, fr = OUT / "fundai_dividends.csv", OUT / "fundai_done.csv", OUT / "fundai_raw.csv.gz"
     done = set(l.strip() for l in fd.read_text(encoding="utf-8").splitlines()) if fd.exists() else set()
     new = not fo.exists()
     todo = [s for s in slugs if s not in done]
@@ -172,6 +193,8 @@ def main():
                 print(f"[{i}/{len(todo)}] {sl}: بدون صفحه", flush=True)
             else:
                 sym, rows = parse(h, sl)
+                with gzip.open(fr, "at", encoding="utf-8", newline="") as z:
+                    csv.writer(z).writerow([sl, sym, table_text(h).replace("\n", "\\n")])
                 for r in rows:
                     w.writerow(r)
                 f.flush()

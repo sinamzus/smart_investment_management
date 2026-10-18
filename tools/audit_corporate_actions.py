@@ -10,6 +10,8 @@
   رکورد تصویب/پرداخت = ردیف dividend_payment_events (مجمع، مبلغ مصوب، تاریخ پرداخت) با ex-date در ±۶ روز.
   رکورد مجمع راهاورد = ردیف kind=meeting در data/fundamentals/rahavard_eps.csv (تاریخ مجمع + سود تقسیمی مصوب)؛ به رویداد وصل می‌شود اگر
   تاریخ مجمع در ۰ تا ۲۰۰ روز قبل از ex-date باشد و مبلغ مصوب با مبلغ مستخرج تا ±۱۵٪ بخواند (کم‌ترین فاصله).
+  رکورد فاندای = data/corporate_actions/fundai_dividends.csv (tools/fetch_fundai_dividends.py: تاریخ مجمع، تاریخ پرداخت، سود هر سهم برای ۴ سال مالی)؛ شرط وصل:
+  تاریخ پرداخت ۵− تا ۴۵۰ روز بعد از ex-date و مبلغ ±۱۵٪ مبلغ مستخرج.
 خروجی ادغام: data/corporate_actions/dividend_events_merged.csv (هر رویداد با منبع تصویب/پرداخت).
 """
 import sys
@@ -19,10 +21,33 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 C = ROOT / "data" / "corporate_actions"
 norm = lambda s: s.astype(str).str.replace("ي", "ی").str.replace("ك", "ک").str.replace(r"[\s‌]+", "", regex=True)  # noqa: E731
+
+
+def load_fundai():
+    f = C / "fundai_dividends.csv"
+    if not f.exists():
+        return pd.DataFrame(columns=["s", "pay", "agm", "dps"])
+    from fetch_corporate_actions import j2g
+
+    def cv(x):
+        try:
+            y, mo, d = map(int, str(x).split("/"))
+        except ValueError:
+            return pd.NaT
+        for dd in (d, d - 1, d - 2):
+            try:
+                return pd.Timestamp(j2g(y, mo, dd))
+            except Exception:  # noqa: BLE001
+                pass
+        return pd.NaT
+    d = pd.read_csv(f, dtype=str)
+    d["s"] = norm(d.symbol); d["pay"] = d.pay_from_j.map(cv); d["agm"] = d.agm_j.map(cv); d["dps"] = pd.to_numeric(d.dps_rial, errors="coerce")
+    return d[d.pay.notna() & (d.dps > 0)].copy()
 
 
 def main():
@@ -61,10 +86,24 @@ def main():
         return pd.Series({"rv_agm": b.agm, "rv_dps": float(b.dps), "rv_fy": b.fy})
     m = m.reset_index(drop=True)
     m = pd.concat([m, m.apply(rv_match, axis=1)], axis=1)
-    m["has_pay"] = m.pay_j.notna()
-    m["has_agm"] = m.rv_agm.notna() | m.agm_j.notna()
+    fd = load_fundai()
+    fdb = {k: g for k, g in fd.groupby("s")}
+
+    def fd_match(r):
+        g = fdb.get(r.s)
+        if g is None:
+            return pd.Series({"fd_pay": pd.NaT, "fd_agm": pd.NaT, "fd_dps": np.nan})
+        lag = (g.pay - r.d).dt.days
+        ok = g[(lag >= -5) & (lag <= 450) & ((g.dps / r.dps_implied - 1).abs() <= 0.15)]
+        if ok.empty:
+            return pd.Series({"fd_pay": pd.NaT, "fd_agm": pd.NaT, "fd_dps": np.nan})
+        b = ok.assign(l=(ok.pay - r.d).abs().dt.days).sort_values("l").iloc[0]
+        return pd.Series({"fd_pay": b.pay, "fd_agm": b.agm, "fd_dps": float(b.dps)})
+    m = pd.concat([m, m.apply(fd_match, axis=1)], axis=1) if len(fd) else m.assign(fd_pay=pd.NaT, fd_agm=pd.NaT, fd_dps=np.nan)
+    m["has_pay"] = m.pay_j.notna() | m.fd_pay.notna()
+    m["has_agm"] = m.rv_agm.notna() | m.agm_j.notna() | m.fd_agm.notna()
     m["has_any"] = m.has_agm | m.has_pay
-    m[["ins_code", "symbol", "d", "dps_implied", "agm_j", "dps_rial", "pay_j", "rv_agm", "rv_dps", "rv_fy", "has_agm", "has_pay", "has_any"]].rename(columns={"d": "ex_date", "agm_j": "farabi_agm_j", "dps_rial": "farabi_dps", "pay_j": "farabi_pay_j"}).to_csv(C / "dividend_events_merged.csv", index=False, encoding="utf-8-sig")
+    m[["ins_code", "symbol", "d", "dps_implied", "agm_j", "dps_rial", "pay_j", "rv_agm", "rv_dps", "rv_fy", "fd_agm", "fd_pay", "fd_dps", "has_agm", "has_pay", "has_any"]].rename(columns={"d": "ex_date", "agm_j": "farabi_agm_j", "dps_rial": "farabi_dps", "pay_j": "farabi_pay_j"}).to_csv(C / "dividend_events_merged.csv", index=False, encoding="utf-8-sig")
     # سال به سال
     rows = []
     for y in range(2019, 2027):
