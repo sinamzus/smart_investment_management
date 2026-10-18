@@ -76,7 +76,7 @@
     let out = '', top = m.t;
     const geo = [], uid = (svg.id || 'ck') + '-cp';
     panes.forEach(p => {
-      const h = avail * p.frac;
+      const h = Math.max(avail * p.frac, 12);   // نمای کوچک (یا پنهان) ارتفاع منفی نسازد
       const vals = []; p.series.forEach(s => { for (let i = v0; i <= v1; i++) { const v = s.v[i]; if (v != null && isFinite(v) && (!p.log || v > 0)) vals.push(v); } });
       let lo = vals.length ? Math.min(...vals) : 0, hi = vals.length ? Math.max(...vals) : 1;
       if (p.zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }

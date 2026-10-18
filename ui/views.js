@@ -1,8 +1,8 @@
-/* SIM — نماهای دوم: Dividend Lab · Factor Lab · Rebalance · Data QA · Reports
+/* SIM — نماهای دوم: Dividend Lab · Rebalance · Data QA · Reports · Symbol · Fund · Risk · Index Funds + روتر پنج‌بخشی
    داده: window.SIM_EXTRA (tools/build_ui_extra.py) و window.SIM_DATA. هیچ عدد ثابتی در این فایل نیست مگر متن توضیحی. */
 (function () {
 const X = window.SIM_EXTRA;
-const VIEWS = { index: 'v-index', div: 'v-div', fac: 'v-fac', reb: 'v-reb', qa: 'v-qa', rep: 'v-rep', sym: 'v-sym', pf: 'v-pf', risk: 'v-risk', fnd: 'v-fnd' };
+const VIEWS = { index: 'v-index', div: 'v-div', reb: 'v-reb', qa: 'v-qa', rep: 'v-rep', sym: 'v-sym', pf: 'v-pf', risk: 'v-risk', fnd: 'v-fnd' };
 const JM = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
 const inited = {}, redraws = {};
 const jyear = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year: 'numeric' });
@@ -10,7 +10,7 @@ const cls = v => v == null ? '' : v >= 0 ? 'up' : 'down';
 const chipTE = t => t == null ? '' : t < 1 ? 'ok' : t < 3 ? 'warn' : 'bad';
 
 if (!X) {
-  ['v-div', 'v-fac', 'v-reb', 'v-qa', 'v-rep', 'v-pf', 'v-risk'].forEach(id => { $(id).innerHTML = '<p style="padding:24px">ui/data/extra.js پیدا نشد. اجرا کنید: <code>python tools/build_ui_extra.py</code></p>'; });
+  ['v-div', 'v-reb', 'v-qa', 'v-rep', 'v-pf', 'v-risk'].forEach(id => { $(id).innerHTML = '<p style="padding:24px">ui/data/extra.js پیدا نشد. اجرا کنید: <code>python tools/build_ui_extra.py</code></p>'; });
 }
 
 /* ── نمودار: موتور مشترک ui/chartkit.js (زوم، جابه‌جایی، هوور با برچسب روی محورها) ── */
@@ -101,21 +101,7 @@ function initDiv() {
   divPayPanel(); redraws.div = divDraw; divRender();
 }
 
-/* ══════════ Factor Lab ══════════ */
-const facState = { i: null, sig: 'mom', cost: 100, uni: 'all' };
-const FAC_LAB = {
-  mom: { title: 'مومنتوم ۱۲−۱ · پنج‌گانه‌ها', Q1: 'پنجک ۱ (ضعیف‌ترین مومنتوم)', Q5: 'پنجک ۵ (قوی‌ترین مومنتوم)', file: 'momentum' },
-  lowvol: { title: 'کم‌نوسان ۲۵۲ روزه · پنج‌گانه‌ها', Q1: 'پنجک ۱ (پرنوسان‌ترین)', Q5: 'پنجک ۵ (کم‌نوسان‌ترین)', file: 'lowvol' },
-  quality: { title: 'کیفیت (ROE · اهرم · ثبات سود) · پنج‌گانه‌ها', Q1: 'پنجک ۱ (کم‌کیفیت‌ترین)', Q5: 'پنجک ۵ (باکیفیت‌ترین)', file: 'quality' }
-};
-const facData = sig => { const k = sig === 'mom' ? 'factor' : sig === 'lowvol' ? 'factor_lowvol' : 'factor_quality'; return (facState.uni === 'b' && X[k + '_b']) || X[k]; };
-function initFac() {
-  document.querySelectorAll('#fc-sig button').forEach(b => b.onclick = () => { facState.sig = b.dataset.s; facState.i = null; renderFacSig(); });
-  document.querySelectorAll('#fc-uni button').forEach(b => b.onclick = () => { facState.uni = b.dataset.u; facState.i = null; renderFacSig(); });
-  $('fc-cost').oninput = e => { facState.cost = Math.max(0, +e.target.value || 0); renderFacSig(); };
-  renderFacSig();
-}
-/* آمار یک سری ماهانه (اعشاری) */
+/* ── آمار ماهانهٔ سبدهای پنجکی (برای خلاصهٔ Reports؛ نمای Factor Lab در بازچینی ۲۰۲۶-۱۰-۱۸ حذف شد) ── */
 function mstats(x) {
   const n = x.length, mu = x.reduce((a, b) => a + b, 0) / n, e = x.map(v => v - mu);
   const sd = Math.sqrt(e.reduce((a, b) => a + b * b, 0) / (n - 1));
@@ -124,67 +110,11 @@ function mstats(x) {
   let c = 1, pk = 1, mdd = 0; x.forEach(r => { c *= 1 + r; pk = Math.max(pk, c); mdd = Math.min(mdd, c / pk - 1); });
   return { mu, sd, ann: (Math.pow(c, 12 / n) - 1) * 100, vol: sd * Math.sqrt(12) * 100, t: mu / Math.sqrt(v / n), ir: mu / sd * Math.sqrt(12), hit: x.filter(r => r > 0).length / n * 100, mdd: mdd * 100 };
 }
-function facNet(F, bp = facState.cost) {
+function facNet(F, bp = 100) {
   const M = F.monthly, c = bp / 1e4, Q = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL'], net = {}, to = {};
   Q.forEach(q => { net[q] = M[q].map((g, i) => g / 100 - (M.to[q][i] || 0) / 100 * c); to[q] = M.to[q].reduce((a, b) => a + (b || 0), 0); });
   const yrs = (Date.parse(M.end[M.end.length - 1]) - Date.parse(M.end[0])) / 864e5 / 365.25 + 1 / 12;
   return { net, yrs, toAnn: Object.fromEntries(Q.map(q => [q, to[q] / yrs])), ex: net.Q5.map((v, i) => v - net.ALL[i]), ls: net.Q5.map((v, i) => v - net.Q1[i]) };
-}
-function renderFacSig() {
-  document.querySelectorAll('#fc-sig button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === facState.sig));
-  document.querySelectorAll('#fc-uni button').forEach(b => b.setAttribute('aria-pressed', b.dataset.u === facState.uni));
-  const qual = facState.sig === 'quality' && !X.factor_quality;
-  $('fc-ctl').hidden = qual;
-  if (qual) {
-    $('fc-title').textContent = 'کیفیت'; $('fc-chip').textContent = 'دادهٔ بنیادی هنوز دریافت نشده';
-    ['fc-kpis', 'fc-legend', 'fc-chart', 'fc-bars', 'fc-year', 'fc-stats', 'fc-lineage', 'fc-lin-b'].forEach(k => $(k).innerHTML = ''); redraws.fac = null;
-    $('fc-method').innerHTML = `<p><b>وضعیت:</b> فاکتور کیفیت (سودآوری، اهرم، ثبات سود — مطابق روش MSCI Quality، فصل ۱۱) بر صورت‌های مالی بنا می‌شود. منبع آن صورت‌های مالی سالانهٔ رهاورد۳۶۵ است (نسبت‌های مالی عمومی؛ <code>tools/fetch_rahavard_fundamentals.py</code>) که هنوز روی سیستم کاربر اجرا و در مخزن نیامده؛ به همین دلیل این نما عددی نشان نمی‌دهد.</p>
-    <p><b>تعریف:</b> میانگین Zِ درون‌صنعتی سه مؤلفه: بازده حقوق صاحبان سهام (ROE)، نسبت بدهی به حقوق صاحبان سهام (کمتر بهتر) و انحراف معیار ROE در ۵ سال مالی (کمتر بهتر؛ جایگزین رشد EPS که تورم اسمی آن را مخدوش می‌کند)؛ پنج‌گانه‌ها و آزمون‌ها مثل مومنتوم و کم‌نوسان.</p>`;
-    return;
-  }
-  const F = facData(facState.sig), L = FAC_LAB[facState.sig];
-  $('fc-title').textContent = L.title;
-  $('fc-chip').textContent = `بک‌تست ماهانه · ${F.n_months} ماه · ${facState.uni === 'b' ? 'فقط بورس' : 'بورس + فرابورس'} · خالص هزینه` + (F.coverage ? ` · ${F.coverage.median} سهم امتیازدار` : '');
-  renderFac(F, L);
-}
-function renderFac(F, L) {
-  const N = facNet(F), M = F.monthly, S = { Q5ALL: mstats(N.ex), Q5Q1: mstats(N.ls) };
-  const ann = q => mstats(N.net[q]).ann, cost = facState.cost;
-  const col = { Q1: 'var(--down)', Q3: 'var(--ch-3)', Q5: 'var(--up)', ALL: 'var(--ch-2)' }, lab = { Q1: L.Q1, Q3: 'پنجک ۳', Q5: L.Q5, ALL: 'همهٔ واجدان شرایط (هم‌وزن)' };
-  const sig = Math.abs(S.Q5ALL.t) >= 1.96;
-  $('fc-kpis').innerHTML = [['پنجک ۵ نسبت به همه (سالانه)', sgn(ann('Q5') - ann('ALL'), 1) + '%', cls(ann('Q5') - ann('ALL'))], ['آمارهٔ t نیوی‌وست', fmt(S.Q5ALL.t, 2), sig ? cls(S.Q5ALL.t) : ''], ['نسبت اطلاعات (IR)', fmt(S.Q5ALL.ir, 2), ''], ['نرخ برد ماهانه', fmt(S.Q5ALL.hit, 0) + '%', ''], ['گردش سالانهٔ پنجک ۵', fmt(N.toAnn.Q5, 0) + '%', '']]
-    .map(([k, v, cl]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cl}">${v}</div></div>`).join('');
-  $('fc-legend').innerHTML = ['Q1', 'Q3', 'Q5', 'ALL'].map(q => `<span><i style="color:${col[q]}"></i>${lab[q]}</span>`).join('') + '<span class="readout" id="fc-readout"></span>';
-  const curve = {}; ['Q1', 'Q3', 'Q5', 'ALL'].forEach(q => { let c = 100; curve[q] = [100, ...N.net[q].map(r => (c *= 1 + r))]; });
-  const dates = [F.from, ...M.end], st = facState;
-  const draw = () => { paneChart($('fc-chart'), dates, [{ frac: 1, log: true, series: ['Q1', 'Q3', 'Q5', 'ALL'].map(q => ({ v: curve[q], color: col[q], w: q === 'ALL' ? 1.6 : 1.2, name: lab[q], fmt: v => fmt(v, 1) })), fmt: v => fmt(v, 0) }], st);
-    $('fc-readout').innerHTML = st.i == null ? '' : `<b>${dates[st.i]}</b> &nbsp; Q1 <b>${fmt(curve.Q1[st.i], 0)}</b> &nbsp; Q5 <b>${fmt(curve.Q5[st.i], 0)}</b> &nbsp; همه <b>${fmt(curve.ALL[st.i], 0)}</b>`; };
-  chartOn('fc-chart', facState, () => redraws.fac && redraws.fac());
-  redraws.fac = draw; draw();
-  $('fc-lineage').innerHTML = `<span><b>بازه</b> <span class="num">${F.from}</span> → <span class="num">${F.to}</span></span><span><b>بازده</b> TR، خرید و نگهداری در ماه</span><span><b>هزینه</b> ${cost} bp رفت‌وبرگشت × گردش واقعی</span><span><b>مبنا</b> فصل ۰۴ · ۰۵</span>`;
-  const q = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL'];
-  bars($('fc-bars'), ['۱', '۲', '۳', '۴', '۵', 'همه'], q.map(ann), v => fmt(v, 1), i => i === 5);
-  $('fc-lin-b').innerHTML = `<span><b>میانگین نماد</b> در هر پنجک ≈ ${F.avg_names.Q1} · کل واجد ≈ ${F.avg_names.ALL}</span><span><b>نوسان سالانه</b> ${['Q1', 'Q5', 'ALL'].map(k => (k === 'ALL' ? 'همه' : k) + ' ' + fmt(mstats(N.net[k]).vol, 1) + '٪').join(' · ')}</span>`;
-  const by = {}; M.end.forEach((d, i) => { const y = jyear.format(new Date(d + 'T00:00:00Z')); (by[y] = by[y] || []).push(i); });
-  const cmp = (arr, ix) => (ix.reduce((c, i) => c * (1 + arr[i]), 1) - 1) * 100;
-  $('fc-year').innerHTML = th([['سال شمسی'], ['پنجک ۱ %', 'n'], ['پنجک ۵ %', 'n'], ['همه %', 'n'], ['۵ − همه', 'n'], ['۵ − ۱', 'n'], ['ماه', 'n']]) + '<tbody>' + Object.entries(by).map(([y, ix]) => {
-    const a = cmp(N.net.Q1, ix), b = cmp(N.net.Q5, ix), c = cmp(N.net.ALL, ix);
-    return `<tr><td class="num">${y}</td><td class="n ${cls(a)}">${sgn(a, 1)}</td><td class="n ${cls(b)}">${sgn(b, 1)}</td><td class="n ${cls(c)}">${sgn(c, 1)}</td><td class="n ${cls(b - c)}">${sgn(b - c, 1)}</td><td class="n ${cls(b - a)}">${sgn(b - a, 1)}</td><td class="n mute">${ix.length}</td></tr>`; }).join('') + '</tbody>';
-  const half = Math.floor(N.ex.length / 2), h1 = mstats(N.ex.slice(0, half)), h2 = mstats(N.ex.slice(half));
-  const row = (k, s) => `<tr><td>${k}</td><td class="n ${cls(s.mu)}">${sgn(s.mu * 100, 2)}</td><td class="n ${cls(s.ann)}">${sgn(s.ann, 1)}</td><td class="n">${fmt(s.vol, 1)}</td><td class="n ${Math.abs(s.t) >= 1.96 ? cls(s.t) : ''}">${fmt(s.t, 2)}</td><td class="n">${fmt(s.ir, 2)}</td><td class="n">${fmt(s.hit, 0)}</td><td class="n down">${fmt(s.mdd, 1)}</td></tr>`;
-  $('fc-stats').innerHTML = th([['سری (خالص)'], ['میانگین ماهانه %', 'n'], ['سالانه %', 'n'], ['نوسان %', 'n'], ['t نیوی‌وست', 'n'], ['IR', 'n'], ['برد %', 'n'], ['بیشترین افت %', 'n']]) + '<tbody>' +
-    row('پنجک ۵ − همه', S.Q5ALL) + row('پنجک ۵ − پنجک ۱', S.Q5Q1) + row(`نیمهٔ اول (تا ${M.end[half - 1]})`, h1) + row('نیمهٔ دوم', h2) + '</tbody>';
-  const sigTxt = sig ? `در سطح ۵٪ معنادار است (|t| ≥ ۱٫۹۶)` : `در سطح ۵٪ معنادار نیست (|t| = ${fmt(Math.abs(S.Q5ALL.t), 2)} < ۱٫۹۶)`;
-  const sign = S.Q5ALL.mu >= 0 ? 'بیشتر' : 'کمتر';
-  $('fc-method').innerHTML = `<p><b>نتیجه:</b> پنجک ۵ پس از ${cost} bp هزینهٔ رفت‌وبرگشت، سالانه ${fmt(Math.abs(ann('Q5') - ann('ALL')), 1)} واحد درصد ${sign} از سبد هم‌وزن همهٔ واجدان شرایط بازده داده است؛ این تفاوت ${sigTxt}. ${facState.sig === 'lowvol' ? `نوسان پنجک ۵ (${fmt(mstats(N.net.Q5).vol, 1)}٪) از همه (${fmt(mstats(N.net.ALL).vol, 1)}٪) کمتر است؛ کاهش ریسک برقرار است حتی اگر بازده اضافه معنادار نباشد.` : 'الگوی پنجک‌ها کوهان‌شکل است: قوی‌ترین مومنتوم از میانهٔ بازار ضعیف‌تر است.'}</p>
-  <ol><li><b>سیگنال:</b> ${facState.sig === 'quality' ? `امتیاز ترکیبی ROE، D/E و ثبات ROE از آخرین سال مالی که تا آخرین روز ماه اعلام شده (تاریخ اعلام اولین EPS ۱۲‌ماهه؛ در نبود آن پایان سال مالی + ۱۲۰ روز)؛ Z درون صنعت، برش ±۳؛ پنجک ۵ باکیفیت‌ترین. دامنهٔ امتیازدار: از ${F.coverage ? F.coverage.first : '—'}، میانه ${F.coverage ? F.coverage.median : '—'} سهم در ماه.` : facState.sig === 'mom' ? 'بازدهٔ لگاریتمی TR از ۲۵۲ تا ۲۱ روز معاملاتی پیش از آخرین روز هر ماه شمسی (ماه آخر کنار گذاشته می‌شود).' : 'انحراف معیار بازدهٔ روزانهٔ TR در ۲۵۲ روز معاملاتی پیش از آخرین روز هر ماه شمسی؛ پنجک ۵ کم‌نوسان‌ترین است.'}</li>
-  <li><b>واجد شرایط:</b> دست‌کم ۸۰٪ روزهای پنجره داده و دست‌کم ۵۰٪ روزهایی با بازده غیرصفر (حذف نمادهای عملاً متوقف)، و دادهٔ روز بعد.</li>
-  <li><b>سبد:</b> هم‌وزن درون هر پنجک در روز ریبالانس (آخرین روز معاملاتی هر ماه شمسی)؛ تا ریبالانس بعد وزن‌ها با بازده رانش می‌کنند (خرید و نگهداری).</li>
-  <li><b>هزینه:</b> گردش یک‌طرفهٔ واقعی هر ماه (½ Σ|وزن هدف − وزن رانش‌یافته|) × هزینهٔ رفت‌وبرگشت ورودی؛ ساخت اولیه حساب نمی‌شود. همین هزینه به سبد «همه» هم اعمال می‌شود.</li>
-  <li><b>آزمون:</b> t با خطای معیار نیوی‌وست (۳ وقفه) چون بازده ماهانهٔ بازار ایران خودهمبستگی مثبت دارد؛ سالانه‌سازی بازده با ۱۲ ماه، نوسان با √۱۲.</li>
-  <li><b>بازه:</b> ${facState.sig === 'quality' ? `از نخستین ماهی که دست‌کم ۳۰ سهم امتیاز دارند (${F.from})؛ عمق تاریخچه را صورت‌های مالی رهاورد تعیین می‌کند، نه قیمت‌ها` : 'از ۱۳۹۵/۰۱؛ سیگنال از ۲۰۱۵ ساخته می‌شود'}.</li></ol>
-  <p><b>محدودیت‌ها:</b> ${facState.uni === 'b' ? `جهان فقط سهام بورس (${X.qa.universe.stocks_bourse_in_returns} نماد با بازده)` : `جهان همهٔ سهام بورس و فرابورس که قیمت دارند (${X.qa.universe.stocks_all_in_returns || '—'} نماد با بازده؛ عضویت در «شاخص كل» لازم نیست)`}، شامل نمادهای حذف‌شدهٔ بازیابی‌شده ولی نه لزوماً همهٔ نمادهای تاریخی؛ فرابورس سهام کم‌معامله بیشتری دارد و فقط فیلتر واجدیت (۸۰٪ روز داده، ۵۰٪ روز غیرصفر) اعمال می‌شود، نه حداقل ارزش معاملات؛ «پنجک ۵ − پنجک ۱» به فروش استقراضی نیاز دارد که در بورس تهران عملاً در دسترس نیست و فقط شاخص تشخیصی فاکتور است؛ مدل هزینه خطی است و صف خرید/فروش و دامنهٔ نوسان را در نظر نمی‌گیرد (فصل ۶).</p>`;
-  $('fc-csv').onclick = () => download(`factor_${L.file}_monthly_net_${cost}bp.csv`, [['month_end', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL', 'to_Q5_pct', 'to_ALL_pct'], ...M.end.map((d, i) => [d, ...q.map(k => (N.net[k][i] * 100).toFixed(3)), M.to.Q5[i] ?? '', M.to.ALL[i] ?? ''])]);
 }
 
 /* ══════════ Rebalance ══════════ */
@@ -577,30 +507,47 @@ $('cmd').addEventListener('keydown', e => {
 }, true);
 
 /* ══════════ Router ══════════ */
-const INIT = { div: initDiv, fac: initFac, reb: initReb, qa: initQA, rep: initRep, sym: initSym, pf: initPf, risk: initRisk, fnd: initFnd };
+const INIT = { div: initDiv, reb: initReb, qa: initQA, rep: initRep, sym: initSym, pf: initPf, risk: initRisk, fnd: initFnd };
 const NV = window.SIM_NEWVIEWS || {};                                   // نماهای lab.js: Lab · Signals · Plan
 Object.keys(NV).forEach(k => { VIEWS[k] = NV[k].id; INIT[k] = NV[k].init; });
+/* پنج بخش بر پایهٔ کار کاربر؛ هر بخش زیرتب‌های خودش را دارد. کلید ۱–۵ بخش‌ها، L استراتژی، G معیارها، A دستور اجرا. */
+const SECTIONS = [
+  { id: 'strategy', fa: 'استراتژی', why: 'معیار ← ترکیب ← الگوریتم ← ریبالانس و هزینه ← آمار سخت', views: [['lab', 'آزمایشگاه استراتژی'], ['sig', 'معیارها']] },
+  { id: 'index', fa: 'شاخص و ماکت', why: 'شاخص رسمی را بسازید یا با نمونهٔ کوچک و وام دنبال کنید', views: [['index', 'شاخص‌های رسمی و ماکت'], ['sam', 'نمونهٔ کوچک + وام'], ['div', 'اثر تأخیر سود'], ['reb', 'سیاست ریبالانس'], ['risk', 'ریسک']] },
+  { id: 'exec', fa: 'اجرا', why: 'از پرتفوی هدف تا سفارش، و رصد استراتژی قفل‌شده', views: [['plan', 'دستور اجرا'], ['live', 'دفتر زنده']] },
+  { id: 'funds', fa: 'صندوق‌ها', why: 'سبد هدف صندوق شاخصی و ردیابی صندوق‌های موجود', views: [['pf', 'سبد صندوق شاخصی'], ['fnd', 'ردیابی صندوق‌ها']] },
+  { id: 'data', fa: 'داده و گزارش', why: 'اعتماد: کیفیت داده، نماد، گزارش و تاریخچهٔ روش‌شناسی', views: [['qa', 'کیفیت داده'], ['sym', 'نماد'], ['rep', 'گزارش‌ها']] },
+];
+const SEC_OF = {}; SECTIONS.forEach(sc => sc.views.forEach(([k]) => { SEC_OF[k] = sc.id; }));
+const LEGACY = { fac: 'lab' };                                          // پیوندهای قدیمی (Factor Lab حذف شد)
+function renderSubnav(name) {
+  const sc = SECTIONS.find(x => x.id === SEC_OF[name]); if (!sc) return;
+  $('subnav').innerHTML = sc.views.map(([k, t]) => `<a href="#${k}" data-view="${k}"${k === name ? ' aria-current="page"' : ''}>${t}</a>`).join('') + `<span class="why">${sc.why}</span>`;
+  $('subnav').querySelectorAll('a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); show(a.dataset.view); }));
+}
 function show(name) {
+  name = LEGACY[name] || name;
   if (!VIEWS[name]) return;
   Object.entries(VIEWS).forEach(([k, id]) => { $(id).hidden = k !== name; });
-  document.querySelectorAll('#nav a').forEach(a => { if (a.dataset.view === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  document.querySelectorAll('#nav a').forEach(a => { if (a.dataset.sec === SEC_OF[name]) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  renderSubnav(name); LS.set('last.' + SEC_OF[name], name);
   if (X && INIT[name] && !inited[name]) { inited[name] = true; INIT[name](); }
   requestAnimationFrame(() => { if (name === 'index') drawChart(); else if (redraws[name]) redraws[name](); else if (NV[name] && NV[name].redraw) NV[name].redraw(); });
   window.SIM_CUR = name;
   history.replaceState(null, '', '#' + name); LS.set('view', name);
 }
 window.SIM_SHOW = show;
-document.querySelectorAll('#nav a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); show(a.dataset.view); }));
+document.querySelectorAll('#nav a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const sc = SECTIONS.find(x => x.id === a.dataset.sec); const last = LS.get('last.' + sc.id); show(last && SEC_OF[last] === sc.id ? last : sc.views[0][0]); }));
 addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || e.ctrlKey || e.metaKey) return;
-  const n = '1234567890'.indexOf(e.key); if (n >= 0) show(Object.keys(VIEWS)[n]);
+  const n = '12345'.indexOf(e.key); if (n >= 0) { const sc = SECTIONS[n], last = LS.get('last.' + sc.id); show(last && SEC_OF[last] === sc.id ? last : sc.views[0][0]); }
   const lk = { l: 'lab', g: 'sig', a: 'plan' }[e.key.toLowerCase()]; if (lk && VIEWS[lk]) show(lk);
 });
 const _run = window.run;
 window.run = function (cmd) {
   const [c, a] = cmd.trim().toLowerCase().split(/\s+/);
-  if (c === 'go' || c === 'view') { if (VIEWS[a]) { show(a); toast('نما: ' + a); } else toast('نما: ' + Object.keys(VIEWS).join(' · ')); return; }
-  if (c === 'help') { toast('GO INDEX|DIV|FAC|REB|QA|REP|SYM|PF|RISK|FND|LAB|SIG|PLAN · SYM <نماد> · IDX K|EW · WIN 2014|2016 · THEME · DENSITY · ↑↓ تاریخچه'); return; }
+  if (c === 'go' || c === 'view') { if (VIEWS[LEGACY[a] || a]) { show(a); toast('نما: ' + (LEGACY[a] || a)); } else toast('نما: ' + Object.keys(VIEWS).join(' · ')); return; }
+  if (c === 'help') { toast('GO LAB|SIG|INDEX|SAM|DIV|REB|RISK|PLAN|LIVE|PF|FND|QA|SYM|REP · SYM <نماد> · IDX K|EW · WIN 2014|2016 · THEME · DENSITY · ↑↓ تاریخچه · کلید ۱–۵ بخش‌ها'); return; }
   if (c === 'sym' && a) { window.openSym(cmd.trim().split(/\s+/)[1]); return; }
   if (c === 'density') { $('density').click(); return; }
   if (c === 'idx' || c === 'win') show('index');
@@ -608,6 +555,6 @@ window.run = function (cmd) {
   if (c === 'theme') { LS.set('theme', document.documentElement.dataset.theme); const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v && redraws[v]) redraws[v](); }
 };
 new ResizeObserver(() => { const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v && redraws[v]) redraws[v](); }).observe(document.body);
-const want = (location.hash || '').slice(1) || LS.get('view') || 'index';
+const want0 = (location.hash || '').slice(1) || LS.get('view') || 'index', want = LEGACY[want0] || want0;
 show(want in VIEWS ? want : 'index');
 })();

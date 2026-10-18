@@ -16,23 +16,11 @@
   <header class="topbar">
     <div class="mark"><i></i>SIM</div>
     <nav class="nav" aria-label="بخش‌ها" id="nav">
-      <span class="ngrp">پژوهش</span>
-      <a href="#lab" data-view="lab">Lab<kbd>L</kbd></a>
-      <a href="#sig" data-view="sig">Signals<kbd>G</kbd></a>
-      <a href="#fac" data-view="fac">Factor Lab<kbd>3</kbd></a>
-      <span class="ngrp">اجرا</span>
-      <a href="#plan" data-view="plan">Plan<kbd>A</kbd></a>
-      <a href="#pf" data-view="pf">Fund<kbd>8</kbd></a>
-      <a href="#fnd" data-view="fnd">Index Funds<kbd>0</kbd></a>
-      <span class="ngrp">شاخص</span>
-      <a href="#index" data-view="index" aria-current="page">Index Lab<kbd>1</kbd></a>
-      <a href="#div" data-view="div">Dividend Lab<kbd>2</kbd></a>
-      <a href="#reb" data-view="reb">Rebalance<kbd>4</kbd></a>
-      <a href="#qa" data-view="qa">Data QA<kbd>5</kbd></a>
-      <span class="ngrp">گزارش</span>
-      <a href="#sym" data-view="sym">Symbol<kbd>7</kbd></a>
-      <a href="#risk" data-view="risk">Risk<kbd>9</kbd></a>
-      <a href="#rep" data-view="rep">Reports<kbd>6</kbd></a>
+      <a href="#lab" data-sec="strategy" data-tip="ساخت و آزمون استراتژی: معیارها، ترکیب، الگوریتم انتخاب، ریبالانس، هزینه و آمار سخت.">استراتژی<kbd>1</kbd></a>
+      <a href="#index" data-sec="index" data-tip="ساخت و بازسازی شاخص: شاخص‌های رسمی، بازسازی با نمونهٔ کوچک و وام، اثر تأخیر سود، سیاست ریبالانس و ریسک.">شاخص و ماکت<kbd>2</kbd></a>
+      <a href="#plan" data-sec="exec" data-tip="اجرا: دستور خرید و فروش تاریخ‌دار برای پرتفوی هدف، و دفتر زندهٔ استراتژی قفل‌شده.">اجرا<kbd>3</kbd></a>
+      <a href="#pf" data-sec="funds" data-tip="صندوق‌ها: سبد هدف صندوق شاخصی و ردیابی صندوق‌های شاخصی موجود در برابر مرجعشان.">صندوق‌ها<kbd>4</kbd></a>
+      <a href="#qa" data-sec="data" data-tip="اعتماد: کیفیت داده، اطلاعات هر نماد و گزارش‌ها.">داده و گزارش<kbd>5</kbd></a>
     </nav>
     <label class="cmd">
       <span class="prompt">›</span>
@@ -44,6 +32,8 @@
     <button class="tool" id="density" title="تراکم جدول‌ها (DENSITY)" aria-label="تراکم">☰</button>
     <button class="tool" id="theme" title="تغییر تم" aria-label="تغییر تم">◐</button>
   </header>
+  <div class="subnav" id="subnav" role="tablist" aria-label="زیربخش‌ها"></div>
+
 
   <main class="workspace" id="v-index">
 
@@ -115,28 +105,6 @@
     <section class="panel" style="--lg:var(--lg-e)">
       <div class="panel-head"><span class="lg-badge">D</span><span class="panel-title">داده تاریخ واقعی پرداخت</span><span class="chip" id="dv-pay-chip"></span></div>
       <div class="panel-body scroll" id="dv-pay"></div></section>
-  </main>
-
-  <main class="workspace v-fac" id="v-fac" hidden>
-    <section class="panel" style="--lg:var(--lg-a)">
-      <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title" id="fc-title">مومنتوم ۱۲−۱ · پنج‌گانه‌ها</span><span class="chip" id="fc-chip"></span>
-        <div class="seg" id="fc-sig"><button data-s="mom" aria-pressed="true">مومنتوم</button><button data-s="lowvol" aria-pressed="false">کم‌نوسان</button><button data-s="quality" aria-pressed="false">کیفیت</button></div>
-        <div class="seg" id="fc-uni" title="جهان سهام فاکتور"><button data-u="all" aria-pressed="true">بورس + فرابورس</button><button data-u="b" aria-pressed="false">فقط بورس</button></div>
-        <div class="panel-tools"><button class="tool" id="fc-csv">CSV</button></div></div>
-      <div class="ctl" id="fc-ctl"><label>هزینهٔ رفت‌وبرگشت <input type="number" id="fc-cost" min="0" max="500" step="10" value="100"> bp</label><span class="mute">همهٔ اعداد این نما خالص همین هزینه‌اند</span></div>
-      <div class="kpis" id="fc-kpis"></div>
-      <div class="panel-body"><div class="legend" id="fc-legend"></div><svg class="chart" id="fc-chart" dir="ltr"></svg></div>
-      <div class="lineage" id="fc-lineage"></div></section>
-    <section class="panel" style="--lg:var(--lg-b)">
-      <div class="panel-head"><span class="lg-badge">B</span><span class="panel-title">بازده سالانهٔ هندسی هر پنجک (خالص)</span></div>
-      <div class="panel-body"><div class="bars" id="fc-bars"></div></div>
-      <div class="lineage" id="fc-lin-b"></div></section>
-    <section class="panel" style="--lg:var(--lg-c)">
-      <div class="panel-head"><span class="lg-badge">C</span><span class="panel-title">بازده هر سال شمسی (خالص)</span></div>
-      <div class="panel-body"><table class="dt" id="fc-year"></table></div></section>
-    <section class="panel" style="--lg:var(--lg-e)">
-      <div class="panel-head"><span class="lg-badge">D</span><span class="panel-title">آزمون آماری · روش · محدودیت‌ها</span></div>
-      <div class="panel-body scroll"><table class="dt" id="fc-stats"></table><div class="prose" id="fc-method"></div></div></section>
   </main>
 
   <main class="workspace v-reb" id="v-reb" hidden>
@@ -273,6 +241,8 @@
       <div class="panel-body scroll"><div class="prose" id="fn-method"></div></div></section>
   </main>
 
+  <main class="workspace v-sam" id="v-sam" hidden></main>
+  <main class="workspace v-live" id="v-live" hidden></main>
   <main class="workspace v-lab" id="v-lab" hidden></main>
   <main class="workspace v-sig" id="v-sig" hidden></main>
   <main class="workspace v-plan" id="v-plan" hidden></main>
@@ -284,6 +254,7 @@
 <script src="data/data.js"></script>
 <script src="data/extra.js"></script>
 <script src="data/funds.js"></script>
+<script src="data/live.js"></script>
 <script src="chartkit.js"></script>
 <script>
 const D = window.SIM_DATA;
@@ -404,6 +375,7 @@ render(); renderComp(); drawChart();
 </script>
 <script src="labengine.js"></script>
 <script src="lab.js"></script>
+<script src="replica.js"></script>
 <script src="views.js"></script>
 <script src="glossary.js"></script>
 <script src="tips.js"></script>

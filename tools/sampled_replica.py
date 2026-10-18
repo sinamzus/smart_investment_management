@@ -184,6 +184,9 @@ def main():
             Cfull.iloc[t] = float(w @ X[t, idx])
     base = evaluate(pd.Series((1 + Cfull[Cfull.index >= START]).cumprod()), K, Cfull)
     print(f"ماکت کامل (وزن بازار، ریبالانس روزانه) در برابر شاخص كل رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}\n")
+    import json
+    json.dump({"rate": a.rate, "cost_bp": a.cost, "from": str(START.date()), "to": str(mk.dates[-1].date()), "n_eligible_last": int((mk.eligible(mk.n - 1) & ok).sum()),
+               "full_replica": {k: float(v) for k, v in base.items()}}, open(ROOT / "data" / "research" / "sampled_replica_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     for N in [int(x) for x in a.ns.split(",")]:
         for m in METHODS:
             for lev in ("none", "beta"):

@@ -12,7 +12,7 @@ button,input { font: inherit; color: inherit; }
 .up { color: var(--up); } .down { color: var(--down); } .mute { color: var(--tx-2); } .dim { color: var(--tx-3); }
 
 /* ── App shell ───────────────────────────────────────────── */
-.app { display:grid; grid-template-rows: 36px 1fr 22px; height:100vh; }
+.app { display:grid; grid-template-rows: 36px 28px 1fr 22px; height:100vh; }
 .topbar { display:flex; align-items:center; gap: var(--s-4); padding: 0 var(--s-4);
   background: var(--bg-head); border-bottom: var(--hair) solid var(--line-strong); }
 .mark { font: 700 var(--fs-md)/1 var(--font-num); letter-spacing: .08em; display:flex; gap:6px; align-items:center; }
@@ -114,10 +114,9 @@ svg.chart { width:100%; height:100%; display:block; }
 .toast { position:fixed; bottom: 30px; inset-inline-start: 50%; transform: translateX(-50%); background: var(--bg-head); border: var(--hair) solid var(--line-strong); padding: 4px 10px; font-size: var(--fs-xs); border-radius: var(--radius); z-index:5; }
 .sub { padding: 4px var(--s-3) 2px; color: var(--tx-3); font-size: var(--fs-2xs); background: var(--bg-head); border-bottom: var(--hair) solid var(--line); position: sticky; top: 24px; z-index:1; }
 
-/* ── Views (Index Lab ‖ Dividend Lab ‖ Factor Lab ‖ Rebalance ‖ Data QA ‖ Reports) ── */
+/* ── Views (Index Lab ‖ Dividend Lab ‖ Rebalance ‖ Data QA ‖ Reports) ── */
 .workspace[hidden] { display:none; }
 .workspace.v-div { grid-template-columns: 1.5fr 1fr; grid-template-rows: 1.35fr 1fr; }
-.workspace.v-fac { grid-template-columns: 1.5fr 1fr; grid-template-rows: 1.2fr 1fr; }
 .workspace.v-reb { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
 .workspace.v-qa  { grid-template-columns: 1.3fr 1fr; grid-template-rows: 1.5fr 1fr; }
 .workspace.v-rep { grid-template-columns: 1.2fr 1fr; grid-template-rows: 1.2fr 1fr; }
@@ -179,7 +178,7 @@ select { font: inherit; }
 /* ── واکنش‌گرا: صفحهٔ کوچک ← یک ستون، اسکرول عمودی ── */
 @media (max-width: 1000px) {
   body { overflow: auto; }
-  .app { height: auto; min-height: 100vh; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr auto; }
+  .app { height: auto; min-height: 100vh; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr auto; }
   .topbar > *, .workspace > * { min-width: 0; }
   .nav { flex: 1 1 100%; order: 2; }
   .statusbar { flex-wrap: wrap; row-gap: 2px; padding-block: 4px; }
@@ -212,3 +211,10 @@ svg.chart.zoomable:focus-visible { outline: 1px dashed var(--accent); outline-of
 .bars .b { cursor: default; transition: filter .08s; }
 .bars .b:hover { filter: brightness(1.3); outline: 1px solid var(--accent); outline-offset: 1px; }
 .bars .b:hover em { color: var(--tx-1); }
+
+/* ── زیرنوار بخش (زیرتب‌ها) ── */
+.subnav { display:flex; align-items:stretch; gap:2px; padding: 0 var(--s-4); background: var(--bg-app); border-bottom: var(--hair) solid var(--line); overflow-x:auto; }
+.subnav a { display:flex; align-items:center; padding: 0 var(--s-4); color: var(--tx-3); text-decoration:none; font-size: var(--fs-xs); border-bottom: 2px solid transparent; white-space:nowrap; }
+.subnav a:hover { color: var(--tx-1); background: var(--bg-hover); }
+.subnav a[aria-current="page"] { color: var(--tx-1); border-bottom-color: var(--accent); font-weight:600; }
+.subnav .why { margin-inline-start:auto; align-self:center; color: var(--tx-3); font-size: var(--fs-2xs); padding-inline-start: var(--s-4); white-space:nowrap; }
