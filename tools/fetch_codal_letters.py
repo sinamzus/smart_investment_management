@@ -4,6 +4,7 @@
 
     python tools/fetch_codal_letters.py --selftest          # آزمون تجزیه بدون شبکه
     python tools/fetch_codal_letters.py --test              # شبکه: چند نامهٔ ن-67 + نمایش متن و فیلدهای استخراج‌شده
+    python tools/fetch_codal_letters.py --test-code ن-57    # نمونه‌برداری از یک کد دیگر (ن-57، ن-64، ن-60، ن-66)
     python tools/fetch_codal_letters.py --log l.txt         # اجرای کامل (قابل ادامه؛ چند ساعت)
     python tools/fetch_codal_letters.py --codes ن-67 --log l.txt   # فقط یک نوع اطلاعیه
     python tools/fetch_codal_letters.py --reparse           # فقط از متن خام دوباره استخراج کن (بدون شبکه)
@@ -13,7 +14,7 @@
 data/corporate_actions/codal_letters_raw.csv.gz ذخیره می‌شود؛ جدول استخراج‌شده: codal_capital_events.csv.
 کدهای اطلاعیه (فهرست رسمی کدال): ن-60 پیشنهاد هیئت‌مدیره · ن-61 اظهارنظر حسابرس · ن-62 مدارک درخواست · ن-63 تمدید مجوز · ن-64 مهلت حق تقدم ·
 ن-65 اعلامیه پذیره‌نویسی · ن-66 نتایج فروش حق تقدم‌های استفاده‌نشده · ن-67 آگهی ثبت افزایش سرمایه · ن-70/73 تصمیم هیئت‌مدیره (تفویض) ·
-ن-56 دعوت مجمع فوق‌العاده · ن-57 تصمیمات مجمع فوق‌العاده. «صدور مجوز افزایش سرمایه» (سازمان بورس) با ن-68 هم امتحان می‌شود.
+ن-56 دعوت مجمع فوق‌العاده · ن-57 تصمیمات مجمع فوق‌العاده. ن-68 (آگهی مطالبهٔ مبلغ پرداخت‌نشدهٔ سرمایه) به کار ما نمی‌آید.
 """
 import argparse
 import csv
@@ -31,13 +32,13 @@ if hasattr(sys.stdout, "reconfigure"):
 OUT = ROOT / "data" / "corporate_actions"
 API = "https://search.codal.ir/api/search/v2/q"
 SITE = "https://codal.ir"
-DEFAULT_CODES = ["ن-67", "ن-57", "ن-64", "ن-60", "ن-66", "ن-68", "ن-65", "ن-73"]
+DEFAULT_CODES = ["ن-67", "ن-57", "ن-64", "ن-60", "ن-66", "ن-65", "ن-73"]
 FA = {**{ord(c): str(i % 10) for i, c in enumerate("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩")}, ord("٬"): ",", ord("ي"): "ی", ord("ك"): "ک", 0x200c: " "}
 SRC = [("claims_cash", r"مطالبات\s*(?:حال\s*شده\s*سهامداران)?\s*و\s*آورده\s*نقدی"), ("cash_waived", r"آورده\s*نقدی\s*با\s*سلب\s*حق\s*تقدم"),
        ("retained", r"سود\s*انباشته"), ("reserves", r"اندوخته"), ("reval", r"مازاد\s*تجدید\s*ارزیابی"), ("premium", r"صرف\s*سهام")]
 FIELDS = ["tracing_no", "symbol", "code", "kind", "publish", "title", "license_no", "license_date", "egm_date", "board_date", "old_capital_m", "new_capital_m", "inc_m", "pct",
           "src_claims_cash_m", "src_cash_waived_m", "src_retained_m", "src_reserves_m", "src_reval_m", "src_premium_m", "approval", "rights_from", "rights_to", "reg_date",
-          "unused_rights", "per_right_rial", "purpose"]
+          "unused_rights", "per_right_rial", "purpose", "superseded", "amends"]
 
 
 def jdate(s):
@@ -60,7 +61,8 @@ def html_text(h):
     h = re.sub(r"(?i)</tr\s*>|<br\s*/?>|</(p|h\d|li|div|table)\s*>", "\n", h)
     h = re.sub(r"<[^>]+>", " ", h)
     t = htmllib.unescape(h).translate(FA)
-    return re.sub(r"[ \t\r\f\v\xa0]+", " ", t)
+    t = re.sub(r"[ \t\r\f\v\xa0]+", " ", t)
+    return re.sub(r"\n\s*(?:\n\s*)+", "\n", t)                                  # خط‌های خالی پشت‌سرهم → یکی
 
 
 def flat(t):
@@ -96,6 +98,11 @@ def parse_letter(code, title, text):
     """-> dict از FIELDS (فقط فیلدهای یافت‌شده). نوع نامه از عنوان تشخیص داده می‌شود (کد ممکن است برای چند نوع مشترک باشد)."""
     t = flat(text)
     r, ti = {}, re.sub(r"\s+", "", title or "")
+    if re.search(r"این\s*اطلاعیه\s*نسخه\s*جدیدتری", t):
+        r["superseded"] = 1                                                          # نسخهٔ جدیدتر (اصلاحیه) دارد؛ در جدول نهایی کنار گذاشته شود
+    m = re.search(r"اصلاحیه\s*اطلاعیه\s*شماره\s*\(?\s*(\d+)", t)
+    if m:
+        r["amends"] = m.group(1)
     no, ld = lic(t)
     if no:
         r["license_no"], r["license_date"] = no, ld
@@ -152,12 +159,14 @@ def parse_letter(code, title, text):
             r["purpose"] = m.group(1).strip()
     elif "تصمیماتمجمععمومیفوقالعاده" in ti or "تصمیماتمجمعفوق" in ti:
         r["kind"] = "egm_decision"
-        row = next((x for x in text.split("\n") if "قطعی" in x and "|" in x), None)
-        if row:
-            cells = [c.strip() for c in row.split("|") if c.strip()]
-            nums = [num(c) for c in cells if re.fullmatch(r"[\d,]+(\.\d+)?", c)]
-            if len(nums) >= 11:
-                sh, par, cap, cc, re_, rs, rv, pr, cw, inc, pct = nums[:11]
+        k = t.find("قطعی")
+        if k > 0:                                                                    # ۱۱ سلول عددی (تعداد سهام … درصد) پیش از «قطعی» در متن تخت
+            cells = [c.strip() for c in t[max(0, k - 600):k].split("|")]
+            while cells and not cells[-1]:
+                cells.pop()
+            nums = [num(c) for c in cells[-11:] if re.fullmatch(r"[\d,]*(\.\d+)?", c)]
+            if len(nums) == 11 and all(v is not None for v in nums[:3]):
+                sh, par, cap, cc, re_, rs, rv, pr, cw, inc, pct = [v or 0.0 for v in nums]
                 r.update({"old_capital_m": cap, "inc_m": inc, "new_capital_m": cap + inc, "pct": pct, "src_claims_cash_m": cc, "src_retained_m": re_,
                           "src_reserves_m": rs, "src_reval_m": rv, "src_premium_m": pr, "src_cash_waived_m": cw, "approval": "قطعی"})
         if "approval" not in r:
@@ -193,6 +202,10 @@ def selftest():
     assert e["kind"] == "license" and e["license_no"] == "DPM-IOP-04A-004" and e["license_date"] == "1404/01/27" and e["old_capital_m"] == 14040000 and e["src_retained_m"] == 4760000, e
     f = p["مجمع"]
     assert f["kind"] == "egm_decision" and f["egm_date"] == "1403/12/26" and f["pct"] == 33 and f["src_retained_m"] == 250000000 and f["approval"] == "قطعی", f
+    g = parse_letter("ن-67", "آگهی ثبت افزایش سرمایه", "این اطلاعیه نسخه جدیدتری به شماره ( 1612358 ) دارد. | با عنایت به مجوز افزایش سرمایه به شماره مجوز DPM-IOP-93A-137 مورخ 1393/10/14")
+    assert g.get("superseded") == 1, g
+    h2 = parse_letter("ن-67", "آگهی ثبت افزایش سرمایه(اصلاحیه)", "این اطلاعیه اصلاحیه اطلاعیه شماره ( 1611885 ) می باشد.")
+    assert h2.get("amends") == "1611885", h2
     print("selftest OK")
 
 
@@ -292,13 +305,36 @@ def test(a):
             print("HTML نیامد برای", x.get("Url")); continue
         text = html_text(t)
         print("\n--- متن (۱۲۰۰ نویسهٔ اول) ---\n", text[:1200], "\n--- استخراج ---\n", parse_letter("ن-67", x.get("Title", ""), text))
-    for code in ("ن-68", "ن-57", "ن-64"):
+    for code in ("ن-57", "ن-64", "ن-60"):
         d = list_page(h, code, 1)
         print(code, "Total:", (d or {}).get("Total"), [ (z.get("Symbol"), z.get("Title")) for z in ((d or {}).get("Letters") or [])[:2]])
 
 
+def test_code(a):
+    """نمونه‌برداری از یک کد: ۸ نامهٔ نخست (برای ن-57 فقط نامه‌هایی که متنشان «افزایش سرمایه» دارد) و استخراج‌شان."""
+    from fetch_codal_fundamentals import Http
+    h = Http(a.delay)
+    d = list_page(h, a.test_code, 1)
+    L = (d or {}).get("Letters") or []
+    print(a.test_code, "Total:", (d or {}).get("Total"), "· صفحهٔ ۱:", len(L))
+    shown = 0
+    for x in L:
+        if shown >= 3:
+            break
+        t = get_html(h, x.get("Url") or "")
+        if not t:
+            continue
+        text = html_text(t)
+        if a.test_code == "ن-57" and "افزایش سرمایه" not in text:
+            continue
+        shown += 1
+        fl = flat(text); k = fl.find("قطعی")
+        print("\n===", x.get("Symbol"), x.get("PublishDateTime"), x.get("Title"), "\n متن (۹۰۰ نویسه):", fl[:900], "\n اطراف «قطعی»:", fl[max(0, k - 300):k + 40] if k > 0 else "(نیست)", "\n استخراج:", parse_letter(a.test_code, x.get("Title", ""), text))
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--test-code", help="نمونه‌برداری از یک کد، مثلاً ن-57")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--test", action="store_true")
     ap.add_argument("--reparse", action="store_true")
@@ -315,6 +351,8 @@ def main():
         return reparse()
     if a.log:
         sys.stdout = sys.stderr = open(a.log, "a", encoding="utf-8", buffering=1)
+    if a.test_code:
+        return test_code(a)
     return test(a) if a.test else run(a)
 
 
