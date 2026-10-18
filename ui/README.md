@@ -52,6 +52,8 @@ python tools/build_ui_symbols.py  # → ui/data/symbols.js (نمای نماد)
 python tools/build_ui_live.py     # → ui/data/live.js (جدول N × روش · دفتر زنده)
 python tools/build_replica_panel.py   # → ui/data/replica.js (ماکت‌ساز: فیلتر نقدشوندگی، نقد/وام، گذشته؛ ≈ ۲۰ دقیقه)
 node tools/replica_selftest.js        # هم‌ارزی موتور مرورگر ماکت‌ساز با پایتون
+python tools/build_replica_x.py       # → ui/data/replica_x.js (بازده روزانه و ارزش بازار/نقدشوندگی ماهانه برای «شاخص بهبودیافته»)
+node tools/enhance_selftest.js        # آزمون موتور تیلت/بهینه‌سازی مرورگری در برابر پایتون
 pip install cvxpy scikit-learn scipy   # فقط برای ساخت کتابخانهٔ Lab (بهینه‌سازها)
 python tools/build_lab.py         # → ui/data/lab.js (Lab · Signals · Plan؛ ۳۰–۶۰ دقیقه)
 node tools/lab_selftest.js        # هم‌ارزی موتور مرورگر با پایتون
