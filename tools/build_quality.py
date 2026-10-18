@@ -67,6 +67,8 @@ def load_codal(skip: set) -> dict:
             a = pub.get((ins, int(fy)))
             avail = (safe_fy_date(a) if isinstance(a, str) and a[:2] == "14" else fe + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1)
             lia = r.get("liabilities", np.nan)
+            if not lia == lia and r.get("liab_cur", np.nan) == r.get("liab_cur", np.nan) and r.get("liab_noncur", np.nan) == r.get("liab_noncur", np.nan):
+                lia = r["liab_cur"] + r["liab_noncur"]
             if not lia == lia and r.get("assets", np.nan) == r.get("assets", np.nan):
                 lia = r["assets"] - eq                 # جمع بدهی‌ها پیدا نشد ← دارایی − حقوق
             rows.append({"ins_code": ins, "fy_end": fe, "roe": 100.0 * r["net_income"] / eq,

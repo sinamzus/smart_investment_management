@@ -18,6 +18,7 @@
     data/fundamentals/codal_letters.csv   ins_code, symbol, tracing_no, title, fy_end, audited, consolidated, published, excel_url
     data/fundamentals/codal_long.csv      ins_code, symbol, tracing_no, fy_year, fy_end, col, stmt(bs|pl), key, label, value
                                           col = cur (سال مالی نامه) | prev (ستون سال قبل همان نامه)؛ مقدار به میلیون ریال [تأیید لازم]
+    data/fundamentals/codal_raw.csv.gz    همهٔ پاره‌های برچسب+عدد هر فایل (برای بازتجزیه بدون دانلود دوباره: --reparse)
     data/fundamentals/codal_done.csv      نمادهای کامل‌شده (برای ادامه)
 
 tools/build_quality.py اگر این فایل‌ها را ببیند، برای نمادهایی که رهاورد ندارد ROE و D/E را از آن می‌سازد و
@@ -41,18 +42,19 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
            "Accept": "application/json", "Accept-Language": "fa-IR,fa;q=0.9"}
 FA = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
-# برچسب (نرمال‌شده) ← (صورت، کلید). فقط پیشوند؛ نخستین رخداد هر کلید در هر نامه می‌ماند (ترازنامه/سود‌وزیان اول فایل = معمولاً تلفیقی در صورت وجود).
-LABELS = [
-    ("bs", "assets", "جمعدارایی"),
-    ("bs", "liabilities", "جمعبدهی"),
-    ("bs", "equity", "جمعحقوقمالکانه"),
-    ("bs", "equity", "جمعحقوقصاحبانسهام"),
-    ("bs", "capital", "سرمایه"),
-    ("pl", "revenue", "درآمدهایعملیاتی"),
-    ("pl", "revenue", "فروشخالص"),
-    ("pl", "op_profit", "سودزیانعملیاتی"),
-    ("pl", "net_income", "سودزیانخالص"),
-]
+# تطبیق دقیق برچسب نرمال‌شده (پیشوند ریز‌جمع‌ها را اشتباه می‌گرفت: «جمع بدهی‌های غیرجاری» به‌جای «جمع بدهی‌ها»).
+EXACT = {
+    ("bs", "assets"): {"جمعداراییها"},
+    ("bs", "liabilities"): {"جمعبدهیها"},
+    ("bs", "liab_cur"): {"جمعبدهیهایجاری"},
+    ("bs", "liab_noncur"): {"جمعبدهیهایغیرجاری"},
+    ("bs", "equity"): {"جمعحقوقمالکانه", "جمعحقوقصاحبانسهام"},
+    ("bs", "capital"): {"سرمایه"},
+    ("pl", "revenue"): {"درآمدهایعملیاتی", "فروشخالص"},
+    ("pl", "op_profit"): {"سودزیانعملیاتی"},
+    ("pl", "net_income"): {"سودزیانخالص"},
+}
+PREFIX_FALLBACK = {("pl", "net_income"): "سودزیانخالص"}      # فقط اگر تطبیق دقیق نبود (مثلاً «… عملیات در حال تداوم»)
 
 
 def norm(s: str) -> str:
@@ -107,17 +109,18 @@ class Tables(HTMLParser):
             self._cell.append(data)
 
 
-def parse_statements(html: str):
-    """[(stmt, key, label, cur, prev)] — نخستین رخداد هر (stmt,key)؛ ستون نخست عددی = سال جاری، دومین = سال قبل."""
+def parse_all(html: str):
+    """همهٔ پاره‌های «برچسب + دو عدد نخست» به‌ترتیب: [(table_idx, hint, label, v_cur, v_prev)].
+    ردیف ترازنامه/سود‌وزیان کدال گاهی دو ستونِ برچسب‌دار دارد (دارایی‌ها | بدهی و حقوق) ← ردیف به پاره‌ها شکسته می‌شود."""
     p = Tables()
     p.feed(html)
-    out, seen = [], set()
-    for tbl in p.tables:
+    out = []
+    for ti, tbl in enumerate(p.tables):
         blob = norm(" ".join(c for r in tbl[:6] for c in r))
-        stmt_hint = "pl" if ("سودوزیان" in blob or "سودزیان" in blob) and "ترازنامه" not in blob else ("bs" if "ترازنامه" in blob or "وضعیتمالی" in blob else None)
+        hint = "pl" if ("سودوزیان" in blob or "سودزیان" in blob) and "ترازنامه" not in blob else ("bs" if "ترازنامه" in blob or "وضعیتمالی" in blob else "")
         for row in tbl:
-            # ترازنامه/سود‌وزیان کدال گاهی دو ستونِ برچسب‌دار در یک ردیف دارد (دارایی‌ها | بدهی و حقوق) ← ردیف به پاره‌های «برچسب + اعداد» شکسته می‌شود
-            segs, cur = [], None
+            cur = None
+            segs = []
             for c in row:
                 if num(c) is None and norm(c):
                     cur = [c, []]
@@ -125,17 +128,33 @@ def parse_statements(html: str):
                 elif cur is not None and num(c) is not None:
                     cur[1].append(num(c))
             for lab, vals in segs:
-                if not vals:
-                    continue
-                nl = norm(lab)
-                for stmt, key, pref in LABELS:
-                    if nl.startswith(pref) and (stmt_hint in (None, stmt)) and (stmt, key) not in seen:
-                        if key == "capital" and len(nl) > 12:      # «سرمایه» دقیق، نه «سرمایه‌گذاری…»
-                            continue
-                        seen.add((stmt, key))
-                        out.append((stmt, key, lab, vals[0], vals[1] if len(vals) > 1 else None))
-                        break
+                if vals:
+                    out.append((ti, hint, lab, vals[0], vals[1] if len(vals) > 1 else None))
     return out
+
+
+def extract(raw):
+    """[(stmt, key, label, cur, prev)] — نخستین رخداد هر (stmt,key) با تطبیق دقیق."""
+    out, seen = [], set()
+    for _ti, hint, lab, cur, prev in raw:
+        nl = norm(lab)
+        for (stmt, key), names in EXACT.items():
+            if nl in names and hint in ("", stmt) and (stmt, key) not in seen:
+                seen.add((stmt, key))
+                out.append((stmt, key, lab, cur, prev))
+    for (stmt, key), pref in PREFIX_FALLBACK.items():
+        if (stmt, key) in seen:
+            continue
+        for _ti, hint, lab, cur, prev in raw:
+            if norm(lab).startswith(pref) and hint in ("", stmt):
+                seen.add((stmt, key))
+                out.append((stmt, key, lab, cur, prev))
+                break
+    return out
+
+
+def parse_statements(html: str):
+    return extract(parse_all(html))
 
 
 def jdate(s: str):
@@ -146,14 +165,17 @@ def jdate(s: str):
 def selftest():
     html = """<html><body>
     <table><tr><th>ترازنامه</th></tr><tr><td>شرح</td><td>۱۴۰۳/۱۲/۳۰</td><td>۱۴۰۲/۱۲/۲۹</td></tr>
+    <tr><td>جمع دارایی‌های غیرجاری</td><td>۱</td><td>۱</td><td>جمع بدهی‌های غیرجاری</td><td>۹</td><td>۹</td></tr>
     <tr><td>جمع دارایی‌ها</td><td>۱,۲۰۰,۰۰۰</td><td>(۹۰۰,۰۰۰)</td><td>جمع بدهی‌ها</td><td>۷۰۰,۰۰۰</td><td>۶۰۰,۰۰۰</td></tr>
     <tr><td>جمع حقوق مالکانه</td><td>۵۰۰,۰۰۰</td><td>۳۰۰,۰۰۰</td></tr>
     <tr><td>سرمایه</td><td>۱۰۰,۰۰۰</td><td>۱۰۰,۰۰۰</td></tr></table>
     <table><tr><td>صورت سود و زیان</td></tr>
     <tr><td>درآمدهای عملیاتی</td><td>۸۰۰,۰۰۰</td><td>۵۰۰,۰۰۰</td></tr>
+    <tr><td>سود (زیان) خالص عملیات در حال تداوم</td><td>۷</td><td>۷</td></tr>
     <tr><td>سود (زیان) خالص</td><td>۱۵۰,۰۰۰</td><td>-</td></tr></table></body></html>"""
     got = {(s, k): (c, p) for s, k, _l, c, p in parse_statements(html)}
     assert got[("bs", "assets")] == (1200000.0, -900000.0), got
+    assert got[("bs", "liabilities")][0] == 700000.0, got
     assert got[("bs", "equity")] == (500000.0, 300000.0) and got[("bs", "liabilities")][0] == 700000.0, got
     assert got[("pl", "net_income")] == (150000.0, None) and got[("pl", "revenue")][0] == 800000.0, got
     assert got[("bs", "capital")][0] == 100000.0
@@ -234,14 +256,17 @@ def pick(letters):
     return res
 
 
-def rows_for(L, ins, sym, content: bytes):
+def rows_for(L, ins, sym, content: bytes, raw_out=None):
     if content[:4] == b"\xd0\xcf\x11\xe0":
         print("   فایل قدیمی OLE2؛ رد شد")
         return []
     html = content.decode("utf-8", errors="replace")
     fy = int(L["fy_end"][:4])
     out = []
-    for stmt, key, label, cur, prev in parse_statements(html):
+    raw = parse_all(html)
+    if raw_out is not None:
+        raw_out += [[ins, sym, L["tracing_no"], fy, L["fy_end"], ti, hint, lab, c, p] for ti, hint, lab, c, p in raw]
+    for stmt, key, label, cur, prev in extract(raw):
         out.append([ins, sym, L["tracing_no"], fy, L["fy_end"], "cur", stmt, key, label, cur])
         if prev is not None:
             out.append([ins, sym, L["tracing_no"], fy - 1, "", "prev", stmt, key, label, prev])
@@ -257,12 +282,41 @@ def append(path, header, rows):
         w.writerows(rows)
 
 
+def append_gz(path, header, rows):
+    import gzip
+    new = not path.exists()
+    with gzip.open(path, "at", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(header)
+        w.writerows(rows)
+
+
+def reparse():
+    """codal_long.csv را از codal_raw.csv.gz دوباره می‌سازد (بدون شبکه) — برای اصلاح قواعد تطبیق برچسب."""
+    import gzip
+    rows, grp = [], {}
+    with gzip.open(OUT / "codal_raw.csv.gz", "rt", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            grp.setdefault((r["ins_code"], r["symbol"], r["tracing_no"], r["fy_year"], r["fy_end"]), []).append(
+                (int(r["table"]), r["hint"], r["label"], float(r["cur"]), float(r["prev"]) if r["prev"] != "" else None))
+    for (ins, sym, tn, fy, fe), raw in grp.items():
+        fy = int(fy)
+        for stmt, key, label, cur, prev in extract(raw):
+            rows.append([ins, sym, tn, fy, fe, "cur", stmt, key, label, cur])
+            if prev is not None:
+                rows.append([ins, sym, tn, fy - 1, "", "prev", stmt, key, label, prev])
+    (OUT / "codal_long.csv").unlink(missing_ok=True)
+    append(OUT / "codal_long.csv", ["ins_code", "symbol", "tracing_no", "fy_year", "fy_end", "col", "stmt", "key", "label", "value"], rows)
+    print("codal_long بازسازی شد:", len(rows), "ردیف از", len(grp), "فایل")
+
+
 def do_symbol(h, ins, sym, dry=False, since=1396):
     ls = [L for L in pick(list_letters(h, sym)) if int(L["fy_end"][:4]) >= since]
     # هر فایل ستون سال قبل را هم دارد ← یک‌درمیان دانلود می‌کنیم (نیمی از درخواست‌ها)؛ فهرست نامه‌ها (تاریخ انتشار) برای همهٔ سال‌ها ذخیره می‌شود
     dl = {L["fy_end"] for L in ls[::-1][::2]}
     print(f"{sym}: {len(ls)} سال مالی، {len(dl)} فایل", flush=True)
-    longs = []
+    longs, raws = [], []
     for L in ls:
         if L["fy_end"] not in dl:
             continue
@@ -270,7 +324,7 @@ def do_symbol(h, ins, sym, dry=False, since=1396):
         if not c:
             print(f"   {L['fy_end']}: دریافت ناموفق", flush=True)
             continue
-        r = rows_for(L, ins, sym, c)
+        r = rows_for(L, ins, sym, c, raws)
         keys = {x[7] for x in r}
         print(f"   {L['fy_end']} {'ح' if L['audited'] else 'غ'}{'ت' if L['consolidated'] else ''}: {len(r)} ردیف؛ کلیدها {sorted(keys)}", flush=True)
         longs += r
@@ -278,6 +332,7 @@ def do_symbol(h, ins, sym, dry=False, since=1396):
         append(OUT / "codal_letters.csv", ["ins_code", "symbol", "tracing_no", "title", "fy_end", "audited", "consolidated", "published", "excel_url", "first_published"],
                [[ins, sym] + [L[k] for k in ("tracing_no", "title", "fy_end", "audited", "consolidated", "published", "excel_url", "first_published")] for L in ls])
         append(OUT / "codal_long.csv", ["ins_code", "symbol", "tracing_no", "fy_year", "fy_end", "col", "stmt", "key", "label", "value"], longs)
+        append_gz(OUT / "codal_raw.csv.gz", ["ins_code", "symbol", "tracing_no", "fy_year", "fy_end", "table", "hint", "label", "cur", "prev"], raws)
         append(OUT / "codal_done.csv", ["ins_code", "symbol", "n_years"], [[ins, sym, len(ls)]])
     return len(ls)
 
@@ -286,6 +341,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--test", metavar="SYMBOL")
+    ap.add_argument("--reparse", action="store_true", help="بازسازی codal_long از codal_raw بدون شبکه")
     ap.add_argument("--symbols-file")
     ap.add_argument("--delay", type=float, default=2.5)
     ap.add_argument("--since", type=int, default=1396, help="قدیمی‌ترین سال مالی (جلالی)؛ ۱۳۹۶ برای ثبات ROE پنج‌ساله تا ۱۴۰۰ کافی است")
@@ -293,6 +349,8 @@ def main():
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.reparse:
+        return reparse()
     if a.log:
         sys.stdout = sys.stderr = open(a.log, "a", encoding="utf-8", buffering=1)
     OUT.mkdir(parents=True, exist_ok=True)
