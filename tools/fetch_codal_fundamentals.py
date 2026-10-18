@@ -116,21 +116,25 @@ def parse_statements(html: str):
         blob = norm(" ".join(c for r in tbl[:6] for c in r))
         stmt_hint = "pl" if ("سودوزیان" in blob or "سودزیان" in blob) and "ترازنامه" not in blob else ("bs" if "ترازنامه" in blob or "وضعیتمالی" in blob else None)
         for row in tbl:
-            lab = next((c for c in row if num(c) is None and norm(c)), None)
-            if lab is None:
-                continue
-            vals = [v for v in (num(c) for c in row[row.index(lab) + 1:]) if v is not None]
-            if not vals:
-                continue
-            nl = norm(lab)
-            for stmt, key, pref in LABELS:
-                if nl.startswith(pref) and (stmt_hint in (None, stmt)) and (stmt, key) not in seen:
-                    # «سرمایه» دقیق (نه «سرمایه‌گذاری…»): برچسب کوتاه
-                    if key == "capital" and len(nl) > 12:
-                        continue
-                    seen.add((stmt, key))
-                    out.append((stmt, key, lab, vals[0], vals[1] if len(vals) > 1 else None))
-                    break
+            # ترازنامه/سود‌وزیان کدال گاهی دو ستونِ برچسب‌دار در یک ردیف دارد (دارایی‌ها | بدهی و حقوق) ← ردیف به پاره‌های «برچسب + اعداد» شکسته می‌شود
+            segs, cur = [], None
+            for c in row:
+                if num(c) is None and norm(c):
+                    cur = [c, []]
+                    segs.append(cur)
+                elif cur is not None and num(c) is not None:
+                    cur[1].append(num(c))
+            for lab, vals in segs:
+                if not vals:
+                    continue
+                nl = norm(lab)
+                for stmt, key, pref in LABELS:
+                    if nl.startswith(pref) and (stmt_hint in (None, stmt)) and (stmt, key) not in seen:
+                        if key == "capital" and len(nl) > 12:      # «سرمایه» دقیق، نه «سرمایه‌گذاری…»
+                            continue
+                        seen.add((stmt, key))
+                        out.append((stmt, key, lab, vals[0], vals[1] if len(vals) > 1 else None))
+                        break
     return out
 
 
@@ -142,8 +146,7 @@ def jdate(s: str):
 def selftest():
     html = """<html><body>
     <table><tr><th>ترازنامه</th></tr><tr><td>شرح</td><td>۱۴۰۳/۱۲/۳۰</td><td>۱۴۰۲/۱۲/۲۹</td></tr>
-    <tr><td>جمع دارایی‌ها</td><td>۱,۲۰۰,۰۰۰</td><td>(۹۰۰,۰۰۰)</td></tr>
-    <tr><td>جمع بدهی‌ها</td><td>۷۰۰,۰۰۰</td><td>۶۰۰,۰۰۰</td></tr>
+    <tr><td>جمع دارایی‌ها</td><td>۱,۲۰۰,۰۰۰</td><td>(۹۰۰,۰۰۰)</td><td>جمع بدهی‌ها</td><td>۷۰۰,۰۰۰</td><td>۶۰۰,۰۰۰</td></tr>
     <tr><td>جمع حقوق مالکانه</td><td>۵۰۰,۰۰۰</td><td>۳۰۰,۰۰۰</td></tr>
     <tr><td>سرمایه</td><td>۱۰۰,۰۰۰</td><td>۱۰۰,۰۰۰</td></tr></table>
     <table><tr><td>صورت سود و زیان</td></tr>
