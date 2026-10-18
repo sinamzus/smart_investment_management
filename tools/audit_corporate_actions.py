@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""ممیزی پوشش اقدامات شرکتی (سود نقدی، افزایش سرمایه، تصویب، پرداخت) برای نمادهای فعال بورس و فرابورس — فصل ۲ §۲٫۴.
+
+    python tools/audit_corporate_actions.py
+
+خروجی: data/research/corporate_action_audit_symbols.csv (هر نماد) و corporate_action_audit_years.csv (هر سال) + خلاصهٔ روی صفحه.
+تعریف‌ها:
+  رویداد سود نقدی = تعدیل قیمت مرجع (price_adjust) که با افزایش سرمایه (share_change، ±۵ روز) نخوانده و نسبت قیمت ∈ (۰٫۴، ۱)؛ مبلغ = قیمت قبل − قیمت تعدیل‌شده.
+  رکورد تصویب/پرداخت = ردیف dividend_payment_events (مجمع، مبلغ مصوب، تاریخ پرداخت) با ex-date در ±۶ روز.
+"""
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+ROOT = Path(__file__).resolve().parent.parent
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+C = ROOT / "data" / "corporate_actions"
+norm = lambda s: s.astype(str).str.replace("ي", "ی").str.replace("ك", "ک").str.replace(r"[\s‌]+", "", regex=True)  # noqa: E731
+
+
+def main():
+    A = pd.read_csv(ROOT / "data/research/coverage_audit.csv", dtype={"ins_code": str})
+    A["last"] = pd.to_datetime(A["last"])
+    act = A[(A.operating == True) & (A.in_returns == True) & (A["last"] >= A["last"].max() - pd.Timedelta(days=45))].copy()  # noqa: E712
+    act["s"] = norm(act.symbol)
+    pa = pd.read_csv(C / "price_adjust.csv", dtype={"ins_code": str})
+    sc = pd.read_csv(C / "share_change.csv", dtype={"ins_code": str})
+    pa["d"] = pd.to_datetime(pa.dEven.astype(str)); sc["d"] = pd.to_datetime(sc.dEven.astype(str)); sc["g"] = sc.shares_new / sc.shares_old
+    inc = sc[sc.g > 1.0001]
+    cap = {k: g.d.values for k, g in inc.groupby("ins_code")}
+
+    def is_cap(r):
+        a = cap.get(r.ins_code)
+        return a is not None and (np.abs((a - np.datetime64(r.d)).astype("timedelta64[D]").astype(int)) <= 5).any()
+    pa["cap"] = pa.apply(is_cap, axis=1)
+    pa["ratio"] = pa.pClosing.astype(float) / pa.pClosingNotAdjusted.astype(float)
+    div = pa[(~pa.cap) & (pa.ratio < 1) & (pa.ratio > 0.4)].copy()
+    div["s"] = norm(div.symbol); div["dps_implied"] = div.pClosingNotAdjusted.astype(float) - div.pClosing.astype(float)
+    ev = pd.read_csv(C / "dividend_payment_events.csv"); ev["s"] = norm(ev.symbol); ev["ex"] = pd.to_datetime(ev.ex_date, errors="coerce"); ev = ev[ev.ex.notna()].sort_values("ex")
+    div = div.sort_values("d")
+    m = pd.merge_asof(div, ev[["s", "ex", "agm_j", "dps_rial", "pay_j"]], left_on="d", right_on="ex", by="s", tolerance=pd.Timedelta(days=6), direction="nearest")
+    m["has_pay"] = m.pay_j.notna()
+    # سال به سال
+    rows = []
+    for y in range(2019, 2027):
+        x = m[m.d.dt.year == y]; c = inc[inc.d.dt.year == y]
+        rows.append({"year": y, "div_events": len(x), "div_symbols": x.ins_code.nunique(), "with_approval_payment_record": int(x.has_pay.sum()), "share_of_events": round(float(x.has_pay.mean()), 3) if len(x) else 0.0,
+                     "capital_increases": len(c), "capital_symbols": c.ins_code.nunique()})
+    Y = pd.DataFrame(rows); Y.to_csv(ROOT / "data/research/corporate_action_audit_years.csv", index=False, encoding="utf-8-sig")
+    # هر نماد
+    r5 = m[m.d >= "2021-10-01"]; c5 = inc[inc.d >= "2021-10-01"]
+    S = act[["ins_code", "symbol", "market2"]].copy()
+    S["div_events_5y"] = S.ins_code.map(r5.groupby("ins_code").size()).fillna(0).astype(int)
+    S["div_with_payment_5y"] = S.ins_code.map(r5[r5.has_pay].groupby("ins_code").size()).fillna(0).astype(int)
+    S["capital_increases_5y"] = S.ins_code.map(c5.groupby("ins_code").size()).fillna(0).astype(int)
+    S.to_csv(ROOT / "data/research/corporate_action_audit_symbols.csv", index=False, encoding="utf-8-sig")
+    print(f"نمادهای فعال عملیاتی: {len(S)} (بورس {int((S.market2 == 'bourse').sum())} · فرابورس {int((S.market2 == 'farabourse').sum())})")
+    print(f"≥۱ سود نقدی در ۵ سال: {int((S.div_events_5y > 0).sum())} ({(S.div_events_5y > 0).mean():.0%}) · ≥۱ افزایش سرمایه: {int((S.capital_increases_5y > 0).sum())} ({(S.capital_increases_5y > 0).mean():.0%})")
+    mm = m.dropna(subset=["dps_rial"]); r = mm.dps_implied / mm.dps_rial.astype(float)
+    print(f"مبلغ مستخرج از قیمت مرجع در برابر مبلغ مصوب (n={len(mm)}): میانه {float(r.median()):.3f}، در ±۵٪: {((r - 1).abs() <= .05).mean():.0%}")
+    print(Y.to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
