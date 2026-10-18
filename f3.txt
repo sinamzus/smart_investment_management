@@ -1,0 +1,25 @@
+اتصال: requests ✓ (فملی = فملی)
+454 نماد برای دریافت (340 قبلاً)
+  requests رد شد ← Chrome
+  fetch مستقیم رد شد ← ضبط پاسخ خود صفحه (کندتر: جدول سه‌گانهٔ نسبت‌ها فقط؛ ترازنامه/سود‌وزیان لازم نیست)
+  [80/454] وگستر: ratio 65 pl 0 bs 0 eps 13
+  [130/454] رنیک: ratio 65 pl 0 bs 0 eps 13
+  [170/454] سغدیر: ratio 65 pl 0 bs 0 eps 16
+  [200/454] دکپسول: ratio 73 pl 0 bs 0 eps 14
+  [210/454] بهپاک: ratio 65 pl 0 bs 0 eps 17
+  [230/454] بزاگرس: ratio 65 pl 0 bs 0 eps 13
+  [240/454] بمپنا: ratio 85 pl 0 bs 0 eps 11
+  [270/454] غشهداب: ratio 81 pl 0 bs 0 eps 13
+  [280/454] غپآذر: ratio 73 pl 0 bs 0 eps 10
+  [290/454] سجام: ratio 73 pl 0 bs 0 eps 15
+  [310/454] بگیلان: ratio 65 pl 0 bs 0 eps 18
+  [330/454] کتوکا: ratio 65 pl 0 bs 0 eps 13
+  [340/454] سباقر: ratio 78 pl 0 bs 0 eps 14
+  [350/454] حسیر: ratio 65 pl 0 bs 0 eps 15
+  [370/454] نبابک: ratio 78 pl 0 bs 0 eps 11
+  [380/454] نپاک: ratio 0 pl 0 bs 0 eps 3
+  [400/454] ولامید: ratio 0 pl 0 bs 0 eps 0
+  [410/454] کنگار: ratio 50 pl 0 bs 0 eps 11
+  [420/454] بجهرم: ratio 65 pl 0 bs 0 eps 15
+  [430/454] فنرژی: ratio 0 pl 0 bs 0 eps 15
+تمام: 215 نماد گرفته شد، 239 ناموفق/بی‌نگاشت ← C:\Users\Part Laptop\smart_investment_management\data\fundamentals
