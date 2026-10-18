@@ -38,6 +38,11 @@ def fy_date(s: str) -> pd.Timestamp:
     return pd.Timestamp(str(j2g(y, m, d))[:10])
 
 
+def is_jdate(s) -> bool:
+    """رشتهٔ تاریخ جلالی معتبر «13xx/mm/dd» یا «14xx/mm/dd» (قبلاً فقط «14» پذیرفته می‌شد و تاریخ‌های ۱۳۹x کنار می‌رفت)."""
+    return isinstance(s, str) and re.fullmatch(r"1[34]\d\d/\d{1,2}/\d{1,2}", s.strip()) is not None
+
+
 def safe_fy_date(s: str) -> pd.Timestamp:
     try:
         return fy_date(s)
@@ -73,7 +78,7 @@ def codal_base(skip: set) -> pd.DataFrame:
     for ins, fy in zip(V.ins_code, V.fy_year):
         e = safe_fy_date(f"{int(fy)}/{md.get(ins, '12/29')}")
         a = pub.get((ins, int(fy)))
-        av.append((safe_fy_date(a) if isinstance(a, str) and a[:2] == "14" else e + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1))
+        av.append((safe_fy_date(a.strip()) if is_jdate(a) else e + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1))
         fe.append(e)
     V["fy_end"], V["avail"] = fe, av
     return V[["ins_code", "fy_end", "avail", "assets", "liabilities", "equity", "capital", "net_income", "op_profit", "revenue"]]

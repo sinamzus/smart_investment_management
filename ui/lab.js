@@ -210,7 +210,7 @@ function runLab(count) {
   toast('در حال اجرا…');
   setTimeout(() => {
     try {
-      const t0 = performance.now(); lab.res = E.run(CTX, s); lab.cost = s.cost_bp; lab.st = E.stats(lab.res, s.cost_bp, jy, lab.bench); lab.dec = null; lab.name = null;
+      const t0 = performance.now(); lab.res = E.run(CTX, s); lab.cost = s.cost_bp; lab.st = E.stats(lab.res, s.cost_bp, jy, lab.bench); lab.dec = null; lab.name = null; lab.lib = null;   // اجرای مرورگر: دیگر ردیف کتابخانه نیست (وگرنه پرتفوی زنده/ظرفیت/دهک‌ها از کتابخانه می‌آمد)
       if (count) lab.trials++; store.set('spec', s);
       $('lb-cnt').textContent = `آزمایش‌های این نشست: ${lab.trials} · ${Math.round(performance.now() - t0)} ms`;
       renderKPIs(); renderTab(); toast('اجرا شد');
@@ -345,7 +345,7 @@ function tabLive(host) {
     const dr = lab.res.live.drift, tg = lab.res.live.target, ent = [], ext = [];
     for (let i = 0; i < k; i++) { if (tg[i] > 0 && !(dr[i] > 0)) ent.push(i); if (dr[i] > 0 && !(tg[i] > 0)) ext.push(i); }
     const nm = a => a.slice(0, 14).map(i => L.codes[i].p || L.codes[i].s).join('، ') + (a.length > 14 ? ' …' : '') || '—';
-    mon = `<div class="lb-note"><b>رصد زنده:</b> اگر امروز ریبالانس بود، <b class="up">${ent.length} نماد وارد</b> و <b class="down">${ext.length} نماد خارج</b> می‌شد (بقیه می‌مانند). ورود: ${nm(ent) || '—'}. خروج: ${nm(ext) || '—'}. اقدام واقعی فقط در روز ریبالانس است (فصل ۵ §۵٫۸٫۳)؛ این فهرست برای برنامه‌ریزی نقدینگی و رصد پیش از روز ریبالانس است.</div>`;
+    mon = `<div class="lb-note"><b>رصد زنده:</b> اگر امروز ریبالانس بود، <b class="up">${ent.length} نماد وارد</b> و <b class="down">${ext.length} نماد خارج</b> می‌شد (بقیه می‌مانند). ورود: ${nm(ent) || '—'}. خروج: ${nm(ext) || '—'}. سبد فعلی = وزن رانش‌یافته تا آخرین پایان ماه${lab.res.live.driftAsOf ? ` (<span class="num">${lab.res.live.driftAsOf}</span>)` : ''}؛ اقدام واقعی فقط در روز ریبالانس است (فصل ۵ §۵٫۸٫۳) و این فهرست برای برنامه‌ریزی نقدینگی و رصد پیش از روز ریبالانس است.</div>`;
   }
   host.innerHTML = mon + `<div class="ctl"><label>سرمایه (میلیارد ریال) <input type="number" id="lv-aum" value="${lab.aum || 100}" min="1" step="10"></label><span class="mute">برای محاسبهٔ روز لازم برای ساخت با ۱۰٪ مشارکت در ارزش معاملات روزانه</span>
     <span class="spacer"></span><button class="tool" id="lv-plan">ارسال به برنامهٔ اقدام ←</button><button class="tool" id="lv-csv">CSV</button></div>
@@ -512,8 +512,7 @@ function renderPlan() {
   const px = i => L.px[i], symIdx = new Map(CTX.sym.map((s, i) => [s, i]));
   const cur = new Float64Array(k); let unknown = [];
   hold.forEach((q, s) => { const i = symIdx.get(s); if (i == null) unknown.push(s); else cur[i] = q; });
-  let curVal = 0; for (let i = 0; i < k; i++) curVal += cur[i] * px(i);
-  const base = hold.size ? Math.max(curVal, 0) : aum, V = hold.size ? aum : aum;     // سرمایه کل = ورودی کاربر (نقد + سهام)
+  const V = aum;                                                                     // سرمایهٔ کل = ورودی کاربر (نقد + سهام)
   const orders = [];
   for (let i = 0; i < k; i++) {
     const wt = tgt.w[i] || 0, p = px(i); if (!(p > 0)) continue;

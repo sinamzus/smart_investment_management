@@ -309,18 +309,23 @@ def _solve_qp(C, kind, max_w, prev=None, sig=None):
     cons = [cp.sum(w) == 1]
     if max_w:
         cons.append(w <= max(max_w, 1.5 / n))
+    var = w
     if kind == "minvar":
         prob = cp.Problem(cp.Minimize(cp.sum_squares(L.T @ w)), cons)
     elif kind == "maxdiv":
         # min w'Σw  s.t.  σ'w = 1، سپس بازنرمال‌سازی (Choueifaty & Coignard 2008)
-        y = cp.Variable(n, nonneg=True)
-        prob = cp.Problem(cp.Minimize(cp.sum_squares(L.T @ y)), [sig @ y == 1] + ([y <= max(max_w, 1.5 / n) * cp.sum(y)] if False else []))
+        var = cp.Variable(n, nonneg=True)
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(L.T @ var)), [sig @ var == 1])
+    else:
+        raise ValueError(kind)
+    try:
         prob.solve(solver=cp.CLARABEL)
-        v = np.maximum(y.value, 0)
-        return v / v.sum()
-    prob.solve(solver=cp.CLARABEL)
-    v = np.maximum(w.value, 0)
-    return v / v.sum()
+    except Exception:  # noqa: BLE001
+        pass
+    if var.value is None:                              # حل‌گر شکست خورد ← هم‌وزن (به‌جای TypeError)
+        return np.full(n, 1.0 / n)
+    v = np.maximum(np.asarray(var.value).ravel(), 0)
+    return v / v.sum() if v.sum() > 0 else np.full(n, 1.0 / n)
 
 
 @algo("min_var", "حداقل واریانس (فقط‌خرید)", "Minimum variance", "در مجموعهٔ برتر، کمینه‌سازی w'Σw با Σ انقباضی Ledoit–Wolf و سقف وزن.", "Clarke, de Silva & Thorley (2006)؛ Ledoit & Wolf (2004)", {"entry": 0.4, "exit": 0.5, "max_w": 0.05})
@@ -516,13 +521,16 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
                "vol": (lambda Z: nanstd_safe(Z))(sg.W(mk.X, a, 126)), "adv": adv, "sector": mk.sector}
         w = algo_["fn"](ctx, **params)
         if w.sum() <= 0:
-            continue
-        if max_w:
-            w = _cap(w, max_w)
-        if kappa < 1.0 and prev_w.sum() > 0:
-            w = prev_w + kappa * (w - prev_w)
-            w = np.maximum(w, 0)
-            w /= w.sum()
+            # الگوریتم پرتفویی نداد (مثلاً کمتر از ۳۰ واجد): سبد قبلی (رانش‌یافته) نگه داشته می‌شود و ماه ثبت می‌شود؛
+            # حذف ماه از سری، ردیف‌ها را با lab.use ناهم‌تراز می‌کرد و برنامهٔ rebalance_every را جابه‌جا
+            w = prev_w.copy()
+        else:
+            if max_w:
+                w = _cap(w, max_w)
+            if kappa < 1.0 and prev_w.sum() > 0:
+                w = prev_w + kappa * (w - prev_w)
+                w = np.maximum(w, 0)
+                w /= w.sum()
         held = w > 0
         to = np.nan if first else 0.5 * np.abs(w - prev_w).sum()
         g = np.where(np.isnan(f), 0, f)
@@ -556,7 +564,8 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
             out["w"].append((r, w.copy()))
         prev_w = w * (1 + g)
         prev_w = prev_w / prev_w.sum() if prev_w.sum() > 0 else prev_w
-        first = False
+        if w.sum() > 0:
+            first = False                               # تا نخستین سبد واقعی، گردش ماه بعد «ساخت اولیه» است نه گردش
     res = {"end": out["end"], "sig_date": out["sig_date"],
            "ret": {"S": np.array(out["S"]), "ALL": np.array(out["ALL"]), "CAP": np.array(out["CAP"])},
            "to": {"S": np.array(out["to"], float), "ALL": None, "CAP": np.array(to_cap, float)},
@@ -582,11 +591,12 @@ def live_target(lab, spec, algo_, params, prev_w, held, ok_univ):
     mk = lab.mk
     a = mk.n - 1
     r = len(lab.idx) - 1
-    # رانش از آخرین ریبالانس تا امروز
+    # رانش از آخرین پایان ماه (که بک‌تست تا آن رانش داده) تا امروز
     a_last = lab.me[-1]
     seg = mk.X[a_last + 1: a + 1]
     g = np.nanprod(1 + np.nan_to_num(seg), axis=0) - 1 if len(seg) else np.zeros(mk.k)
-    drift = prev_w
+    drift = prev_w * (1 + g)
+    drift = drift / drift.sum() if drift.sum() > 0 else prev_w
     ok = mk.eligible(a) & ok_univ[0]
     if ok_univ[1] > 0:
         v = sg.W(mk.val, a, 63)

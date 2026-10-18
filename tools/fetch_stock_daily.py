@@ -102,7 +102,8 @@ def get_json(url: str, retries: int = 3):
                 break
         except Exception as e:  # noqa: BLE001
             err = repr(e)
-        time.sleep(2 ** (k + 1))
+        if k < retries - 1:
+            time.sleep(2 ** (k + 1))
     raise RuntimeError(f"{url} -> {err}")
 
 

@@ -419,7 +419,7 @@ def fund(R, info):
     rows = []
     for x in L.sort_values("wt", ascending=False).itertuples():
         a20, a60, tf, med = adv.get(x.ins_code, (np.nan, np.nan, np.nan, np.nan))
-        rows.append([x.symbol, str(x.sector_name or "").strip(), r(x.wt, 7), r(x.pClosing, 0), r(a20, 0), r(a60, 0), r(tf, 2), r(med, 0)])
+        rows.append([x.symbol, (x.sector_name if isinstance(x.sector_name, str) else "").strip(), r(x.wt, 7), r(x.pClosing, 0), r(a20, 0), r(a60, 0), r(tf, 2), r(med, 0)])
     return {"asof": str(last.date()), "n": len(rows), "cols": ["sym", "sector", "w_k", "price", "adv20", "adv60", "traded_frac60", "med60"], "rows": rows}
 
 

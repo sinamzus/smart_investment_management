@@ -161,9 +161,12 @@ function run(ctx, spec) {
     if (reb) {
       sc = score(ctx, spec, r);
       const c = { k, score: sc, ok, held, mcap: ctx.mcap.subarray(r * k, (r + 1) * k).map(v => v < -40 ? 0 : Math.exp(v)), vol: ctx.vol.subarray(r * k, (r + 1) * k) };
-      let wn = algo(c, p); let s = 0; for (const x of wn) s += x; if (s <= 0) continue;
-      if (mx) wn = capW(wn, mx);
-      if (kappa < 1 && !first) { wn = wn.map((x, i) => Math.max(prev[i] + kappa * (x - prev[i]), 0)); const t = wn.reduce((a, b) => a + b, 0); wn = wn.map(x => x / t); }
+      let wn = algo(c, p); let s = 0; for (const x of wn) s += x;
+      if (s <= 0) wn = Float64Array.from(prev);                               // بدون سبد (کمتر از ۳۰ واجد): سبد قبلی نگه داشته و ماه ثبت می‌شود (همان tools/construction.py)
+      else {
+        if (mx) wn = capW(wn, mx);
+        if (kappa < 1 && !first) { wn = wn.map((x, i) => Math.max(prev[i] + kappa * (x - prev[i]), 0)); const t = wn.reduce((a, b) => a + b, 0); wn = wn.map(x => x / t); }
+      }
       w = wn; held = w.map(x => x > 0 ? 1 : 0);
       if (!first) { to = 0; for (let i = 0; i < k; i++) to += Math.abs(w[i] - prev[i]); to *= 0.5; } else to = NaNv;
     }
@@ -183,13 +186,15 @@ function run(ctx, spec) {
     if (reb && sc) { const m = new Float64Array(k).fill(NaNv); for (let i = 0; i < k; i++) if (ok[i] && !isNaN(sc[i]) && !isNaN(f[i])) m[i] = f[i]; out.ic.push(spearman(sc, m)); } else out.ic.push(NaNv);
     let nw = new Float64Array(k), tot = 0; for (let i = 0; i < k; i++) { nw[i] = w[i] * (1 + g[i]); tot += nw[i]; } prev = tot > 0 ? nw.map(x => x / tot) : nw;
     let na = new Float64Array(k), ta = 0; for (let i = 0; i < k; i++) { na[i] = allw[i] * (1 + g[i]); ta += na[i]; } prevAll = ta > 0 ? na.map(x => x / ta) : na;
-    first = false;
+    if (tot > 0) first = false;                                              // تا نخستین سبد واقعی، گردش ماه بعد «ساخت اولیه» است
   }
   // وزن هدف زنده (آخرین سطر)
   const rl = ctx.rows - 1, okr = okAt(ctx, rl), okl = new Uint8Array(k); for (let i = 0; i < k; i++) okl[i] = okr[i] && mk.has(ctx.mkt[i]) && (minAdv == null || ctx.adv[rl * k + i] >= minAdv) ? 1 : 0;
   const scl = score(ctx, spec, rl), cl = { k, score: scl, ok: okl, held, mcap: ctx.mcap.subarray(rl * k, (rl + 1) * k).map(v => v < -40 ? 0 : Math.exp(v)), vol: ctx.vol.subarray(rl * k, (rl + 1) * k) };
   let wl = algo(cl, p); if (mx && wl.reduce((a, b) => a + b, 0) > 0) wl = capW(wl, mx);
-  out.live = { target: wl, score: scl, drift: prev };
+  // رانش از آخرین پایان ماه تا امروز: بازده ماه ناتمام در fw سطر rows−2 نیست؛ در پایتون از mk.X می‌آید و اینجا سری روزانه نیست،
+  // پس وزن رانش‌یافته تا آخرین پایان ماه است (ui/lab.js این را در متن رصد زنده می‌گوید)
+  out.live = { target: wl, score: scl, drift: prev, driftAsOf: ctx.L.months_end[ctx.rows - 3] || null };
   return out;
 }
 

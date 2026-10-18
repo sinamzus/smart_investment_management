@@ -1,3 +1,0 @@
-اتصال: requests ✓ (فملی = فملی)
-404 نماد برای دریافت (0 قبلاً)
-تمام: 0 نماد گرفته شد، 404 ناموفق/بی‌نگاشت ← C:\Users\Part Laptop\smart_investment_management\data\fundamentals

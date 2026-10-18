@@ -310,6 +310,15 @@ def jyear(dt: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+def current_jalali_year() -> int:
+    """سال جلالی امروز (قبلاً ۱۴۰۵ ثابت نوشته شده بود و پنجرهٔ --years هر سال کوتاه‌تر می‌شد)."""
+    import datetime as _dt
+    sys.path.insert(0, str(ROOT / "tools"))
+    from rebuild_ew_rebalanced import g2j
+    t = _dt.date.today()
+    return g2j(t.year, t.month, t.day)[0]
+
+
 def list_letters(sym: str, lt: int) -> list:
     items = []
     for p in range(1, 20):
@@ -368,7 +377,7 @@ def collect(symbols: list, years: int) -> None:
     هر فایل یک بار دانلود می‌شود (اجرای دوباره از همان‌جا ادامه می‌دهد). روی 429 فوراً متوقف می‌شود."""
     PATIENT[0] = False
     base = RAW / "collect"
-    min_year = 1405 - years + 1
+    min_year = current_jalali_year() - years + 1
     t0 = time.time()
     try:
         for i, sym in enumerate(symbols, 1):

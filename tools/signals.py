@@ -22,6 +22,28 @@ import rebuild_ew_rebalanced as ewr  # noqa: E402
 REG: dict = {}          # نام ← فراداده + تابع
 EVAL_FROM = pd.Timestamp("2016-03-20")
 WARM = 273              # روز لازم پیش از اولین ریبالانس (۲۵۲ + ۲۱)
+WEEKEND = (3, 4)        # پنجشنبه و جمعه (weekday پایتون)؛ تعطیلات رسمی مدل نشده [تأیید لازم]
+
+
+def jalali_ym(ts) -> int:
+    """سال×۱۰۰+ماه جلالی یک تاریخ میلادی."""
+    jy, jm, _ = ewr.g2j(ts.year, ts.month, ts.day)
+    return jy * 100 + jm
+
+
+def is_jalali_month_end(ts, calendar=None) -> bool:
+    """آیا ts آخرین روز معاملاتی ماه جلالی خودش است؟ (برای آخرین روز داده، که روز بعدش هنوز در داده نیست.)
+
+    قاعده: هیچ روز غیرتعطیلی (شنبه تا چهارشنبه) بین ts و پایان ماه جلالی باقی نمانده باشد. اگر `calendar`
+    (مجموعهٔ روزهای معاملاتی شناخته‌شده) داده شود، وجود روز معاملاتی بعدی در همان ماه هم بررسی می‌شود."""
+    ts = pd.Timestamp(ts).normalize()
+    ym = jalali_ym(ts)
+    d = ts + pd.Timedelta(days=1)
+    while jalali_ym(d) == ym:
+        if (calendar is not None and d in calendar) or (calendar is None and d.weekday() not in WEEKEND):
+            return False
+        d += pd.Timedelta(days=1)
+    return True
 
 
 def signal(name, family, fa, en, formula, ref, needs="price", window=252):
@@ -74,7 +96,8 @@ class Market:
         self.shares = pv("shares")
         self.mcap = self.prev * self.shares
         self.LR = np.log1p(np.where(np.isnan(self.X), 0, self.X))   # لگاریتم بازده (۰ برای بی‌داده)
-        self.mkt = np.nanmean(np.where(np.isnan(self.X), np.nan, self.X), axis=0 if False else 1)   # بازار هم‌وزن روزانه
+        with np.errstate(all="ignore"):
+            self.mkt = np.nanmean(self.X, axis=1)                   # بازار هم‌وزن روزانه
         self._load_prices()
         jm = np.array([ewr.g2j(d.year, d.month, d.day)[0] * 100 + ewr.g2j(d.year, d.month, d.day)[1] for d in self.dates])
         self.month_end = np.where(jm[1:] != jm[:-1])[0]
@@ -111,8 +134,14 @@ class Market:
     # ── واجدیت قیمتی (همان قاعدهٔ موتور فاکتور) ──
     def eligible(self, a: int):
         i1, i0 = a + 1, a + 1 - 252
+        if i0 < 0:                                                   # پنجرهٔ ۲۵۲ روزه هنوز پر نشده (اندیس منفی در numpy از انتها می‌خواند)
+            return np.zeros(self.k, bool)
         ok = ((self.have[i1] - self.have[i0]) >= 0.8 * 252) & ((self.nz[i1] - self.nz[i0]) >= 0.5 * 252) & ~np.isnan(self.X[a])
         return ok
+
+    def last_day_is_month_end(self) -> bool:
+        """آیا آخرین روز داده، آخرین روز معاملاتی ماه جلالی است؟ (month_end فقط تا n−۲ را دارد؛ روز آخر از تقویم تشخیص داده می‌شود.)"""
+        return is_jalali_month_end(self.dates[-1])
 
     def fwd(self, a: int, b: int, delay: int = 0):
         """بازدهٔ مرکب [a+1+delay, b+delay]؛ NaN اگر روز بعد یا پایان دوره داده ندارد."""
@@ -500,7 +529,7 @@ def _issue_events():
         if f.exists():
             E = pd.read_csv(f, dtype={"ins_code": str})
             E = E[E.reliable].copy()
-            E["date"] = pd.to_datetime(E.dEven.astype(str))
+            E["date"] = pd.to_datetime(E.dEven.astype(int).astype(str), format="%Y%m%d")
             E["lng"] = np.log(E.g)
             _ISSUE["E"] = E[["ins_code", "date", "lng", "cs"]]
         else:

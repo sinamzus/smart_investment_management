@@ -79,7 +79,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     S[["ins_code", "symbol", "name", "market2", "rows", "first", "last", "operating", "in_returns", "reason_returns", "rahavard_mapped", "fund_data", "reason_fund"]].to_csv(out, index=False, encoding="utf-8")
     print("جهان:", S.groupby("market2").size().to_dict())
-    print("\nوارد پانل بازده:\\n", S.groupby(["market2", "in_returns"]).size().unstack(fill_value=0))
+    print("\nوارد پانل بازده:\n", S.groupby(["market2", "in_returns"]).size().unstack(fill_value=0))
     print("\nعلت نبودن در بازده:\n", S[~S.in_returns].groupby(["market2", "reason_returns"]).size())
     print("\nصورت مالی (نسبت‌ها):\n", S.groupby(["market2", "fund_data"]).size().unstack(fill_value=0))
     print("\nعلت نبود صورت مالی:\n", S[~S.fund_data].groupby(["market2", "reason_fund"]).size())

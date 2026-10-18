@@ -62,7 +62,7 @@ python tools/build_ui_funds.py    # → ui/data/funds.js (نمای ۱۰)
 python tools/fetch_fund_portfolio.py --probe کاردان   # (روی سیستم شما) پرتفوی ماهانهٔ صندوق از کدال
 python tools/analyze_fund_holdings.py                 # تجزیهٔ بازده فعال با پرتفو (پس از parser)
 ```
-هر سه فایل در مخزن commit شده‌اند؛ برای دیدن وضعیت فعلی لازم نیست دوباره بسازید.
+همهٔ فایل‌های `ui/data/*.js` در مخزن commit شده‌اند؛ برای دیدن وضعیت فعلی لازم نیست دوباره بسازید. وابستگی‌ها در `requirements.txt`؛ آزمون‌های سبک هسته: `python -m unittest discover -s tests`.
 
 ## کنترل‌ها
 - دکمه‌های «كل / هم‌وزن» و «از ۲۰۱۴ / از ۲۰۱۶»، یا فرمان‌ها در نوار بالا (`/` یا `Ctrl+K`): `GO INDEX|DIV|FAC|REB|QA|REP|SYM|PF|RISK|FND` · `SYM <نماد>` · `IDX K` · `IDX EW` · `WIN 2014` · `WIN 2016` · `THEME` · `DENSITY` · `HELP`؛ ↑/↓ در نوار فرمان = فرمان‌های قبلی

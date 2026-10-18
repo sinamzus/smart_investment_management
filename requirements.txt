@@ -1,0 +1,18 @@
+# هستهٔ محاسبات و ساخت دادهٔ UI (tools/rebuild_*.py، build_ui_*.py، signals.py، construction.py)
+pandas>=2.2
+numpy>=1.26
+# جمع‌آوری داده روی سیستم کاربر (fetch_*.py)
+requests>=2.31
+# کتابخانهٔ Lab و ماکت‌ساز (بهینه‌سازها): build_lab.py، sampled_replica.py، build_replica_panel.py
+cvxpy>=1.4
+clarabel>=0.6
+scikit-learn>=1.4
+scipy>=1.12
+# پرتفوی صندوق‌ها از کدال (parse_fund_portfolio.py)
+openpyxl>=3.1
+xlrd>=2.0
+# ضبط مرورگر و رهاورد (fetch_rahavard_*.py؛ اختیاری)
+playwright>=1.44
+# OCR پیوست‌های کدال (parse_dividend_payments.py --ocr؛ اختیاری): Pillow + poppler (pdftotext/pdftoppm) + tesseract با زبان fas
+Pillow>=10.0
+# آزمون‌ها: python -m unittest discover -s tests   و   node tools/lab_selftest.js  node tools/replica_selftest.js  node tools/enhance_selftest.js

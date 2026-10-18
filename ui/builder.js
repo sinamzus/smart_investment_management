@@ -153,7 +153,7 @@ function render() {
   const o = opts(), key = curKey(), sim = simulate(R, key, o), m = metrics(R, sim), cv = curves(R, sim), c = R.configs[key], nm = R.mstart.length;
   last = { sim, m, cv };
   let sL = 0, sT = 0, cnt = 0; for (let j = S.j0; j < nm; j++) { sL += sim.Ls[j]; sT += j === S.j0 ? 0 : c.to[j]; cnt++; }
-  const capNow = c.live[2], cov = R.configs[key].sel[nm - 1][1].reduce((a, x) => a + x, 0) / 1e5;
+  const capNow = c.live[2];
   const bj = R.b[nm - 1], bmap = new Map(bj[0].map((i, p) => [i, bj[1][p]])), covB = c.sel[nm - 1][0].reduce((a, i) => a + (bmap.get(i) || 0), 0) / 1e5;
   const yrs = m ? m.years : 0;
   const kp = m ? [['TE در برابر شاخص رسمی', f(m.te, 2) + '٪', 'خطای ردیابی سالانه‌شده: انحراف معیار تفاضل بازده روزانهٔ ماکت و «شاخص كل» رسمی × √۲۵۲؛ کمتر بهتر.'],
@@ -193,7 +193,7 @@ function drawCharts(cv, m) {
   const dts = cv.idx.map(t => R.dates[t]);
   $('rb-ch1-t').innerHTML = 'رشد ۱۰۰ واحد (مقیاس لگاریتمی): <b style="color:var(--ch-1)">━ ماکت</b> در برابر <b style="color:var(--warn)">━ «شاخص كل» رسمی (بازده کل)</b>';
   chart($('rb-ch1'), [{ v: cv.k, c: 'var(--warn)', t: 'شاخص' }, { v: cv.a, c: 'var(--ch-1)', t: 'ماکت', w: 1.8 }], { dates: dts, h: 210, d: 0, log: true });
-  $('rb-ch2-t').textContent = 'رشد نسبی ماکت به شاخص (٪، خط پُر) و TE غلتان ۱۲ ماهه (٪، خط‌چین قرمز)';
+  $('rb-ch2-t').textContent = 'رشد نسبی ماکت به شاخص (٪، خط پُر) و TE غلتان تا ۲۵۲ روز (از ۱۲۶ روز به بعد؛ خط‌چین قرمز)';
   chart($('rb-ch2'), [{ v: cv.td, c: 'var(--ch-1)', t: 'تفاوت تجمعی' }, { v: cv.te, c: 'var(--down)', t: 'TE غلتان', dash: true, w: 1.2 }], { dates: dts, h: 150, d: 1, zero: true });
 }
 

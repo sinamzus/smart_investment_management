@@ -280,7 +280,8 @@ def universe():
             rows.append((code, sym))
     with (ROOT / "data" / "index_constituents.csv").open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
-            add(r["ins_code"], r["symbol"])
+            if r["ins_code"] in have:                  # مثل بقیه فقط نمادهایی که فایل قیمت دارند
+                add(r["ins_code"], r["symbol"])
     with (ROOT / "data" / "instruments.csv").open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
             if r["type"] == "stock" and r["market"] in ("bourse", "farabourse") and r["ins_code"] in have:

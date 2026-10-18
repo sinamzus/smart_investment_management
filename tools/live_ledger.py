@@ -80,7 +80,7 @@ def cmd_freeze(a):
     ex = fe.net(res["ret"]["S"], res["to"]["S"], spec["cost_bp"]) - fe.net(res["ret"]["ALL"], res["to"]["ALL"], spec["cost_bp"])
     keep = {k: (float(st[k]) if isinstance(st[k], (int, float, np.floating)) else st[k]) for k in
             ("excess_net", "t_net", "ir", "te", "vol", "turn_ann", "ex_h1", "ex_h2", "boot_lo", "boot_hi", "hit", "mdd_active") if k in st}
-    S = {"id": "c1-rank-partial50-v1", "frozen_at": pd.Timestamp.utcnow().isoformat(), "code_commit": git_rev(),
+    S = {"id": "c1-rank-partial50-v1", "frozen_at": pd.Timestamp.now(tz="UTC").isoformat(), "code_commit": git_rev(),
          "data_through": str(mk.dates[-1].date()), "spec": spec, "spec_hash": spec_hash(spec),
          "note": ("ترکیب c1 با امتیاز رتبه‌ای و ریبالانس جزئی ۵۰٪ — این ترکیب دقیق در شبکهٔ ۱۲۰ آزمایش فصل ۱۴ نبود (c1:rank با κ=۱ و c1:equal با κ=۰٫۵ بودند)؛ "
                   "پس آزمایش ۱۲۱ام است و DSR باید با N=۱۲۱ خوانده شود. آمار زیر درون‌نمونه است."),
@@ -129,7 +129,8 @@ def cmd_orders(a):
         a0 = int(mk.dates.searchsorted(pd.Timestamp(last_sig)))
         prev = drift_weights(mk, prev, a0, n)
         kappa = float(S["rules"]["kappa"])
-    official = bool(n in set(int(x) for x in mk.month_end))
+    # روز آخر داده در mk.month_end نیست (آن آرایه فقط تا n−۲ را می‌شناسد)؛ پایان ماه از تقویم جلالی تشخیص داده می‌شود
+    official = mk.last_day_is_month_end()
     algo_ = cn.ALGOS[spec["algo"]]
     params = {**algo_["params"], **spec.get("params", {})}
     mk_ok = np.isin(mk.market, spec["universe"]["markets"])
@@ -161,12 +162,12 @@ def cmd_orders(a):
     orders.sort(key=lambda o: (o["side"], -o["value_rial"]))
     plan_id = hashlib.sha256(f"{S['spec_hash']}|{asof.date()}|{aum}".encode()).hexdigest()[:12]
     body = {"schema": "sim.trade_plan/1", "plan_id": plan_id, "strategy": S["id"], "spec_hash": S["spec_hash"], "code_commit": git_rev(),
-            "asof": str(asof.date()), "created": pd.Timestamp.utcnow().isoformat(), "official_month_end": official, "cold_start": bool(prev.sum() == 0),
+            "asof": str(asof.date()), "created": pd.Timestamp.now(tz="UTC").isoformat(), "official_month_end": official, "cold_start": bool(prev.sum() == 0),
             "kappa": kappa, "aum_rial": aum, "cost_bp_roundtrip": spec["cost_bp"],
             "execution": {"convention": "signal at last trading day close; execute next trading day", "participation_cap": PARTICIPATION,
                           "price_basis": "last_close_ref", "note": "قیمت مرجع آخرین بسته است؛ سامانه باید با قیمت زنده/محدودهٔ مجاز نوسان جایگزین کند"},
             "n_hold": int((w > 0).sum()), "turnover_oneway": float(np.maximum(w - prev, 0).sum()),
-            "orders": [{"id": hashlib.sha256((plan_id + o["symbol"] + o["side"]).encode()).hexdigest()[:10], "type": "rebalance", **o} for o in orders]}
+            "orders": [{"id": hashlib.sha256((plan_id + o["ins_code"] + o["side"]).encode()).hexdigest()[:10], "type": "rebalance", **o} for o in orders]}   # ins_code یکتاست؛ نماد ممکن است تکراری باشد
     LIVE.mkdir(parents=True, exist_ok=True)
     tag = ("" if official else "_interim")
     fj = LIVE / f"orders_{asof.date()}{tag}.json"
@@ -208,7 +209,8 @@ def cmd_track(a):
     mk_ok = np.isin(mk.market, spec["universe"]["markets"])
     dates = sorted(led.signal_date.unique())
     bt = S["backtest_in_sample"]
-    rows, prev_w, prev_all, prev_cap = [], None, None, None
+    rows, prev_w, prev_all, prev_a0 = [], None, None, None
+    last_is_end = mk.last_day_is_month_end()
     for j, d in enumerate(dates):
         a0 = int(mk.dates.searchsorted(pd.Timestamp(d)))
         a1 = int(mk.dates.searchsorted(pd.Timestamp(dates[j + 1]))) if j + 1 < len(dates) else mk.n - 1
@@ -218,21 +220,24 @@ def cmd_track(a):
         for r in led[led.signal_date == d].itertuples():
             if r.ins_code in pos:
                 w[pos[r.ins_code]] = r.w_post
-        f = np.where(np.isnan(mk.fwd(a0, a1)), 0, mk.fwd(a0, a1))
-        ok = mk.eligible(a0) & mk_ok & ~np.isnan(mk.fwd(a0, a1))
+        fwd = mk.fwd(a0, a1)
+        f = np.where(np.isnan(fwd), 0, fwd)
+        ok = mk.eligible(a0) & mk_ok & ~np.isnan(fwd)
         allw = ok / max(ok.sum(), 1)
         mc = np.where(ok, np.nan_to_num(mk.mcap[a0]), 0.0)
         cw = mc / mc.sum() if mc.sum() > 0 else mc
-        d_prev = drift_weights(mk, prev_w, mk.dates.searchsorted(pd.Timestamp(dates[j - 1])), a0) if prev_w is not None else np.zeros(mk.k)
+        # هر دو وزن قبلی (استراتژی و مرجع هم‌وزن) تا a0 رانش می‌کنند — همان قرارداد construction.backtest
+        d_prev = drift_weights(mk, prev_w, prev_a0, a0) if prev_w is not None else np.zeros(mk.k)
+        d_all = drift_weights(mk, prev_all, prev_a0, a0) if prev_all is not None else None
         to = 0.5 * np.abs(w - d_prev).sum() if prev_w is not None else np.nan
-        toa = 0.5 * np.abs(allw - (prev_all if prev_all is not None else allw)).sum() if prev_all is not None else np.nan
+        toa = 0.5 * np.abs(allw - d_all).sum() if d_all is not None else np.nan
         r_s, r_a, r_c = float((w * f).sum()), float((allw * f).sum()), float((cw * f).sum())
         net_s = r_s - (0 if to != to else to * cost)       # هزینهٔ رفت‌وبرگشت × گردش یک‌طرفه (همان fe.net)
         net_a = r_a - (0 if toa != toa else toa * cost)
         rows.append({"signal_date": d, "to_date": str(mk.dates[a1].date()), "days": a1 - a0, "ret_S": r_s, "ret_ALL": r_a, "ret_CAP": r_c,
                      "excess_net_vs_ALL": net_s - net_a, "excess_vs_CAP": r_s - r_c, "turnover_oneway": to,
-                     "open": bool(a1 == mk.n - 1 and (mk.n - 1) not in set(int(x) for x in mk.month_end))})
-        prev_w, prev_all = w, allw
+                     "open": bool(a1 == mk.n - 1 and not last_is_end)})
+        prev_w, prev_all, prev_a0 = w, allw, a0
     T = pd.DataFrame(rows)
     if T.empty:
         print("هنوز دورهٔ کاملی نیست.")

@@ -316,14 +316,16 @@ def do_symbol(h, ins, sym, dry=False, since=1396):
     # هر فایل ستون سال قبل را هم دارد ← یک‌درمیان دانلود می‌کنیم (نیمی از درخواست‌ها)؛ فهرست نامه‌ها (تاریخ انتشار) برای همهٔ سال‌ها ذخیره می‌شود
     dl = {L["fy_end"] for L in ls[::-1][::2]}
     print(f"{sym}: {len(ls)} سال مالی، {len(dl)} فایل", flush=True)
-    longs, raws = [], []
+    longs, raws, n_try, n_ok = [], [], 0, 0
     for L in ls:
         if L["fy_end"] not in dl:
             continue
+        n_try += 1
         c = h.get(L["excel_url"], binary=True)
         if not c:
             print(f"   {L['fy_end']}: دریافت ناموفق", flush=True)
             continue
+        n_ok += 1
         r = rows_for(L, ins, sym, c, raws)
         keys = {x[7] for x in r}
         print(f"   {L['fy_end']} {'ح' if L['audited'] else 'غ'}{'ت' if L['consolidated'] else ''}: {len(r)} ردیف؛ کلیدها {sorted(keys)}", flush=True)
@@ -333,7 +335,11 @@ def do_symbol(h, ins, sym, dry=False, since=1396):
                [[ins, sym] + [L[k] for k in ("tracing_no", "title", "fy_end", "audited", "consolidated", "published", "excel_url", "first_published")] for L in ls])
         append(OUT / "codal_long.csv", ["ins_code", "symbol", "tracing_no", "fy_year", "fy_end", "col", "stmt", "key", "label", "value"], longs)
         append_gz(OUT / "codal_raw.csv.gz", ["ins_code", "symbol", "tracing_no", "fy_year", "fy_end", "table", "hint", "label", "cur", "prev"], raws)
-        append(OUT / "codal_done.csv", ["ins_code", "symbol", "n_years"], [[ins, sym, len(ls)]])
+        if n_try == 0 or n_ok > 0:                     # فقط وقتی دست‌کم یک فایل رسید «انجام‌شده» است؛ شکست کامل (۴۰۳/۴۲۹) دوباره تلاش می‌شود
+            append(OUT / "codal_done.csv", ["ins_code", "symbol", "n_years"], [[ins, sym, len(ls)]])
+        else:
+            append(OUT / "codal_fail.csv", ["ins_code", "symbol", "n_letters", "why"], [[ins, sym, len(ls), "هیچ فایلی دریافت نشد"]])
+            print(f"   {sym}: هیچ فایلی دریافت نشد؛ در codal_done ثبت نشد (اجرای بعدی دوباره می‌گیرد)", flush=True)
     return len(ls)
 
 

@@ -9,6 +9,7 @@
 ← (۵) آزمون‌های سخت (Bonferroni، DSR، PBO، Reality Check/SPA) ← (۶) خروجی.
 """
 import base64
+import hashlib
 import json
 import pickle
 import sys
@@ -33,6 +34,18 @@ COST = 100.0
 REP = {"momentum": "mom_12_1", "risk": "vol_252", "liquidity": "size", "yield": "div_yield", "quality": "q_roe", "value": "ep"}
 
 
+def store_signature(mk: sg.Market) -> str:
+    """امضای حافظهٔ میانی: تاریخ‌ها، نمادها و کد معیارها. هر تغییری در داده یا signals.py کش را باطل می‌کند
+    (وگرنه idx به روزهای قدیمی اشاره می‌کرد و دستور اجرای زنده با ماتریس ناهم‌تراز ساخته می‌شد)."""
+    h = hashlib.sha256()
+    h.update(f"{mk.n}|{mk.k}|{mk.dates[0].date()}|{mk.dates[-1].date()}|".encode())
+    h.update("|".join(map(str, mk.cols)).encode())
+    h.update((ROOT / "tools" / "signals.py").read_bytes())
+    fund_files = [ROOT / "data/fundamentals" / x for x in ("rahavard_long.csv", "rahavard_eps.csv", "codal_long.csv", "codal_letters.csv")]
+    h.update("|".join(f"{p.name}:{p.stat().st_size}:{int(p.stat().st_mtime)}" if p.exists() else p.name for p in fund_files).encode())
+    return h.hexdigest()[:16]
+
+
 def get_lab():
     _, info, Ra = bx.base_panel(bx.ALL_MARKETS)
     Ra = bx.operating_view(Ra)                      # بدون صندوق/گواهی/امتیاز تسهیلات (فصل ۲ §۲٫۰)
@@ -40,14 +53,19 @@ def get_lab():
     mk.fund = sg.load_fund(mk.cols, mk.dates)
     CACHE.mkdir(parents=True, exist_ok=True)
     f = CACHE / "signals_store.npz"
+    sig = store_signature(mk)
+    S = None
     if f.exists():
         z = np.load(f, allow_pickle=True)
-        idx, names = list(z["idx"]), list(z["names"])
-        S = {n: z["S_" + n] for n in names}
-        print(f"ماتریس معیارها از حافظهٔ میانی: {len(S)} معیار")
-    else:
+        if "sig" in z.files and str(z["sig"]) == sig:
+            idx, names = [int(a) for a in z["idx"]], list(z["names"])
+            S = {n: z["S_" + n] for n in names}
+            print(f"ماتریس معیارها از حافظهٔ میانی: {len(S)} معیار (امضا {sig})")
+        else:
+            print("حافظهٔ میانی معیارها با دادهٔ فعلی نمی‌خواند (داده یا signals.py عوض شده)؛ دوباره ساخته می‌شود")
+    if S is None:
         idx, S = sg.compute_store(mk, verbose=False)
-        np.savez_compressed(f, idx=np.array(idx), names=np.array(list(S)), **{"S_" + n: v for n, v in S.items()})
+        np.savez_compressed(f, idx=np.array(idx), names=np.array(list(S)), sig=np.array(sig), **{"S_" + n: v for n, v in S.items()})
     return mk, cn.Lab(mk, idx, S), info
 
 
@@ -141,22 +159,23 @@ def run_all(lab: cn.Lab, S):
 def finalize(lab, S, R):
     """آمار خالص، حکم، DSR، PBO، RC/SPA؛ ورودی R از run_all."""
     runs = R["runs"]
+    cost_of = lambda r: float(r["spec"].get("cost_bp", COST))          # noqa: E731  هزینهٔ مشخصات (پیش‌فرض کتابخانه COST)
     # دهک‌های ترکیب‌ها برای حکم
     for rid, r in runs.items():
-        res = r["res"]
-        r["stats"] = fe.stats_of(res, "S", COST)
-        sc = fe.stats_of(res, "S", COST, bench="CAP")                      # مرجع دوم: ارزش‌وزن واجدان
+        res, c = r["res"], cost_of(r)
+        r["stats"] = fe.stats_of(res, "S", c)
+        sc = fe.stats_of(res, "S", c, bench="CAP")                         # مرجع دوم: ارزش‌وزن واجدان
         r["stats"].update({"excess_net_cap": sc["excess_net"], "t_net_cap": sc["t_net"], "ir_cap": sc["ir"], "ann_cap_net": sc["ann_all_net"],
                            "t_h1_cap": sc["t_h1"], "t_h2_cap": sc["t_h2"], "ex_h1_cap": sc["ex_h1"], "ex_h2_cap": sc["ex_h2"]})
-        rn = fe.net(res["ret"]["S"], res["to"]["S"], COST)
-        an = fe.net(res["ret"]["ALL"], res["to"]["ALL"], COST)
+        rn = fe.net(res["ret"]["S"], res["to"]["S"], c)
+        an = fe.net(res["ret"]["ALL"], res["to"]["ALL"], c)
         r["capacity"] = {str(int(a_)): fe.ann(rn - np.nan_to_num(imp)) - fe.ann(an) for a_, imp in res["impact"].items()}   # برتری خالص پس از اثر بازار
         r["ic"] = fe.ic_stats({"ic": res["ic"]})
     # آزمون‌های چندگانه
     sr_list, ids, D = [], [], {}
     for rid, r in runs.items():
-        res = r["res"]
-        ex = fe.net(res["ret"]["S"], res["to"]["S"], COST) - fe.net(res["ret"]["ALL"], res["to"]["ALL"], COST)
+        res, c = r["res"], cost_of(r)
+        ex = fe.net(res["ret"]["S"], res["to"]["S"], c) - fe.net(res["ret"]["ALL"], res["to"]["ALL"], c)
         D[rid] = pd.Series(ex, index=pd.DatetimeIndex(res["sig_date"]))      # کلید = روز سیگنال (در برابر تأخیر اجرا ثابت)
         sr_list.append(float(np.mean(ex) / np.std(ex, ddof=1)) if np.std(ex) > 0 else np.nan)
         ids.append(rid)
@@ -227,9 +246,7 @@ def main(export_only=False):
         names, C = sg.corr_matrix(mk, lab.idx, S, use, ok)
         R["corr"] = {"names": names, "m": np.round(C, 3).tolist()}
         R = finalize(lab, S, R)
-        for r in R["runs"].values():
-            r["live_top"] = top_holdings(lab, r["res"]) if r["group"] != "sig" else None
-        pickle.dump(R, open(pk, "wb"))
+        pickle.dump(R, open(pk, "wb"))              # پرتفوی زنده (top_holdings) فقط در export ساخته می‌شود
     export(mk, lab, R)
 
 
@@ -239,6 +256,19 @@ def nrm(s):
 
 def b64(a):
     return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode()
+
+
+def json_default(o):
+    """numpy → JSON: NaN به null، bool به bool (نه 1.0)، عدد به float، بقیه به رشته."""
+    if isinstance(o, (np.bool_,)):
+        return bool(o)
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating, float)):
+        return None if o != o else float(o)
+    if hasattr(o, "item"):
+        return json_default(o.item())
+    return str(o)
 
 
 def export(mk, lab, R):
@@ -303,11 +333,11 @@ def export(mk, lab, R):
             "vol": b64(np.nan_to_num(vol, nan=-1)), "adv": b64(np.nan_to_num(adv, nan=-1)), "signals": sig,
             "zoo": R["zoo"], "fm": R["fm"], "corr": R["corr"], "dec": R["dec"], "library": lib, "multi": R["multi"], "cost_bp": COST,
             "aums": [int(a_) for a_ in cn.AUMS], "y_impact": cn.Y_IMPACT, "algos": [{c: v for c, v in a.items() if c != "fn"} for a in cn.ALGOS.values()]}
-    OUT_JS.write_text("window.SIM_LAB = " + json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=lambda o: None if o != o else (float(o) if hasattr(o, "item") else str(o))) + ";\n", encoding="utf-8")
+    OUT_JS.write_text("window.SIM_LAB = " + json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=json_default) + ";\n", encoding="utf-8")
     slim = {"zoo": R["zoo"], "fm": R["fm"], "multi": R["multi"], "dec": R["dec"],
             "library": [{k_: v for k_, v in x.items() if k_ not in ("end", "ret", "all", "to", "to_all")} for x in lib]}
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
-    OUT_JSON.write_text(json.dumps(slim, ensure_ascii=False, default=lambda o: None if o != o else float(o)), encoding="utf-8")
+    OUT_JSON.write_text(json.dumps(slim, ensure_ascii=False, default=json_default), encoding="utf-8")
     print(f"ذخیره شد: {OUT_JS} ({OUT_JS.stat().st_size / 1e6:.1f} MB)")
 
 

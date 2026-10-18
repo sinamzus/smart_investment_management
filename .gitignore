@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 *.tmp
 data/derived/cache/
+# لاگ‌های اجرای کالکتورها (--log) در ریشه؛ در مخزن نگه داشته نمی‌شوند
+/*.txt
+!/requirements.txt
+/logs/

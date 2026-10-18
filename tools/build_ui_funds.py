@@ -157,8 +157,11 @@ def analyze_fund(m: dict, bench: dict, repl: dict, ys: dict) -> dict | None:
         for kk, s in bench.items():                                    # مرجع با بهترین برازش
             x.setdefault("fit", {})[kk] = metrics(f, s).get("te_w")
         out["win"][w] = x
+    if "all" not in out["win"]:
+        return None                                   # کمتر از ۴۰ روز داده
     fit = out["win"]["all"]["fit"]
-    out["best_fit"] = min((v, kk) for kk, v in fit.items() if v is not None)[1]
+    cand = [(v, kk) for kk, v in fit.items() if v is not None]
+    out["best_fit"] = min(cand)[1] if cand else k      # اگر TE هفتگی برای هیچ مرجعی حساب نشد، مرجع اعلام‌شده
     # ریشهٔ خطا: تأخیر سود یا چیز دیگر؟ (fund_diagnostics.py)
     out["divtest"] = fd.divlag_test(fr, btr, ys[k])
     out["holdings"] = ah.analyze(sym, fr, btr) if (FUNDS / f"holdings_{sym}.csv").exists() else None   # پرتفوی کدال (اگر parse شده باشد)

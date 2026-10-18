@@ -258,6 +258,9 @@ def main():
             r[k] = last_first(df, f"{k}_dates")
         ev.append(r)
     E = pd.DataFrame(ev)
+    if E.empty:
+        print("هیچ رویداد ۱۲ماهه با تاریخ مجمع پیدا نشد؛ dividend_payment_lags.csv ساخته نشد (ابتدا --parse و codal_agm.csv).")
+        return
     E["eff"] = [s or f or n for f, s, n in zip(E.fund, E.sejam, E["any"])]
     E["basis"] = ["sejam" if s else "fund" if f else "first" if n else "" for f, s, n in zip(E.fund, E.sejam, E["any"])]
     # روز استحقاق از تعدیل TSETMC

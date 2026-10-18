@@ -150,11 +150,12 @@ function initQA() {
   $('qa-lin-b').innerHTML = `<span><b>قاعده</b> نسبت سطح ≈ ۰٫۱ یا ۱۰ ← حذف جفت یا نرمال‌سازی مقیاس؛ جهش > ۷٪ که فردا برمی‌گردد ← تیغه</span><span><b>مورد</b> «شاخص كل» و دو هم‌وزن بدون هیچ مورد</span><span><b>TEDPIX</b> داده معیوب و کنار گذاشته شده</span>`;
   const u = Q.universe, rl = Q.rules;
   $('qa-kpis').innerHTML = [['اعضای «شاخص كل»', u.k_members], ['با فایل قیمت', u.k_with_prices], ['نمادهای extras', u.extras], ['نماد در بازده', u.stocks_bourse_in_returns], ['ردیف قاعدهٔ ۸', rl.rule8]].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${fmt(v, 0)}</div></div>`).join('');
+  const s34 = Q.sectors.find(r => String(r.sector).replace(/^0+/, '') === '34'), covRows = (X.divlab.payment_data.coverage || []).filter(c => c.events), covLast = covRows[covRows.length - 1];   // اعداد از داده، نه ثابت در متن
   $('qa-gaps').innerHTML = `<b>باز و شناخته‌شده</b><ul>
-  <li><b>صنعت ۳۴ خودرو:</b> TE ۳٫۲٪ (همبستگی ۰٫۹۹۶)؛ فرضیهٔ زمان‌بندی/سهام شناور/توقف/فرابورس رد شد؛ خطا پراکنده است.</li>
-  <li><b>تاریخ پرداخت سود:</b> ${X.divlab.payment_data.with_ex || 0} رویداد (${X.divlab.payment_data.symbols || 0} نماد) تاریخ پرداخت سجامی دارند (کدال ن-۱۳ و رونوشت کارگزاری فارابی)؛ پوشش جریان سود «كل» در ۲۰۲۵ حدود ${fmt(((X.divlab.payment_data.coverage || []).find(c => c.year === 2025) || {cov_K: 0}).cov_K * 100, 0)}٪ و در سال‌های قدیمی‌تر کمتر است؛ بقیه با توزیع تجربی وزنی مدل می‌شوند.</li>
+  <li><b>صنعت ۳۴ خودرو:</b> TE ${s34 && s34.te != null ? fmt(Math.min(s34.te, s34.te_all ?? s34.te)) + '٪ (همبستگی ' + fmt(Math.max(s34.corr || 0, s34.corr_all || 0), 3) + ')' : '—'}؛ فرضیهٔ زمان‌بندی/سهام شناور/توقف/فرابورس رد شد؛ خطا پراکنده است.</li>
+  <li><b>تاریخ پرداخت سود:</b> ${X.divlab.payment_data.with_ex || 0} رویداد (${X.divlab.payment_data.symbols || 0} نماد) تاریخ پرداخت سجامی دارند (کدال ن-۱۳ و رونوشت کارگزاری فارابی)؛ ${covLast ? `پوشش جریان سود «كل» در ${covLast.year} حدود ${fmt(covLast.cov_K * 100, 0)}٪ و در سال‌های قدیمی‌تر کمتر است` : 'جدول پوشش هنوز ساخته نشده'}؛ بقیه با توزیع تجربی وزنی مدل می‌شوند.</li>
   <li><b>هم‌وزن TR رسمی:</b> نسبت سطح بازسازی به رسمی ${fmt(D.stats.EW.all.cum_ratio, 3)}؛ تفاوت از تفکیک سود و افزایش سرمایه در رویدادهای ترکیبی است.</li>
-  <li><b>سهام کاملاً حذف‌شده:</b> فقط آن‌هایی که با جست‌وجوی نام صنعت پیدا شده‌اند (۱۳۶ نماد extras)؛ جهان کامل نیست.</li>
+  <li><b>سهام کاملاً حذف‌شده:</b> فقط آن‌هایی که با جست‌وجوی نام صنعت پیدا شده‌اند (${fmt(u.extras, 0)} نماد extras)؛ جهان کامل نیست.</li>
   <li><b>۴ صنعت بدون عضو فعلی (۳۳، ۳۵، ۳۶، ۴۵)</b> و ۲۶ با کمتر از ۲۰۰ روز هم‌پوشانی: قابل مقایسه نیستند.</li></ul>`;
   $('qa-csv').onclick = () => download('sector_qa.csv', [['sector', 'name', 'n_official', 'n_missing', 'corr', 'te_pct', 'n_all', 'corr_all', 'te_all_pct', 'cum_ratio'], ...rows.map(r => [r.sector, r.name, r.n_last, r.n_miss, r.corr, r.te, r.n_all, r.corr_all, r.te_all, r.cum])]);
 }
