@@ -86,7 +86,7 @@ function initLab() {
       <div class="seg" id="lb-tabs"><button data-t="perf" aria-pressed="true">عملکرد</button><button data-t="dec" aria-pressed="false">دهک‌ها</button><button data-t="ic" aria-pressed="false">IC و پریمیوم</button><button data-t="stab" aria-pressed="false">پایداری</button><button data-t="hard" aria-pressed="false">آمار سخت</button><button data-t="cap" aria-pressed="false">ظرفیت</button><button data-t="live" aria-pressed="false">پرتفوی زنده</button></div>
       <div class="panel-tools"><button class="tool" id="lb-csv">CSV</button></div></div>
     <div class="ctl"><label data-tip="مرجع سنجش برتری: هم‌وزن واجدان پریمیوم اندازه/نقدناپذیری را در خود دارد؛ ارزش‌وزن واجدان مرجع مدیرِ ارزش‌وزن است.">مرجع <span class="seg" id="lb-bench"><button data-b="eq" aria-pressed="true">هم‌وزن واجدان</button><button data-b="cap" aria-pressed="false">ارزش‌وزن واجدان</button></span></label>
-      <span class="mute">برتری، t، IR، پایداری و حکم همه نسبت به این مرجع‌اند</span></div>
+      <span class="mute" data-tip="با تغییر مرجع، همهٔ ستون‌های برتری، آمار t، نسبت اطلاعاتی (IR)، نیمه‌ها و حکم دوباره نسبت به همان مرجع حساب می‌شوند؛ خود بازده استراتژی عوض نمی‌شود.">برتری، t، IR، پایداری و حکم همه نسبت به این مرجع‌اند</span></div>
     <div class="kpis" id="lb-kpis"></div>
     <div class="panel-body scroll" id="lb-view"></div>
     <div class="lineage" id="lb-lin"></div>
