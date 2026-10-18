@@ -530,6 +530,27 @@ def load_fund(cols, dates):
         g["avail"] = g.avail.fillna(g.fy_end + pd.Timedelta(days=120)) + pd.Timedelta(days=1)
         out[key] = g
     out["_eps"] = E12.sort_values("date")
+    # نمادهای بدون رهاورد: نسبت‌ها و EPS از کدال (tools/fetch_codal_fundamentals.py) اشتقاق می‌شود؛ مقیاس‌ها با رهاورد یکی است
+    # (ROE/حاشیه به درصد؛ بدهی÷دارایی و گردش دارایی نسبت). جاری، پوشش بدهی از کدال ساخته نمی‌شود.
+    import build_quality as bq
+    C = bq.codal_base(set(L.ins_code))
+    if len(C):
+        def _put(key, val):
+            g = C[["ins_code", "fy_end", "avail"]].assign(value=val).replace([np.inf, -np.inf], np.nan).dropna(subset=["value"])
+            out[key] = pd.concat([out[key], g], ignore_index=True)
+        ok = (C.equity > 0)
+        _put("roe", np.where(ok, 100.0 * C.net_income / C.equity, np.nan))
+        _put("roa", np.where(C.assets > 0, 100.0 * C.net_income / C.assets, np.nan))
+        _put("net_margin", np.where(C.revenue > 0, 100.0 * C.net_income / C.revenue, np.nan))
+        _put("op_margin", np.where(C.revenue > 0, 100.0 * C.op_profit / C.revenue, np.nan))
+        _put("d_a", np.where(C.assets > 0, C.liabilities / C.assets, np.nan))
+        _put("d_e", np.where(C.equity != 0, C.liabilities / C.equity, np.nan))
+        _put("asset_turn", np.where(C.assets > 0, C.revenue / C.assets, np.nan))
+        # EPS (ریال) ≈ سود خالص ÷ سرمایهٔ ثبت‌شده × ۱۰۰۰ (ارزش اسمی ۱۰۰۰ ریال [تأیید لازم]) — بی‌واحد از واحد پولی صورت مالی
+        ce = C[(C.capital > 0) & C.net_income.notna()][["ins_code", "fy_end", "avail", "net_income", "capital"]].copy()
+        ce["eps"] = ce.net_income / ce.capital * 1000.0
+        ce["date"] = ce.avail
+        out["_eps_codal"] = ce.sort_values("date")
     return out
 
 
@@ -588,6 +609,11 @@ def ep(mk, a):
     t = mk.dates[a]
     e = E[E.date <= t].groupby("ins_code").tail(1)
     e = e[(t - e.date).dt.days <= 540]
+    Ec = mk.fund.get("_eps_codal")
+    if Ec is not None and len(Ec):                               # نمادهای فقط-کدال
+        ec = Ec[Ec.date <= t].groupby("ins_code").tail(1)
+        ec = ec[(t - ec.date).dt.days <= 540]
+        e = pd.concat([e, ec[~ec.ins_code.isin(set(e.ins_code))][["ins_code", "date", "eps"]]], ignore_index=True)
     out = np.full(mk.k, np.nan)
     pos = {c: i for i, c in enumerate(mk.cols)}
     for r in e.itertuples():

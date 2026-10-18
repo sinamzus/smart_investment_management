@@ -33,6 +33,11 @@ def available() -> bool:
     return (FUND / "rahavard_long.csv").exists() and (FUND / "rahavard_eps.csv").exists()
 
 
+def fy_date(s: str) -> pd.Timestamp:
+    y, m, d = map(int, s.split("/"))
+    return pd.Timestamp(str(j2g(y, m, d))[:10])
+
+
 def safe_fy_date(s: str) -> pd.Timestamp:
     try:
         return fy_date(s)
@@ -41,46 +46,49 @@ def safe_fy_date(s: str) -> pd.Timestamp:
         return fy_date(f"{y}/{m}/{min(int(d), 29)}")
 
 
-def load_codal(skip: set) -> dict:
-    """نمادهایی که رهاورد ندارند ولی tools/fetch_codal_fundamentals.py گرفته است (ins_code ∉ skip) → همان قالب load_records.
-    ROE = سود خالص ÷ حقوق مالکانهٔ پایان سال؛ D/E = جمع بدهی ÷ حقوق مالکانه. تاریخ دانستن = نخستین انتشار کدال + ۱ روز."""
+def codal_base(skip: set) -> pd.DataFrame:
+    """جدول سال‌مالی × نماد از کدال برای ins_codeهایی که در skip نیستند (رهاورد ندارند):
+    ins_code, fy_end, avail, assets, liabilities, equity, capital, net_income, op_profit, revenue.
+    تاریخ دانستن = نخستین انتشار کدال + ۱ روز؛ اگر نبود پایان سال + ۱۲۰ روز [تأیید لازم]. بدهی: جمع بدهی ← جاری + غیرجاری ← دارایی − حقوق."""
     fl, fo = FUND / "codal_long.csv", FUND / "codal_letters.csv"
     if not (fl.exists() and fo.exists()):
-        return {}
+        return pd.DataFrame()
     L = pd.read_csv(fl, dtype={"ins_code": str})
     Lt = pd.read_csv(fo, dtype={"ins_code": str})
     L = L[~L.ins_code.isin(skip)]
     if L.empty:
-        return {}
+        return pd.DataFrame()
     L["pref"] = (L.col == "cur").astype(int)
-    V = (L.sort_values("pref").groupby(["ins_code", "fy_year", "key"]).value.last().unstack("key"))
+    V = L.sort_values("pref").groupby(["ins_code", "fy_year", "key"]).value.last().unstack("key")
+    for k in ("assets", "liabilities", "equity", "capital", "net_income", "op_profit", "revenue", "liab_cur", "liab_noncur"):
+        if k not in V:
+            V[k] = np.nan
+    lia = V.liabilities.copy()
+    lia = lia.fillna(V.liab_cur + V.liab_noncur).fillna(V.assets - V.equity)
+    V["liabilities"] = lia
+    V = V.reset_index()
     pub = Lt.groupby(["ins_code", Lt.fy_end.str[:4].astype(int)]).first_published.min()
     md = Lt.sort_values("fy_end").groupby("ins_code").fy_end.last().str[5:]
-    recs = {}
-    for ins, g in V.groupby(level=0):
-        rows = []
-        for (_i, fy), r in g.iterrows():
-            eq = r.get("equity", np.nan)
-            if not eq == eq or "net_income" not in r or not r["net_income"] == r["net_income"] or eq == 0:
-                continue
-            fe = safe_fy_date(f"{int(fy)}/{md.get(ins, '12/29')}")
-            a = pub.get((ins, int(fy)))
-            avail = (safe_fy_date(a) if isinstance(a, str) and a[:2] == "14" else fe + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1)
-            lia = r.get("liabilities", np.nan)
-            if not lia == lia and r.get("liab_cur", np.nan) == r.get("liab_cur", np.nan) and r.get("liab_noncur", np.nan) == r.get("liab_noncur", np.nan):
-                lia = r["liab_cur"] + r["liab_noncur"]
-            if not lia == lia and r.get("assets", np.nan) == r.get("assets", np.nan):
-                lia = r["assets"] - eq                 # جمع بدهی‌ها پیدا نشد ← دارایی − حقوق
-            rows.append({"ins_code": ins, "fy_end": fe, "roe": 100.0 * r["net_income"] / eq,
-                         "de": lia / eq, "equity": eq, "avail": avail})
-        if rows:
-            recs[ins] = pd.DataFrame(rows).sort_values("fy_end").reset_index(drop=True)
-    return recs
+    fe, av = [], []
+    for ins, fy in zip(V.ins_code, V.fy_year):
+        e = safe_fy_date(f"{int(fy)}/{md.get(ins, '12/29')}")
+        a = pub.get((ins, int(fy)))
+        av.append((safe_fy_date(a) if isinstance(a, str) and a[:2] == "14" else e + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1))
+        fe.append(e)
+    V["fy_end"], V["avail"] = fe, av
+    return V[["ins_code", "fy_end", "avail", "assets", "liabilities", "equity", "capital", "net_income", "op_profit", "revenue"]]
 
 
-def fy_date(s: str) -> pd.Timestamp:
-    y, m, d = map(int, s.split("/"))
-    return pd.Timestamp(str(j2g(y, m, d))[:10])
+def load_codal(skip: set) -> dict:
+    """نمادهایی که رهاورد ندارند ولی tools/fetch_codal_fundamentals.py گرفته است → همان قالب load_records.
+    ROE = سود خالص ÷ حقوق مالکانهٔ پایان سال؛ D/E = جمع بدهی ÷ حقوق مالکانه."""
+    V = codal_base(skip)
+    if V.empty:
+        return {}
+    V = V[V.equity.notna() & (V.equity != 0) & V.net_income.notna()].copy()
+    V["roe"] = 100.0 * V.net_income / V.equity
+    V["de"] = V.liabilities / V.equity
+    return {c: g[["ins_code", "fy_end", "roe", "de", "equity", "avail"]].sort_values("fy_end").reset_index(drop=True) for c, g in V.groupby("ins_code")}
 
 
 def load_records() -> dict:
