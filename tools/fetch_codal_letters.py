@@ -266,8 +266,10 @@ def run(a):
                     continue
                 t = get_html(h, x.get("Url") or "")
                 if not t:
-                    print(f"  بدون HTML: {sym} {tn}", flush=True)
+                    h.delay = min(h.delay * 2, 20.0)                                 # تطبیق‌پذیر: پس از شکست، تأخیر دو برابر
+                    print(f"  بدون HTML: {sym} {tn}؛ تأخیر → {h.delay:.1f}s", flush=True)
                     continue
+                h.delay = max(a.delay, h.delay * 0.92)                              # پس از موفقیت، آرام‌آرام کمتر
                 text = html_text(t)[:12000]
                 with gzip.open(raw, "at", encoding="utf-8", newline="") as z:
                     csv.writer(z).writerow([tn, sym, code, jdate(x.get("PublishDateTime") or x.get("SentDateTime")), x.get("Title", ""), text.replace("\n", "\\n")])
@@ -349,7 +351,7 @@ def main():
     ap.add_argument("--reparse", action="store_true")
     ap.add_argument("--codes", default=",".join(DEFAULT_CODES))
     ap.add_argument("--since", type=int, default=1399, help="قدیمی‌ترین سال انتشار (جلالی)")
-    ap.add_argument("--delay", type=float, default=2.0)
+    ap.add_argument("--delay", type=float, default=6.0, help="کف تأخیر بین درخواست‌ها (ثانیه)؛ پس از ۴۲۹ خودکار بیشتر می‌شود")
     ap.add_argument("--max-pages", type=int, default=400)
     ap.add_argument("--log")
     a = ap.parse_args()
