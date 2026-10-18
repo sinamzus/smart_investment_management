@@ -40,7 +40,7 @@
 | ۱۰ | [منابع و موارد باز](10-references-and-open-items.md) | کتاب‌شناسی، پارامترهای نیازمند راستی‌آزمایی، تصمیم‌های لازم |
 | ۱۱ | [مقایسهٔ سه فاکتور برتر iShares](11-blackrock-factor-etf-comparison.md) | Quality، Momentum، Min Vol: ساختار و قابلیت پیاده‌سازی در ایران |
 | ۱۲ | [بنچمارک UI نرم‌افزارهای Investment Research آمریکا](12-ui-benchmark.md) | Bloomberg، FactSet، LSEG، Morningstar، Aladdin، Koyfin: محبوبیت و الگوهای UI |
-| ۱۳ | [دیزاین سیستم Ledger](13-design-system.md) | اصول، خط قرمز ظاهری، توکن، کامپوننت؛ کد در `ui/` |
+| ۱۳ | [دیزاین سیستم Calm](13-design-system.md) | اصول، خط قرمز ظاهری، توکن (شب/روز)، کامپوننت؛ کد در `ui/` |
 | ۱۴ | [معیارهای انتخاب و الگوریتم‌های ساخت پرتفوی](14-signals-and-selection-research.md) | ۵۰ معیار، ترکیب، ۱۱ الگوریتم، آزمون‌های سخت (DSR، PBO، SPA)؛ کد: `tools/signals.py`، `construction.py` |
 | — | [تاریخچهٔ تغییرات](CHANGELOG.md) | هر تغییر روش‌شناسی اینجا ثبت می‌شود (قاعده: `CLAUDE.md`) |
 

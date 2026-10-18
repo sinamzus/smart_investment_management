@@ -7,102 +7,104 @@
   /* ── Typography ─────────────────────────────────────────────── */
   --font-ui:   "Vazirmatn", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
   --font-num:  "JetBrains Mono", "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
-  --fs-2xs: 10.5px;  --fs-xs: 11.5px;  --fs-sm: 12px;  --fs-md: 13px;  --fs-lg: 15px;  --fs-xl: 18px;
-  --lh-tight: 1.25;  --lh-ui: 1.5;
+  --fs-2xs: 11px;  --fs-xs: 12px;  --fs-sm: 13px;  --fs-md: 14px;  --fs-lg: 17px;  --fs-xl: 21px;
+  --lh-tight: 1.3;  --lh-ui: 1.7;
 
   /* ── Space: مبنای ۴px ───────────────────────────────────────── */
-  --s-1: 2px; --s-2: 4px; --s-3: 8px; --s-4: 12px; --s-5: 16px; --s-6: 24px;
+  --s-1: 3px; --s-2: 6px; --s-3: 10px; --s-4: 16px; --s-5: 22px; --s-6: 32px;
 
   /* ── Shape ──────────────────────────────────────────────────── */
-  --radius: 2px;           /* گوشه‌های تیز؛ هرگز > 4px */
+  --radius: 8px;           /* کنترل‌ها */
+  --radius-lg: 14px;       /* کارت‌ها/پنل‌ها */
+  --pill: 999px;           /* ناوبری، تراشه‌ها */
   --hair: 1px;             /* ضخامت خط‌های تقسیم */
-  --notch: 3px;            /* نوار گروه‌لینک در سربرگ پنل */
+  --notch: 0px;            /* (قدیمی) نوار گروه‌لینک؛ اکنون با نقطهٔ رنگی جایگزین شده */
 
   /* ── Density (ارتفاع ردیف جدول) ─────────────────────────────── */
-  --row-h: 26px;           /* compact (پیش‌فرض) ؛ default: 30px ؛ comfortable: 36px */
-  --ctl-h: 28px;
+  --row-h: 40px;           /* آرام (پیش‌فرض) ؛ default: 34px ؛ compact: 28px */
+  --ctl-h: 34px;
 
   /* ── Motion ─────────────────────────────────────────────────── */
-  --t-fast: 90ms;  --t-base: 140ms;  --ease: cubic-bezier(.2,.0,.0,1);
+  --t-fast: 120ms;  --t-base: 200ms;  --ease: cubic-bezier(.2,.6,.2,1);
 }
 
 /* ── Dark (پیش‌فرض: میز معاملات) ─────────────────────────────── */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg-app:    #0A0E13;
-  --bg-panel:  #0F151C;
-  --bg-head:   #141C25;
-  --bg-hover:  #18222D;
-  --bg-select: #1B2A44;
-  --line:      #212C38;
-  --line-strong: #31404F;
+  --bg-app:    #0E1116;
+  --bg-panel:  #151A22;
+  --bg-head:   #1A2029;
+  --bg-hover:  #1E2530;
+  --bg-select: #243050;
+  --line:      #232B37;
+  --line-strong: #323C4B;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 10px 28px rgba(0,0,0,.18);
 
-  --tx-1: #E6EBF0;
-  --tx-2: #9AA7B4;
-  --tx-3: #6B7886;
-  --tx-inv: #0A0E13;
+  --tx-1: #E9EDF4;
+  --tx-2: #A4AEBF;
+  --tx-3: #738094;
+  --tx-inv: #0E1116;
 
-  --accent:     #5B8CFF;    /* تعامل: فوکوس، انتخاب، لینک */
-  --accent-dim: #2A3F73;
-  --accent-tx:  #A9C1FF;
+  --accent:     #7C9CFF;    /* تعامل: فوکوس، انتخاب، لینک */
+  --accent-dim: #2D3C68;
+  --accent-tx:  #B5C8FF;
 
-  --up:   #2FC27B;          /* بازار ایران: سبز = صعود */
-  --down: #F0615F;
-  --up-bg:   rgba(47,194,123,.14);
-  --down-bg: rgba(240,97,95,.14);
-  --warn: #E3B341;
-  --warn-bg: rgba(227,179,65,.14);
-  --info-bg: rgba(91,140,255,.14);
+  --up:   #3DCF8E;          /* بازار ایران: سبز = صعود */
+  --down: #F27C7A;
+  --up-bg:   rgba(61,207,142,.13);
+  --down-bg: rgba(242,124,122,.13);
+  --warn: #E8BD5A;
+  --warn-bg: rgba(232,189,90,.13);
+  --info-bg: rgba(124,156,255,.13);
 
-  /* سری‌های نمودار: اصلی روشن، مرجع اول آبی، مرجع دوم خاکستری فولادی */
-  --ch-1: #E6EBF0;
-  --ch-2: #5B8CFF;
-  --ch-3: #7C8A99;
-  --ch-grid: #1A232E;
+  --ch-1: #E9EDF4;
+  --ch-2: #7C9CFF;
+  --ch-3: #8A97A9;
+  --ch-grid: #1D2430;
 
-  /* گروه‌های لینک (حرف + رنگ، برای کوررنگی) */
-  --lg-a: #5B8CFF; --lg-b: #2FC27B; --lg-c: #E3B341;
-  --lg-d: #C77DFF; --lg-e: #FF8A5B; --lg-f: #4FD1D9;
+  --lg-a: #7C9CFF; --lg-b: #3DCF8E; --lg-c: #E8BD5A;
+  --lg-d: #C99BFF; --lg-e: #FF9C74; --lg-f: #5FD6DD;
 }
 
 /* ── Light (گزارش / چاپ) — خاکستری سرد، نه کرم ───────────────── */
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg-app:    #E9EDF1;
+  --bg-app:    #F3F5F9;
   --bg-panel:  #FFFFFF;
-  --bg-head:   #F3F5F8;
-  --bg-hover:  #EDF1F6;
-  --bg-select: #DCE7FF;
-  --line:      #D3DAE2;
-  --line-strong: #B4BFCB;
+  --bg-head:   #F8F9FC;
+  --bg-hover:  #EFF2F8;
+  --bg-select: #E2EAFF;
+  --line:      #E4E8F0;
+  --line-strong: #CDD5E1;
+  --shadow-card: 0 1px 2px rgba(20,30,55,.06), 0 8px 24px rgba(20,30,55,.06);
 
-  --tx-1: #0E1620;
-  --tx-2: #4A5866;
-  --tx-3: #7A8794;
+  --tx-1: #18202D;
+  --tx-2: #546074;
+  --tx-3: #8591A4;
   --tx-inv: #FFFFFF;
 
-  --accent:     #2F5FE0;
-  --accent-dim: #C6D6FF;
-  --accent-tx:  #1D45B0;
+  --accent:     #4565F0;
+  --accent-dim: #D3DCFF;
+  --accent-tx:  #2E4BC4;
 
-  --up:   #0C8F55;
-  --down: #D03A38;
-  --up-bg:   rgba(12,143,85,.10);
-  --down-bg: rgba(208,58,56,.10);
+  --up:   #109A66;
+  --down: #D6484A;
+  --up-bg:   rgba(16,154,102,.10);
+  --down-bg: rgba(214,72,74,.10);
   --warn: #9A6B00;
-  --warn-bg: rgba(154,107,0,.12);
-  --info-bg: rgba(47,95,224,.10);
+  --warn-bg: rgba(154,107,0,.11);
+  --info-bg: rgba(69,101,240,.09);
 
-  --ch-1: #0E1620;
-  --ch-2: #2F5FE0;
-  --ch-3: #7A8794;
-  --ch-grid: #E4E9EE;
+  --ch-1: #18202D;
+  --ch-2: #4565F0;
+  --ch-3: #8591A4;
+  --ch-grid: #ECEFF5;
 
-  --lg-a: #2F5FE0; --lg-b: #0C8F55; --lg-c: #9A6B00;
-  --lg-d: #8F3FD0; --lg-e: #C85A25; --lg-f: #12808A;
+  --lg-a: #4565F0; --lg-b: #109A66; --lg-c: #A87500;
+  --lg-d: #8E45D6; --lg-e: #CC5F2A; --lg-f: #14838D;
 }
 
-/* ── Density modes ─────────────────────────────────────────── */
-:root[data-density="default"]     { --row-h: 30px; --ctl-h: 30px; }
-:root[data-density="comfortable"] { --row-h: 36px; --ctl-h: 34px; --fs-sm: 13px; }
+/* ── Density modes: آرام (پیش‌فرض، بدون صفت) · استاندارد · فشرده ── */
+:root[data-density="default"] { --row-h: 34px; --ctl-h: 32px; --fs-sm: 12.5px; }
+:root[data-density="compact"] { --row-h: 28px; --ctl-h: 28px; --fs-sm: 12px; --fs-md: 13px; --s-3: 8px; --s-4: 12px; }

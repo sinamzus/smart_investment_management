@@ -87,7 +87,7 @@ function initLab() {
       <div class="panel-tools"><button class="tool" id="lb-csv">CSV</button></div></div>
     <div class="ctl"><label data-tip="مرجع سنجش برتری: هم‌وزن واجدان پریمیوم اندازه/نقدناپذیری را در خود دارد؛ ارزش‌وزن واجدان مرجع مدیرِ ارزش‌وزن است.">مرجع <span class="seg" id="lb-bench"><button data-b="eq" aria-pressed="true">هم‌وزن واجدان</button><button data-b="cap" aria-pressed="false">ارزش‌وزن واجدان</button></span></label>
       <span class="mute" data-tip="با تغییر مرجع، همهٔ ستون‌های برتری، آمار t، نسبت اطلاعاتی (IR)، نیمه‌ها و حکم دوباره نسبت به همان مرجع حساب می‌شوند؛ خود بازده استراتژی عوض نمی‌شود.">برتری، t، IR، پایداری و حکم همه نسبت به این مرجع‌اند</span></div>
-    <details class="lb-flowbox" open><summary data-tip="ترتیب دقیق محاسبه در هر ماه شبیه‌سازی؛ مقدارهای هر مرحله از تنظیمات همین لحظهٔ سازنده می‌آید و کلیک روی هر مرحله بخش مربوط را باز می‌کند.">روند ساخت و ترتیب شبیه‌سازی · ۱۰ مرحله در هر ماه</summary><div class="lb-flow" id="lb-flow"></div></details>
+    <details class="lb-flowbox"><summary data-tip="ترتیب دقیق محاسبه در هر ماه شبیه‌سازی؛ برای دیدن مقدار هر مرحله (از تنظیمات همین لحظهٔ سازنده) باز کنید؛ کلیک روی هر مرحله بخش مربوط را باز می‌کند."><span class="ttl">روند ساخت و ترتیب شبیه‌سازی</span><span class="lb-mini" id="lb-mini"></span></summary><div class="lb-flow" id="lb-flow"></div></details>
     <div class="kpis" id="lb-kpis"></div>
     <div class="panel-body scroll" id="lb-view"></div>
     <div class="lineage" id="lb-lin"></div>
@@ -195,6 +195,7 @@ function renderFlow() {
     ['هزینه', `${s.cost_bp} bp رفت‌وبرگشت × گردش یک‌طرفه`, 'fric', 'گردش یک‌طرفه = نصف مجموع |Δوزن|؛ هزینهٔ ماه = گردش × هزینهٔ رفت‌وبرگشت (پیش‌فرض ۱۰۰ bp [تأیید لازم]). اثر بازار جدا در تب «ظرفیت» است.'],
     ['اجرا', 'روز معاملاتی بعد · بازده از روز بعد از سیگنال', null, 'سفارش‌ها روز معاملاتی بعد اجرا می‌شود (شنبه تا چهارشنبه؛ تعطیلات رسمی مدل نشده [تأیید لازم]) و بازده ماه از روز بعد از سیگنال تا سیگنال بعدی حساب می‌شود.'],
     ['رانش و مرجع', `وزن‌ها با بازده رانش می‌کنند · مرجع: ${bench}`, null, 'تا ریبالانس بعد وزن‌ها با بازده کل رانش می‌کنند؛ مرجع هم‌وزن یا ارزش‌وزن واجدان همان ماه است و برتری، t و حکم نسبت به آن سنجیده می‌شود.']];
+  const mini = $('lb-mini'); if (mini && !mini.dataset.done) { mini.dataset.done = 1; mini.innerHTML = ST.map(([t], i) => `<i><em>${i + 1}</em>${esc(t)}</i>`).join(''); }
   el.innerHTML = ST.map(([t, sub, sec, tip], i) => `<button class="lb-step${sec == null ? ' static' : ''}" data-sec="${sec == null ? '' : FLOW_SEC[sec]}" data-tip="${esc(tip)}"><span class="no">${i + 1}</span><b>${esc(t)}</b><small>${esc(sub)}</small></button>`).join('');
   $$$('#lb-flow .lb-step').forEach(b => b.onclick = () => {
     if (b.dataset.sec === '') return;

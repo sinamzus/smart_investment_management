@@ -64,7 +64,7 @@ function renderSam() {
     ['نمونهٔ واجد در آخرین ماه', M.n_eligible_last + ' سهم', 'تعداد نمادهای واجد بورس در آخرین ماه (فهرست ماکت کامل).']]
     .map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v">${v}</div></div>`).join('');
   // نمودار خطی: محور x = N (رتبه‌ای)، y = معیار
-  const W = 760, H = 220, pl = 46, pr = 14, pt = 12, pb = 26;
+  const W = 980, H = 250, pl = 46, pr = 14, pt = 12, pb = 26;
   const ms = sam.method === 'all' ? Object.keys(METHODS) : [sam.method];
   const ys = rows.map(r => r[sam.metric]).concat(sam.metric === 'te_vs_official_pct' ? [FR.te_vs_official_pct] : []);
   const lo = Math.min(0, ...ys), hi = Math.max(...ys) * 1.08 || 1, X = i => pl + (W - pl - pr) * (Ns.length > 1 ? i / (Ns.length - 1) : .5), Y = v => pt + (H - pt - pb) * (1 - (v - lo) / (hi - lo));
@@ -78,7 +78,7 @@ function renderSam() {
     g += `<polyline fill="none" stroke="${COLORS[k]}" stroke-width="1.8" points="${pts.map(p => p[0] + ',' + p[1]).join(' ')}"/>` + pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="${COLORS[k]}"><title>${METHODS[k]} · N=${p[2].N}: ${f(p[2][sam.metric], 2)}</title></circle>`).join('');
   });
   const leg = ms.map(k => `<span style="margin-inline-end:14px"><i style="display:inline-block;width:10px;height:3px;background:${COLORS[k]};vertical-align:middle;margin-inline-end:4px"></i>${METHODS[k]}</span>`).join('');
-  $('sm-chart').innerHTML = `<div class="mute" style="font-size:var(--fs-xs);margin-bottom:4px" data-tip="${esc(mt[2])}">${mt[1]} · ${sam.lev === 'beta' ? 'تراز بتا' : 'بدون وام'}</div><svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;direction:ltr">${g}</svg><div class="mute" style="font-size:var(--fs-2xs)">${leg}</div>`;
+  $('sm-chart').innerHTML = `<div class="mute" style="font-size:var(--fs-xs);margin-bottom:4px" data-tip="${esc(mt[2])}">${mt[1]} · ${sam.lev === 'beta' ? 'تراز بتا' : 'بدون وام'}</div><svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block">${g}</svg><div class="mute" style="font-size:var(--fs-2xs)">${leg}</div>`;
   const hd = [['N', 'n', 'تعداد سهام نمونه'], ['روش', '', 'روش انتخاب سهام'], ['L̄', 'n', 'میانگین اهرم؛ کمتر از ۱ یعنی بخشی نقد، بیشتر از ۱ یعنی وام.'], ['بازده سالانه', 'n', 'بازده سالانهٔ نمونه (خالص از هزینه و بهرهٔ وام).'], ['شاخص', 'n', 'بازده سالانهٔ شاخص كل رسمی (بازده کل) در همین بازه.'], ['فاصله', 'n', 'بازدهٔ نمونه منهای شاخص (واحد درصد).'], ['TE رسمی', 'n', 'خطای ردیابی در برابر شاخص رسمی (٪).'], ['TE ماکت', 'n', 'خطای نمونه‌گیری در برابر ماکت کامل (٪).'], ['بتا', 'n', 'بتای بازده روزانهٔ نمونه نسبت به شاخص.'], ['همبستگی', 'n', 'همبستگی بازده روزانه با شاخص.'], ['گردش', 'n', 'گردش یک‌طرفهٔ میانگین هر ریبالانس (٪).']];
   $('sm-table').innerHTML = `<thead><tr>${hd.map(([t, c, d]) => `<th class="${c}" data-tip="${esc(d)}">${t}</th>`).join('')}</tr></thead><tbody>` + rows.slice().sort((a, b) => a.N - b.N || a.method.localeCompare(b.method)).map(r => `<tr><td class="n">${r.N}</td><td>${METHODS[r.method]}</td><td class="n">${f(r.mean_L, 2)}</td><td class="n">${f(r.ann_pct)}٪</td><td class="n">${f(r.ann_index_pct)}٪</td><td class="n ${r.gap_pct >= 0 ? 'up' : 'down'}">${sg(r.gap_pct)}</td><td class="n">${f(r.te_vs_official_pct, 2)}</td><td class="n">${f(r.te_vs_fullreplica_pct, 2)}</td><td class="n">${f(r.beta, 2)}</td><td class="n">${f(r.corr, 3)}</td><td class="n">${f(r.turnover_oneway_pct, 0)}٪</td></tr>`).join('') + '</tbody>';
   const nb = D.replica.filter(r => r.leverage === 'beta'), nn = D.replica.filter(r => r.leverage === 'none');

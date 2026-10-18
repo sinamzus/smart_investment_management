@@ -493,11 +493,16 @@ function initFnd() {
 
 /* ══════════ تراکم، حافظهٔ تنظیمات، تاریخچهٔ فرمان، کلیک روی نماد ══════════ */
 const LS = { get: k => { try { return localStorage.getItem('sim.' + k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem('sim.' + k, v); } catch (e) { /* بی‌اهمیت */ } } };
-const DENS = ['compact', 'default', 'comfortable'];
-function setDensity(d) { if (d === 'compact') delete document.documentElement.dataset.density; else document.documentElement.dataset.density = d; LS.set('density', d); }
-$('density').onclick = () => { const cur = document.documentElement.dataset.density || 'compact'; const nx = DENS[(DENS.indexOf(cur) + 1) % 3]; setDensity(nx); toast('تراکم: ' + nx); };
-if (LS.get('density')) setDensity(LS.get('density'));
-if (LS.get('theme')) document.documentElement.dataset.theme = LS.get('theme');
+const DENS = ['calm', 'default', 'compact'], DENS_FA = { calm: 'آرام', default: 'استاندارد', compact: 'فشرده' };
+function setDensity(d) { if (d === 'calm') delete document.documentElement.dataset.density; else document.documentElement.dataset.density = d; LS.set('density2', d); }
+$('density').onclick = () => { const cur = document.documentElement.dataset.density || 'calm'; const nx = DENS[(DENS.indexOf(cur) + 1) % 3]; setDensity(nx); toast('تراکم: ' + DENS_FA[nx]); };
+if (LS.get('density2')) setDensity(LS.get('density2'));
+/* تم شب/روز: اگر انتخاب ذخیره نشده، از ترجیح سیستم‌عامل؛ دکمه آیکن وضعیت را نشان می‌دهد */
+const html = document.documentElement;
+html.dataset.theme = LS.get('theme') || (matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+const themeIcon = () => { const b = $('theme'); b.textContent = html.dataset.theme === 'dark' ? '☀' : '☾'; b.title = html.dataset.theme === 'dark' ? 'تم روز' : 'تم شب'; b.dataset.tip = html.dataset.theme === 'dark' ? 'تغییر به تم روز (THEME)' : 'تغییر به تم شب (THEME)'; };
+new MutationObserver(() => { LS.set('theme', html.dataset.theme); themeIcon(); const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v) setTimeout(() => { if (v === 'index') drawChart(); else if (redraws[v]) redraws[v](); else if (NV[v] && NV[v].redraw) NV[v].redraw(); }, 30); }).observe(html, { attributes: true, attributeFilter: ['data-theme'] });
+themeIcon();
 document.addEventListener('click', e => { const a = e.target.closest('.symlink'); if (a) { e.preventDefault(); window.openSym(a.dataset.sym); } });
 const hist = JSON.parse(LS.get('hist') || '[]'); let hi = hist.length;
 $('cmd').addEventListener('keydown', e => {
