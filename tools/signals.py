@@ -490,6 +490,50 @@ def net_issue(mk, a):
         return -np.log(mk.shares[a] / mk.shares[a - 252])
 
 
+_ISSUE = {}
+
+
+def _issue_events():
+    """رویدادهای افزایش سرمایهٔ مطمئن با سهم نقدی cs (tools/build_issue_split.py)؛ ستون‌ها: ins_code, date, lng = ln g, cs."""
+    if "E" not in _ISSUE:
+        f = ROOT / "data/corporate_actions/issue_split.csv"
+        if f.exists():
+            E = pd.read_csv(f, dtype={"ins_code": str})
+            E = E[E.reliable].copy()
+            E["date"] = pd.to_datetime(E.dEven.astype(str))
+            E["lng"] = np.log(E.g)
+            _ISSUE["E"] = E[["ins_code", "date", "lng", "cs"]]
+        else:
+            _ISSUE["E"] = None
+    return _ISSUE["E"]
+
+
+def _issue_part(mk, a, cash: bool):
+    E = _issue_events()
+    if E is None or a - 252 < 0:
+        return None
+    lo, hi = mk.dates[a - 252], mk.dates[a]
+    e = E[(E.date > lo) & (E.date <= hi)]
+    out = np.zeros(mk.k)
+    pos = {c: i for i, c in enumerate(mk.cols)}
+    share = e.cs if cash else 1.0 - e.cs
+    for ins, x in (e.lng * share).groupby(e.ins_code):
+        i = pos.get(ins)
+        if i is not None:
+            out[i] = -x.sum()
+    return out
+
+
+@signal("net_issue_cash", "investment", "انتشار نقدی (حق‌تقدم) کم", "Low cash issuance", "منفی Σ ln g × سهم نقدی در ۲۵۲ روز؛ سهم نقدی از تعدیل قیمت مرجع روز ایکس-دیت", "Pontiff & Woodgate (2008)؛ Loughran & Ritter (1995)", needs="shares", window=252)
+def net_issue_cash(mk, a):
+    return _issue_part(mk, a, True)
+
+
+@signal("net_issue_bonus", "investment", "سهام جایزه (کم)", "Low bonus issuance", "منفی Σ ln g × (۱ − سهم نقدی) در ۲۵۲ روز (سهام جایزه از محل سود انباشته/اندوخته/تجدید ارزیابی)", "Grinblatt, Masulis & Titman (1984)", needs="shares", window=252)
+def net_issue_bonus(mk, a):
+    return _issue_part(mk, a, False)
+
+
 @signal("div_yield", "investment", "بازده نقدی سود (۱۲ ماه)", "Trailing dividend yield", "Σ بازده سود نقدی روز استحقاق در ۲۵۲ روز (r_TR − r_PR)", "Fama & French (1988)", window=252)
 def div_yield(mk, a):
     Y = W(mk.Y, a, 252)
