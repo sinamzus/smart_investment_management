@@ -77,3 +77,18 @@ th.sortable.asc::after { content: ' ▲'; } th.sortable.desc::after { content: '
 @media (min-width: 1500px) { .nav a kbd { display: inline-block; } }
 .lb-bars { direction: ltr; }
 .lb-bars .sb span, .lb-bars .sb em { direction: ltr; }
+
+/* روند ساخت و ترتیب شبیه‌سازی */
+.lb-flowbox { border-bottom: var(--hair) solid var(--line); }
+.lb-flowbox > summary { cursor: pointer; padding: 6px var(--s-3); background: var(--bg-head); font-size: var(--fs-sm); font-weight: 600; color: var(--tx-1); list-style: none; }
+.lb-flowbox > summary::-webkit-details-marker { display: none; }
+.lb-flowbox > summary::before { content: '▾'; margin-inline-end: 6px; color: var(--tx-3); }
+.lb-flowbox:not([open]) > summary::before { content: '◂'; }
+.lb-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 4px; padding: var(--s-3); }
+.lb-step { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: start; border: var(--hair) solid var(--line-strong); background: var(--bg-app); color: var(--tx-2); border-radius: var(--radius); padding: 5px 8px 5px 8px; cursor: pointer; font: var(--fs-xs) var(--font-ui); position: relative; min-width: 0; }
+.lb-step:hover { border-color: var(--accent); color: var(--tx-1); }
+.lb-step.static { cursor: help; }
+.lb-step .no { position: absolute; inset-block-start: 4px; inset-inline-end: 6px; font: 600 var(--fs-2xs) var(--font-num); color: var(--accent); }
+.lb-step b { color: var(--tx-1); font-size: var(--fs-xs); padding-inline-end: 16px; }
+.lb-step small { color: var(--tx-3); font-size: var(--fs-2xs); line-height: 1.6; overflow-wrap: anywhere; }
+.lb-body details.flash > summary { outline: 2px solid var(--accent); outline-offset: -2px; }

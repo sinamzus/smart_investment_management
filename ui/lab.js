@@ -87,6 +87,7 @@ function initLab() {
       <div class="panel-tools"><button class="tool" id="lb-csv">CSV</button></div></div>
     <div class="ctl"><label data-tip="مرجع سنجش برتری: هم‌وزن واجدان پریمیوم اندازه/نقدناپذیری را در خود دارد؛ ارزش‌وزن واجدان مرجع مدیرِ ارزش‌وزن است.">مرجع <span class="seg" id="lb-bench"><button data-b="eq" aria-pressed="true">هم‌وزن واجدان</button><button data-b="cap" aria-pressed="false">ارزش‌وزن واجدان</button></span></label>
       <span class="mute" data-tip="با تغییر مرجع، همهٔ ستون‌های برتری، آمار t، نسبت اطلاعاتی (IR)، نیمه‌ها و حکم دوباره نسبت به همان مرجع حساب می‌شوند؛ خود بازده استراتژی عوض نمی‌شود.">برتری، t، IR، پایداری و حکم همه نسبت به این مرجع‌اند</span></div>
+    <details class="lb-flowbox" open><summary data-tip="ترتیب دقیق محاسبه در هر ماه شبیه‌سازی؛ مقدارهای هر مرحله از تنظیمات همین لحظهٔ سازنده می‌آید و کلیک روی هر مرحله بخش مربوط را باز می‌کند.">روند ساخت و ترتیب شبیه‌سازی · ۱۰ مرحله در هر ماه</summary><div class="lb-flow" id="lb-flow"></div></details>
     <div class="kpis" id="lb-kpis"></div>
     <div class="panel-body scroll" id="lb-view"></div>
     <div class="lineage" id="lb-lin"></div>
@@ -114,6 +115,7 @@ function initLab() {
   ['lb-libgrp', 'lb-libsort'].forEach(i => { $(i).onchange = renderSide; });
   $$$('#lb-bench button').forEach(b => b.onclick = () => { lab.bench = b.dataset.b; $$$('#lb-bench button').forEach(x => x.setAttribute('aria-pressed', x === b)); if (lab.res) { lab.st = E.stats(lab.res, lab.cost, jy, lab.bench); renderKPIs(); renderTab(); renderSide(); } });
   $('lb-csv').onclick = exportRunCSV;
+  const bd = m.querySelector('.lb-body'); ['change', 'input', 'click'].forEach(ev => bd.addEventListener(ev, () => setTimeout(renderFlow, 0)));
   lab.side = 'saved';
   lab.saved = store.get('saved') || [];
   lab.srLib = L.library.map(r => { const c = lab.cost / 1e4, ex = r.ret.map((v, i) => v - (r.to[i] || 0) * c - (r.all[i] - (r.to_all && r.to_all[i] || 0) * c)); const m = ex.reduce((a, b) => a + b, 0) / ex.length, s = Math.sqrt(ex.reduce((a, b) => a + (b - m) ** 2, 0) / (ex.length - 1)); return s > 0 ? m / s : NaN; }).filter(x => x === x);
@@ -121,6 +123,7 @@ function initLab() {
   setSpec(saved && saved.signals && saved.signals.every(([n]) => CTX.Z[n]) ? saved : JSON.parse(JSON.stringify(DEFAULT)));
   runLab(false);
   renderSide();
+  renderFlow();
 }
 function applyPreset(k) {
   const p = PRESETS[k], s = JSON.parse(JSON.stringify(lab.spec));
@@ -169,6 +172,36 @@ function readSpec() {
   const ps = {}; (PARAMS[s.algo] || []).forEach(([k, , d]) => { const i = $$(`#lb-params input[data-k="${k}"]`); ps[k] = i ? +i.value : d; }); s.params = ps;
   return s;
 }
+const FLOW_SEC = { universe: 0, sigs: 1, comb: 2, algo: 3, fric: 4 };
+function renderFlow() {
+  const el = $('lb-flow'); if (!el || !lab.spec) return;
+  let s; try { s = readSpec(); } catch (e) { return; }
+  const al = (L.algos.find(a => a.name === s.algo) || {}).fa || s.algo;
+  const ps = s.params && Object.keys(s.params).length ? ' (' + Object.entries(s.params).map(([k, v]) => k + '=' + v).join('، ') + ')' : '';
+  const mk = (s.universe.markets.length === 2 ? 'بورس + فرابورس' : s.universe.markets[0] === 'bourse' ? 'فقط بورس' : 'فقط فرابورس');
+  const adv = s.universe.min_adv ? ` · ADV ≥ ${f1(s.universe.min_adv / 1e6, 0)} میلیون ریال` : '';
+  const comb = (COMB.find(c => c[0] === s.combine) || [0, s.combine])[1];
+  const nsig = s.combine === 'topk_icir' ? `${s.topk} معیار پویا` : `${s.signals.length} معیار`;
+  const kap = Math.round(s.partial * 100);
+  const bench = lab.bench === 'cap' ? 'ارزش‌وزن واجدان' : 'هم‌وزن واجدان';
+  const ST = [
+    ['سیگنال', `پایان آخرین روز معاملاتی ماه جلالی · هر ${s.rebalance_every} ماه`, 'universe', 'همهٔ محاسبه‌ها با داده‌ای انجام می‌شود که تا پایان همان روز شناخته بوده است (بدون نگاه به آینده؛ بنیادی‌ها از تاریخ انتشار + ۱ روز). ریبالانس هر ۱، ۳ یا ۶ ماه است.'],
+    ['واجدان', mk + adv, 'universe', 'فقط شرکت‌های عملیاتی (بدون صندوق، گواهی، امتیاز تسهیلات) که داده و قیمت کافی و معامله دارند؛ فیلتر حداقل ارزش معاملات روزانه (میانگین ۶۳ روز) اختیاری است.'],
+    ['Z و خنثی‌سازی', 'وینزورایز ۱٪–۹۹٪ → Z' + (s.neutral ? ' → خنثی‌سازی صنعتی' : ' · بدون خنثی‌سازی'), 'comb', 'هر معیار جداگانه وینزورایز و استاندارد می‌شود (کوانتیزه به ۱/۴۰ برای هم‌ارزی با پایتون)؛ در خنثی‌سازی میانگین صنعت (دست‌کم ۶ نماد) کم می‌شود و نمادهای بی‌داده صفر شمرده نمی‌شوند.'],
+    ['ترکیب معیارها', `${nsig} · ${comb}`, 'sigs', 'Zهای معیارها با روش انتخابی (میانگین وزنی، رتبه‌ای، وزن IC/ICIR/FM/ریج یا انتخاب پویای k معیار) به یک امتیاز تبدیل می‌شوند؛ وزن منفی جهت معیار را برعکس می‌کند.'],
+    ['انتخاب', al + ps, 'algo', 'الگوریتم انتخاب بر پایهٔ امتیاز و فهرست دارایی‌های ماه قبل (برای بافر ورود/خروج) نمادهای پرتفوی را برمی‌گزیند؛ بافر گردش را کم می‌کند.'],
+    ['وزن‌دهی و سقف', s.max_w ? `سقف ${f1(s.max_w * 100, 0)}٪ برای هر نماد` : 'بدون سقف وزن', 'fric', 'وزن‌ها طبق همان الگوریتم (هم‌وزن، امتیازی، ریسکی…) ساخته می‌شوند و در صورت وجود سقف، مازاد به بقیه پخش می‌شود.'],
+    ['ریبالانس جزئی', kap >= 100 ? 'کامل (κ = 1)' : `κ = ${f1(s.partial, 2)}: ${kap}٪ راه تا هدف`, 'fric', 'وزن نهایی = وزن رانش‌یافتهٔ قبلی + κ × (هدف − قبلی)؛ κ کمتر گردش و هزینه را کم می‌کند و ریبالانس را آهسته‌تر.'],
+    ['هزینه', `${s.cost_bp} bp رفت‌وبرگشت × گردش یک‌طرفه`, 'fric', 'گردش یک‌طرفه = نصف مجموع |Δوزن|؛ هزینهٔ ماه = گردش × هزینهٔ رفت‌وبرگشت (پیش‌فرض ۱۰۰ bp [تأیید لازم]). اثر بازار جدا در تب «ظرفیت» است.'],
+    ['اجرا', 'روز معاملاتی بعد · بازده از روز بعد از سیگنال', null, 'سفارش‌ها روز معاملاتی بعد اجرا می‌شود (شنبه تا چهارشنبه؛ تعطیلات رسمی مدل نشده [تأیید لازم]) و بازده ماه از روز بعد از سیگنال تا سیگنال بعدی حساب می‌شود.'],
+    ['رانش و مرجع', `وزن‌ها با بازده رانش می‌کنند · مرجع: ${bench}`, null, 'تا ریبالانس بعد وزن‌ها با بازده کل رانش می‌کنند؛ مرجع هم‌وزن یا ارزش‌وزن واجدان همان ماه است و برتری، t و حکم نسبت به آن سنجیده می‌شود.']];
+  el.innerHTML = ST.map(([t, sub, sec, tip], i) => `<button class="lb-step${sec == null ? ' static' : ''}" data-sec="${sec == null ? '' : FLOW_SEC[sec]}" data-tip="${esc(tip)}"><span class="no">${i + 1}</span><b>${esc(t)}</b><small>${esc(sub)}</small></button>`).join('');
+  $$$('#lb-flow .lb-step').forEach(b => b.onclick = () => {
+    if (b.dataset.sec === '') return;
+    const d = $$$('.lb-body details')[+b.dataset.sec]; if (!d) return;
+    d.open = true; d.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); d.classList.add('flash'); setTimeout(() => d.classList.remove('flash'), 900);
+  });
+}
 function runLab(count) {
   const s = readSpec();
   if (!s.signals.length) { toast('دست‌کم یک معیار لازم است'); return; }
@@ -188,6 +221,7 @@ function specText(s) {
   return `${sg} · ${(COMB.find(c => c[0] === s.combine) || [0, s.combine])[1]} · ${al}${p}`;
 }
 function renderKPIs() {
+  renderFlow();
   const st = lab.st, v = E.verdict(st, lab.dec ? lab.dec.spearman : null);
   const K = [['بازده خالص سالانه', f1(st.ann_net) + '٪', ''], [lab.bench === 'cap' ? 'مرجع (ارزش‌وزن واجدان)' : 'مرجع (هم‌وزن واجدان)', f1(st.ann_all_net) + '٪', ''], ['برتری خالص', sg1(st.excess_net) + '٪', st.excess_net >= 0 ? 'up' : 'down'], ['t خالص (نیوی‌وست)', f1(st.t_net, 2), tcls(st.t_net)],
     ['IR', f1(st.ir, 2), ''], ['TE سالانه', f1(st.te) + '٪', ''], ['بیشترین افت فعال', f1(st.mdd_active) + '٪', 'down'], ['گردش سالانه', f1(st.turn_ann, 0) + '٪', ''], ['تعداد نماد', f1(st.names, 0), '']];
