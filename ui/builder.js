@@ -44,7 +44,7 @@ function metrics(R, sim, tEnd) {
   const m = rr.length; if (m < 30) return null;
   const d1 = rr.map((x, i) => x - kk[i]), d2 = rr.map((x, i) => x - cc[i]), mk = mean(kk), mr = mean(rr);
   let cv = 0, vk = 0, vr = 0; for (let i = 0; i < m; i++) { cv += (rr[i] - mr) * (kk[i] - mk); vk += (kk[i] - mk) ** 2; vr += (rr[i] - mr) ** 2; }
-  const yrs = m / 252, gk = kk.reduce((a, x) => a * (1 + x), 1);
+  const yrs = (R.dates[n] - R.dates[t0]) / 365.25, gk = kk.reduce((a, x) => a * (1 + x), 1);   // سال تقویمی (فصل ۷ §۷٫۳)، همان tools/sampled_replica.evaluate
   const first = sim.nav[t0];
   const ann = Math.pow(sim.nav[n] / first, 1 / yrs) - 1, annk = Math.pow(gk, 1 / yrs) - 1;
   return { n: m, years: yrs, ann: 100 * ann, annk: 100 * annk, gap: 100 * (ann - annk), te: sd(d1) * Math.sqrt(252) * 100, teC: sd(d2) * Math.sqrt(252) * 100,

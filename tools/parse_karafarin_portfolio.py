@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-from fetch_corporate_actions import j2g  # noqa: E402
+import jalali  # noqa: E402
 import parse_fund_portfolio as pp  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -52,7 +52,7 @@ def parse_pdf(pdf: Path):
     m = re.search(r"منتهی به\s*(1[34]\d{2})/(\d{1,2})/(\d{1,2})", t)
     if not m:
         return None, []
-    d = j2g(*map(int, m.groups()))
+    d = jalali.j2g(*map(int, m.groups()), strict=False)       # تاریخ از pdftotext
     rows, on = [], False
     for ln in t.split("\n"):
         header_like = not BIG.search(ln)                   # سرتیتر/عنوان بخش: عدد هزارگان ندارد

@@ -23,7 +23,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-from fetch_corporate_actions import j2g  # noqa: E402
+import jalali  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -32,7 +32,8 @@ OUT = CA / "dividend_payment_events.csv"
 
 
 def g(jd: str) -> pd.Timestamp:
-    return pd.Timestamp(j2g(*map(int, jd.split("/"))))
+    """تاریخ خراش‌شدهٔ کدال/فارابی: روز نامعتبر به آخرین روز ماه بُرش می‌خورد."""
+    return pd.Timestamp(jalali.parse_j(jd, strict=False))
 
 
 def norm(t) -> str:

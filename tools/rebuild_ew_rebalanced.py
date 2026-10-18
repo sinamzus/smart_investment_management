@@ -20,23 +20,11 @@ import rebuild_ew_index as ew
 ROOT = ew.ROOT
 
 
-def g2j(gy: int, gm: int, gd: int):
-    """میلادی → شمسی (الگوریتم استاندارد)."""
-    g_dm = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
-    gy2 = gy + 1 if gm > 2 else gy
-    days = 355666 + 365 * gy + (gy2 + 3) // 4 - (gy2 + 99) // 100 + (gy2 + 399) // 400 + gd + g_dm[gm - 1]
-    jy = -1595 + 33 * (days // 12053)
-    days %= 12053
-    jy += 4 * (days // 1461)
-    days %= 1461
-    if days > 365:
-        jy += (days - 1) // 365
-        days = (days - 1) % 365
-    if days < 186:
-        jm, jd = 1 + days // 31, 1 + days % 31
-    else:
-        jm, jd = 7 + (days - 186) // 30, 1 + (days - 186) % 30
-    return jy, jm, jd
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from jalali import g2j  # noqa: E402,F401  میلادی → شمسی؛ پیاده‌سازی مشترک tools/jalali.py
 
 
 def rebalance_flags(dates: pd.DatetimeIndex, policy: str) -> np.ndarray:

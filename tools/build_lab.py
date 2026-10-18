@@ -156,10 +156,37 @@ def run_all(lab: cn.Lab, S):
     return R
 
 
+def decile_table(lab, spec, cost):
+    """دهک‌های امتیاز ترکیبی همین استراتژی (همان معیارها/ترکیب/خنثی‌سازی/جهان؛ الگوریتم quantile با G=۱۰، هم‌وزن درون دهک):
+    بازده خالص سالانهٔ هر دهک، اسپیرمن رتبهٔ دهک با بازده، t اختلاف دهک ۱۰ − ۱. برای حکم «استقرار» لازم است (فصل ۱۴ §۱۴٫۷٫۶).
+    پیش از این فقط تک‌معیارها دهک داشتند و ترکیب‌ها/الگوریتم‌ها ساختاراً نمی‌توانستند «استقرار» بگیرند."""
+    ann, first, last = [], None, None
+    for k in range(1, 11):
+        q = {"signals": spec["signals"], "combine": spec.get("combine", "equal"), "neutral": spec.get("neutral", True), "topk": spec.get("topk", 5),
+             "universe": spec.get("universe", {}), "algo": "quantile", "params": {"G": 10, "k": k}}
+        res = cn.backtest(lab, q, live=False)
+        if len(res["ret"]["S"]) < 24:
+            return None
+        net = fe.net(res["ret"]["S"], res["to"]["S"], cost)
+        ann.append(fe.ann(net))
+        first, last = (net if k == 1 else first), (net if k == 10 else last)
+    sp = fe._spearman(np.arange(10), ann)
+    return {"ann_net": ann, "spearman": float(sp) if sp == sp else np.nan, "spread_t": fe.nw_t(last - first), "n_months": int(len(first))}
+
+
 def finalize(lab, S, R):
     """آمار خالص، حکم، DSR، PBO، RC/SPA؛ ورودی R از run_all."""
     runs = R["runs"]
     cost_of = lambda r: float(r["spec"].get("cost_bp", COST))          # noqa: E731  هزینهٔ مشخصات (پیش‌فرض کتابخانه COST)
+    t0 = time.time()
+    for i, (rid, r) in enumerate(runs.items()):                        # دهک‌های امتیاز ترکیبی برای همهٔ اجراها (تک‌معیار از R["dec"] می‌آید)
+        if rid.startswith("sig:"):
+            d = R["dec"].get(rid.split(":")[1])
+            r["dec"] = {"ann_net": d["ann_net"], "spearman": float(pd.Series(d["ann_net"]).corr(pd.Series(range(10)), method="spearman")), "spread_t": d["spread_t"], "n_months": d["n_months"]} if d else None
+        elif "dec" not in r:
+            r["dec"] = decile_table(lab, r["spec"], cost_of(r))
+            if (i + 1) % 20 == 0:
+                print(f"  دهک‌های ترکیب‌ها [{i + 1}/{len(runs)}] {time.time() - t0:.0f}s")
     # دهک‌های ترکیب‌ها برای حکم
     for rid, r in runs.items():
         res, c = r["res"], cost_of(r)
@@ -197,8 +224,7 @@ def finalize(lab, S, R):
     rej = rs.bhy_pvals(pvals, 0.05)
     for (rid, r), j in zip(runs.items(), rej):
         r["bhy"] = bool(j)
-        dec = R["dec"].get(rid.split(":")[1], None) if rid.startswith("sig:") else None
-        mono = {"spearman": float(pd.Series(dec["ann_net"]).corr(pd.Series(range(10)), method="spearman")) if dec else np.nan}
+        mono = {"spearman": r["dec"]["spearman"] if r.get("dec") else np.nan}
         r["verdict"] = fe.verdict(r["stats"], mono, r["ic"], N)
     return R
 
@@ -326,7 +352,7 @@ def export(mk, lab, R):
                     "to_cap": [None if x != x else round(float(x), 4) for x in res["to"]["CAP"]],
                     "impact": {str(int(a_)): [None if x != x else round(float(x), 5) for x in v] for a_, v in res["impact"].items()}, "capacity": r.get("capacity"),
                     "to": [None if x != x else round(float(x), 4) for x in res["to"]["S"]], "to_all": [None if x != x else round(float(x), 4) for x in res["to"]["ALL"]],
-                    "stats": {a: (None if (isinstance(b, float) and b != b) else b) for a, b in st.items()}, "ic": r["ic"], "dsr": r.get("dsr"), "verdict": r["verdict"],
+                    "stats": {a: (None if (isinstance(b, float) and b != b) else b) for a, b in st.items()}, "ic": r["ic"], "dsr": r.get("dsr"), "verdict": r["verdict"], "dec": r.get("dec"),
                     "bhy": r.get("bhy"), "live": (top_holdings(lab, res) if r["group"] != "sig" else None), "ic_series": [None if x != x else round(float(x), 4) for x in res["ic"]]})
     data = {"use": [int(r) for r in lab.use], "built": time.strftime("%Y-%m-%d %H:%M"), "asof": str(mk.dates[-1].date()), "rows": rows, "k": k, "months_end": ends, "sig_dates": [str(mk.dates[a].date()) for a in lab.idx],
             "codes": codes, "divs": divs, "px": [0 if x != x else float(x) for x in mk.close[-1]], "sectors": sectors, "ok": b64(ok), "fw": b64(np.nan_to_num(fw, nan=-9).astype(np.float32)), "mcap": b64(np.nan_to_num(mcap, nan=-99)),

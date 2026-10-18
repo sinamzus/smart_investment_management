@@ -144,10 +144,13 @@ class Market:
         return is_jalali_month_end(self.dates[-1])
 
     def fwd(self, a: int, b: int, delay: int = 0):
-        """بازدهٔ مرکب [a+1+delay, b+delay]؛ NaN اگر روز بعد یا پایان دوره داده ندارد."""
+        """بازدهٔ مرکب [a+1+delay, b+delay]؛ NaN فقط اگر روز اجرا (a+1+delay) داده ندارد.
+
+        قرارداد (فصل ۱۴ §۱۴٫۲٫۱): واجدیت فقط با اطلاعات تا روز اجرا؛ روزهای بی‌داده در ادامهٔ دوره (توقف/حذف نماد) بازده صفر
+        می‌گیرند (موقعیت در آخرین ارزش منجمد می‌ماند). شرط پیشین «داده در پایان دوره» نگاه به آینده و سوگیری بقای درون‌ماهی بود."""
         lo, hi = a + 1 + delay, min(b + 1 + delay, self.n)
         seg = self.X[lo:hi]
-        bad = np.isnan(self.X[a + 1]) | np.isnan(self.X[min(b, self.n - 1)])
+        bad = np.isnan(self.X[min(lo, self.n - 1)])
         g = np.nanprod(1 + np.nan_to_num(seg), axis=0) - 1
         return np.where(bad, np.nan, g)
 
@@ -584,7 +587,7 @@ def load_fund(cols, dates):
     f1, f2 = ROOT / "data/fundamentals/rahavard_long.csv", ROOT / "data/fundamentals/rahavard_eps.csv"
     if not (f1.exists() and f2.exists()):
         return None
-    from fetch_corporate_actions import j2g
+    import build_quality as bq
     L = pd.read_csv(f1, dtype={"ins_code": str})
     L = L[L.stmt == "ratio"].copy()
     L["rn"] = L.row.str.replace(r"[‌\s]+", "", regex=True)
@@ -593,19 +596,21 @@ def load_fund(cols, dates):
     E["fy"] = pd.to_datetime(E["fy"])
     E12 = E[E.period == 12]
     first = E12.groupby(["ins_code", "fy"]).date.min()
-    L["fy_end"] = L.fy.map({s: pd.Timestamp(str(j2g(*map(int, s.split("/"))))[:10]) for s in L.fy.unique()})
+    L["fy_end"] = L.fy.map({s: bq.safe_fy_date(s) for s in L.fy.unique()})
     out = {}
     didx = pd.DatetimeIndex(dates)
     for key, pred in FUND_KEYS.items():
-        sub = L[L.rn.map(pred)].sort_values(["audited", "represented"])
-        g = sub.groupby(["ins_code", "fy_end"]).value.last().reset_index()
-        g["avail"] = [first.get((c, f), pd.NaT) for c, f in zip(g.ins_code, g.fy_end)]
+        sub = L[L.rn.map(pred)].sort_values(["represented", "audited"])     # نسخهٔ اولیه ترجیح دارد ← first
+        gb = sub.groupby(["ins_code", "fy_end"])
+        g = gb.value.first().reset_index()
+        g["sd"] = gb.statement_date.first().values
+        # point-in-time: max(نخستین اعلام EPS، تاریخ نسخهٔ منبع) + ۱ روز (build_quality.rahavard_avail)
+        g["avail"] = [bq.rahavard_avail(first.get((c, f), pd.NaT), s) for c, f, s in zip(g.ins_code, g.fy_end, g.sd)]
         g["avail"] = g.avail.fillna(g.fy_end + pd.Timedelta(days=120)) + pd.Timedelta(days=1)
-        out[key] = g
+        out[key] = g.drop(columns=["sd"])
     out["_eps"] = E12.sort_values("date")
     # نمادهای بدون رهاورد: نسبت‌ها و EPS از کدال (tools/fetch_codal_fundamentals.py) اشتقاق می‌شود؛ مقیاس‌ها با رهاورد یکی است
     # (ROE/حاشیه به درصد؛ بدهی÷دارایی و گردش دارایی نسبت). جاری، پوشش بدهی از کدال ساخته نمی‌شود.
-    import build_quality as bq
     C = bq.codal_base(set(L.ins_code))
     if len(C):
         def _put(key, val):

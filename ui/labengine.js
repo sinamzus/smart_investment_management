@@ -162,7 +162,8 @@ function run(ctx, spec) {
       sc = score(ctx, spec, r);
       const c = { k, score: sc, ok, held, mcap: ctx.mcap.subarray(r * k, (r + 1) * k).map(v => v < -40 ? 0 : Math.exp(v)), vol: ctx.vol.subarray(r * k, (r + 1) * k) };
       let wn = algo(c, p); let s = 0; for (const x of wn) s += x;
-      if (s <= 0) wn = Float64Array.from(prev);                               // بدون سبد (کمتر از ۳۰ واجد): سبد قبلی نگه داشته و ماه ثبت می‌شود (همان tools/construction.py)
+      if (s <= 0 && first) { cnt--; continue; }                                // پیش از نخستین سبد (مثلاً بنیادی بدون پوشش): نمونه هنوز شروع نشده (همان tools/construction.py)
+      if (s <= 0) wn = Float64Array.from(prev);                               // بدون سبد در میانهٔ نمونه: سبد قبلی نگه داشته و ماه ثبت می‌شود
       else {
         if (mx) wn = capW(wn, mx);
         if (kappa < 1 && !first) { wn = wn.map((x, i) => Math.max(prev[i] + kappa * (x - prev[i]), 0)); const t = wn.reduce((a, b) => a + b, 0); wn = wn.map(x => x / t); }
@@ -236,7 +237,8 @@ function dsr(exn, trialSR, N) {
 }
 function verdict(st, spearmanDec) {
   const same = (st.ex_h1 > 0) === (st.ex_h2 > 0), t = st.t_net, bootOk = st.excess_net > 0 ? st.boot_lo > 0 : st.boot_hi < 0;
-  if (Math.abs(t) >= 3 && same && bootOk && Math.abs(spearmanDec ?? 0) >= 0.6) return st.excess_net > 0 ? { v: 'استقرار', why: 't خالص ≥ ۳، دو نیمه هم‌علامت، بوت‌استرپ بدون صفر، یکنوایی بالا', cls: 'ok' } : { v: 'معکوس معنادار', why: 'برتری معنادار ولی منفی؛ فروش استقراضی لازم است', cls: 'warn' };
+  const mono = spearmanDec == null ? NaN : spearmanDec;                  // بدون دهک = یکنوایی نامعلوم ⇒ «استقرار» صادر نمی‌شود
+  if (Math.abs(t) >= 3 && same && bootOk && Math.abs(mono) >= 0.6) return st.excess_net > 0 ? { v: 'استقرار', why: 't خالص ≥ ۳، دو نیمه هم‌علامت، بوت‌استرپ بدون صفر، یکنوایی بالا', cls: 'ok' } : { v: 'معکوس معنادار', why: 'برتری معنادار ولی منفی؛ فروش استقراضی لازم است', cls: 'warn' };
   if (Math.abs(t) >= 2 && same) return { v: 'شاهد ضعیف', why: 't خالص ≥ ۲ و دو نیمه هم‌علامت، ولی آستانهٔ آزمون‌های چندگانه رد نشده', cls: 'warn' };
   return { v: 'بدون برتری معنادار', why: 't خالص < ۲ یا ناپایدار بین دو نیمه', cls: 'bad' };
 }

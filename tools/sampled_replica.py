@@ -156,7 +156,7 @@ def evaluate(s, K, Cfull):
     te_c = float((r - c).std(ddof=1) * np.sqrt(252) * 100)
     beta = float(np.cov(r, k)[0, 1] / np.var(k, ddof=1))
     corr = float(np.corrcoef(r, k)[0, 1])
-    yrs = len(r) / 252
+    yrs = (s.index[-1] - s.index[0]).days / 365.25            # سال تقویمی (فصل ۷ §۷٫۳)؛ نه ۲۵۲ روز معاملاتی
     ann = (s.iloc[-1] / s.iloc[0]) ** (1 / yrs) - 1
     annk = ((1 + k).prod()) ** (1 / yrs) - 1
     return {"ann_pct": 100 * ann, "ann_index_pct": 100 * annk, "gap_pct": 100 * (ann - annk), "te_vs_official_pct": te, "te_vs_fullreplica_pct": te_c, "beta": beta, "corr": corr}

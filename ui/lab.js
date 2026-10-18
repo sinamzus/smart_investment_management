@@ -210,7 +210,8 @@ function runLab(count) {
   toast('در حال اجرا…');
   setTimeout(() => {
     try {
-      const t0 = performance.now(); lab.res = E.run(CTX, s); lab.cost = s.cost_bp; lab.st = E.stats(lab.res, s.cost_bp, jy, lab.bench); lab.dec = null; lab.name = null; lab.lib = null;   // اجرای مرورگر: دیگر ردیف کتابخانه نیست (وگرنه پرتفوی زنده/ظرفیت/دهک‌ها از کتابخانه می‌آمد)
+      const t0 = performance.now(); lab.res = E.run(CTX, s); lab.cost = s.cost_bp; lab.st = E.stats(lab.res, s.cost_bp, jy, lab.bench); lab.name = null; lab.lib = null;   // اجرای مرورگر: دیگر ردیف کتابخانه نیست (وگرنه پرتفوی زنده/ظرفیت/دهک‌ها از کتابخانه می‌آمد)
+      lab.dec = E.deciles(CTX, s, s.cost_bp);                              // دهک‌ها همین‌جا تا حکم به تبِ بازدیدشده وابسته نباشد (فصل ۱۴ §۱۴٫۷٫۶)
       if (count) lab.trials++; store.set('spec', s);
       $('lb-cnt').textContent = `آزمایش‌های این نشست: ${lab.trials} · ${Math.round(performance.now() - t0)} ms`;
       renderKPIs(); renderTab(); toast('اجرا شد');
@@ -262,7 +263,7 @@ function alignSeries(o, dates) { const m = new Map(); let c = 100; m.set(dates[0
 function tabDec(host) {
   host.innerHTML = `<div class="lb-note" id="lb-dnote">در حال محاسبهٔ دهک‌ها…</div><div class="lb-bars" id="lb-dbars"></div><div id="lb-dtab"></div>`;
   setTimeout(() => {
-    if (!lab.dec) { if (lab.lib) { lab.dec = null; $('lb-dnote').textContent = 'دهک‌های این اجرای کتابخانه‌ای را فقط برای تک‌معیارها داریم (تب کتابخانه ← تک‌معیار).'; return; } lab.dec = E.deciles(CTX, lab.spec, lab.cost); renderKPIs(); }
+    if (!lab.dec) { if (lab.lib) { $('lb-dnote').textContent = 'دهک‌های این اجرای کتابخانه‌ای ساخته نشده (پوشش کمتر از ۲۴ ماه).'; return; } lab.dec = E.deciles(CTX, lab.spec, lab.cost); renderKPIs(); }
     const d = lab.dec, base = lab.st.ann_all_net;
     $('lb-dnote').innerHTML = `بازدهٔ سالانهٔ خالص هر دهک از امتیاز ترکیبی این استراتژی (هم‌وزن درون دهک، بدون بافر). اسپیرمن رتبهٔ دهک با بازده: <b class="${d.spearman > 0.6 ? 'up' : ''}">${f1(d.spearman, 2)}</b> · جفت‌های صعودی: <b>${d.up} از ۹</b> · دهک ۱۰ − دهک ۱: <b class="${d.spread_ann >= 0 ? 'up' : 'down'}">${sg1(d.spread_ann)}٪</b> (t = ${f1(d.spread_t, 2)}). خط مرجع: هم‌وزن واجدان ${f1(base)}٪.`;
     sbars($('lb-dbars'), d.ann.map((_, i) => 'D' + (i + 1)), d.ann, v => f1(v, 0), i => d.ann[i] > base, base);
@@ -386,8 +387,9 @@ function renderSide() {
 }
 function openLibrary(id) {
   const r = L.library.find(x => x.id === id); if (!r) return;
-  lab.lib = r; lab.res = toRes(r); lab.cost = L.cost_bp; lab.st = E.stats(lab.res, lab.cost, jy, lab.bench); lab.dec = null; lab.name = r.name;
-  if (r.id.startsWith('sig:') && L.dec[r.id.split(':')[1]]) { const d = L.dec[r.id.split(':')[1]]; lab.dec = { ann: d.ann_net, spread_t: d.spread_t, spread_ann: NaN, spearman: spearmanArr(d.ann_net), up: d.ann_net.slice(1).filter((v, i) => v > d.ann_net[i]).length }; }
+  lab.lib = r; lab.res = toRes(r); lab.cost = (r.spec && r.spec.cost_bp) || L.cost_bp; lab.st = E.stats(lab.res, lab.cost, jy, lab.bench); lab.dec = null; lab.name = r.name;
+  const d = r.dec || (r.id.startsWith('sig:') ? L.dec[r.id.split(':')[1]] : null);   // دهک‌های امتیاز ترکیبی از پایتون (همهٔ اجراها)
+  if (d) lab.dec = { ann: d.ann_net, spread_t: d.spread_t, spread_ann: NaN, spearman: d.spearman ?? spearmanArr(d.ann_net), up: d.ann_net.slice(1).filter((v, i) => v > d.ann_net[i]).length };
   if (isJS(r.spec)) { try { setSpec(JSON.parse(JSON.stringify(r.spec))); } catch (e) { /* ممکن است معیار نباشد */ } }
   lab.spec = JSON.parse(JSON.stringify(r.spec));
   renderKPIs(); renderTab();

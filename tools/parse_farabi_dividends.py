@@ -25,7 +25,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-from fetch_corporate_actions import j2g  # noqa: E402
+import jalali  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -49,8 +49,7 @@ def clean(t: str) -> str:
 
 
 def g(jd: str):
-    y, m, d = map(int, jd.split("/"))
-    return pd.Timestamp(j2g(y, m, d))
+    return pd.Timestamp(jalali.parse_j(jd, strict=False))     # متن پست‌ها: روز نامعتبر بُرش می‌خورد
 
 
 def jd_of(y, m, d) -> str | None:

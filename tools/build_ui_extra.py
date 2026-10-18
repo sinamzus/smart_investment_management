@@ -247,7 +247,7 @@ def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
         if a < 252 + 21 or a < start - 1:
             continue
         i1, i0 = (a + 1 - 21, a + 1 - 252) if signal in ("mom", "quality") else (a + 1, a + 1 - 252)   # mom: [t−252, t−21)؛ lowvol: [t−252, t)؛ quality: همان پنجرهٔ قیمتی برای واجدیت
-        ok = ((have[i1] - have[i0]) >= 0.8 * (i1 - i0)) & ((nz[i1] - nz[i0]) >= 0.5 * (i1 - i0)) & ~np.isnan(X[a + 1]) & ~np.isnan(X[min(b, len(dates) - 1)])
+        ok = ((have[i1] - have[i0]) >= 0.8 * (i1 - i0)) & ((nz[i1] - nz[i0]) >= 0.5 * (i1 - i0)) & ~np.isnan(X[a + 1])   # بدون شرط پایان دوره (فصل ۱۴ §۱۴٫۲٫۱)
         ok &= ~np.isnan(X[a])
         if signal == "quality":
             if dates[a] not in qscore.index:
@@ -285,17 +285,7 @@ def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
         mret_end.append(dates[min(b, len(dates) - 1)]); mret_start.append(dates[a + 1])
     S = pd.DataFrame(port, index=dates).dropna(how="all")
     S = S[S.index >= "2016-03-21"]
-    yrs = len(S) / 252
-    res = {"ann": {}, "curve": {}}
-    for q in S.columns:
-        c = (1 + S[q].fillna(0)).prod()
-        res["ann"][q] = r((c ** (1 / yrs) - 1) * 100, 1)
-    ls = S.Q5 - S.Q1
-    res["ls_ann_pct"] = r(((1 + ls.fillna(0)).prod() ** (1 / yrs) - 1) * 100, 1)
-    res["q5_minus_all_te"] = r((S.Q5 - S.ALL).std() * np.sqrt(252) * 100, 1)
-    res["ls_vol_pct"] = r(ls.std() * np.sqrt(252) * 100, 1)
-    res["q5_excess_ann_pct"] = r(res["ann"]["Q5"] - res["ann"]["ALL"], 1)
-    res["n_months"] = len(holds)
+    res = {"ann": {}, "curve": {}}                 # آمار سالانه از سری ماهانه (پایین‌تر، ×۱۲/n) می‌آید؛ نسخهٔ روزانهٔ ÷۲۵۲ حذف شد (فصل ۷ §۷٫۳)
     res["avg_names"] = {q: int(np.mean(v)) for q, v in names.items()}
     yearly = []
     for y, g in S.groupby(S.index.map(lambda d: ewr.g2j(d.year, d.month, d.day)[0])):

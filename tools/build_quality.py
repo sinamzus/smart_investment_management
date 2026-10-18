@@ -23,10 +23,26 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-from fetch_corporate_actions import j2g  # noqa: E402
+import jalali  # noqa: E402
+from jalali import j2g  # noqa: E402
 
 FUND = ROOT / "data" / "fundamentals"
 STALE_DAYS, DEFAULT_LAG, MIN_SECTOR = 540, 120, 6
+
+
+def rahavard_avail(first_eps, *statement_dates) -> pd.Timestamp:
+    """زمان دانستن یک مقدار رهاورد (point-in-time): هیچ مقداری زودتر از تاریخ نسخه‌ای که از آن آمده (statement_date)
+    و زودتر از نخستین اعلام EPS همان سال مالی (first_eps) دانسته نمی‌شود (بدون «+۱ روز»؛ فراخواننده اضافه می‌کند).
+    رهاورد برای هر سال مالی فقط آخرین نسخه را می‌دهد (تجدیدارائه‌شده/حسابرسی‌شده)؛ پیش از این اصلاح، آن مقدار با تاریخ اعلام
+    نسخهٔ اول وارد بک‌تست می‌شد (فصل ۸ §۸٫۱ «Restatement»). statement_date به شکل «1403/3/13» (بدون صفر) است و باید تاریخی مقایسه شود."""
+    cands = [] if first_eps is None or pd.isna(first_eps) else [pd.Timestamp(first_eps)]
+    for s in statement_dates:
+        if isinstance(s, str) and s.strip():
+            try:
+                cands.append(pd.Timestamp(jalali.parse_j(s, strict=False)))
+            except ValueError:
+                pass
+    return max(cands) if cands else pd.NaT
 
 
 def available() -> bool:
@@ -34,8 +50,9 @@ def available() -> bool:
 
 
 def fy_date(s: str) -> pd.Timestamp:
-    y, m, d = map(int, s.split("/"))
-    return pd.Timestamp(str(j2g(y, m, d))[:10])
+    """تاریخ جلالی معتبر → Timestamp؛ تاریخ نامعتبر ValueError (tools/jalali.py)."""
+    y, m, d = map(int, str(s).strip().split("/"))
+    return pd.Timestamp(j2g(y, m, d))
 
 
 def is_jdate(s) -> bool:
@@ -44,17 +61,19 @@ def is_jdate(s) -> bool:
 
 
 def safe_fy_date(s: str) -> pd.Timestamp:
+    """مثل fy_date ولی «۳۰ اسفند» در سال غیرکبیسه (و هر روز نامعتبر) به آخرین روز معتبر ماه بُرش می‌خورد."""
     try:
         return fy_date(s)
-    except Exception:                              # noqa: BLE001  — روز ۳۰ اسفند در سال کبیسه‌نبودن
-        y, m, d = s.split("/")
-        return fy_date(f"{y}/{m}/{min(int(d), 29)}")
+    except ValueError:
+        y, m, d = map(int, str(s).strip().split("/"))
+        return pd.Timestamp(jalali.j2g(y, m, d, strict=False))
 
 
 def codal_base(skip: set) -> pd.DataFrame:
     """جدول سال‌مالی × نماد از کدال برای ins_codeهایی که در skip نیستند (رهاورد ندارند):
     ins_code, fy_end, avail, assets, liabilities, equity, capital, net_income, op_profit, revenue.
-    تاریخ دانستن = نخستین انتشار کدال + ۱ روز؛ اگر نبود پایان سال + ۱۲۰ روز [تأیید لازم]. بدهی: جمع بدهی ← جاری + غیرجاری ← دارایی − حقوق."""
+    تاریخ دانستن = تاریخ انتشار همان نامه‌ای که مقدار از آن آمده + ۱ روز (point-in-time؛ ستون prev از نامهٔ سال بعد می‌آید و همان
+    تاریخ را می‌گیرد)؛ اگر نبود پایان سال + ۱۲۰ روز [تأیید لازم]. بدهی: جمع بدهی ← جاری + غیرجاری ← دارایی − حقوق."""
     fl, fo = FUND / "codal_long.csv", FUND / "codal_letters.csv"
     if not (fl.exists() and fo.exists()):
         return pd.DataFrame()
@@ -64,7 +83,11 @@ def codal_base(skip: set) -> pd.DataFrame:
     if L.empty:
         return pd.DataFrame()
     L["pref"] = (L.col == "cur").astype(int)
-    V = L.sort_values("pref").groupby(["ins_code", "fy_year", "key"]).value.last().unstack("key")
+    pub_tn = Lt.drop_duplicates("tracing_no").set_index("tracing_no").published
+    L["pub"] = L.tracing_no.map(pub_tn)
+    Ls = L.sort_values("pref")
+    V = Ls.groupby(["ins_code", "fy_year", "key"]).value.last().unstack("key")
+    pubV = Ls.groupby(["ins_code", "fy_year", "key"]).pub.last().groupby(level=[0, 1]).max()   # محافظه‌کارانه: دیرترین نامه بین کلیدها
     for k in ("assets", "liabilities", "equity", "capital", "net_income", "op_profit", "revenue", "liab_cur", "liab_noncur"):
         if k not in V:
             V[k] = np.nan
@@ -72,12 +95,11 @@ def codal_base(skip: set) -> pd.DataFrame:
     lia = lia.fillna(V.liab_cur + V.liab_noncur).fillna(V.assets - V.equity)
     V["liabilities"] = lia
     V = V.reset_index()
-    pub = Lt.groupby(["ins_code", Lt.fy_end.str[:4].astype(int)]).first_published.min()
     md = Lt.sort_values("fy_end").groupby("ins_code").fy_end.last().str[5:]
     fe, av = [], []
     for ins, fy in zip(V.ins_code, V.fy_year):
         e = safe_fy_date(f"{int(fy)}/{md.get(ins, '12/29')}")
-        a = pub.get((ins, int(fy)))
+        a = pubV.get((ins, int(fy)))
         av.append((safe_fy_date(a.strip()) if is_jdate(a) else e + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1))
         fe.append(e)
     V["fy_end"], V["avail"] = fe, av
@@ -105,19 +127,23 @@ def load_records() -> dict:
     E["date"] = pd.to_datetime(E["date"])
     E["fy"] = pd.to_datetime(E["fy"])
     first = E.groupby(["ins_code", "fy"]).date.min()
-    L["fy_end"] = L.fy.map({s: fy_date(s) for s in L.fy.unique()})
+    L["fy_end"] = L.fy.map({s: safe_fy_date(s) for s in L.fy.unique()})
     L["row_n"] = L.row.str.replace(r"[‌\s]+", "", regex=True)
     pick = {"roe": L.row_n.str.contains("ROE"), "de": L.row_n == "نسبتبدهیبهارزشویژه",
             "equity": (L.stmt == "bs") & L.row_n.str.startswith("جمعحقوقصاحبانسهام") & ~L.row_n.str.contains("مصوب")}
-    parts = []
+    parts, sds = [], []
     for k, m in pick.items():
-        x = L[m].sort_values(["audited", "represented"]).groupby(["ins_code", "fy_end"]).value.last().rename(k)   # حسابرسی‌شده/تجدیدارائه‌شده ترجیح دارد
-        parts.append(x)
-    P = pd.concat(parts, axis=1).reset_index()
+        g = L[m].sort_values(["represented", "audited"]).groupby(["ins_code", "fy_end"])   # نسخهٔ اولیه (تجدیدارائه‌نشده) ترجیح دارد ← first
+        parts.append(g.value.first().rename(k))
+        sds.append(g.statement_date.first().rename("sd_" + k))
+    P = pd.concat(parts + sds, axis=1).reset_index()
     if "equity" not in P:
         P["equity"] = np.nan                       # دریافت فقط-نسبت‌ها (حالت nav): ترازنامه نیست
-    P["avail"] = [first.get((c, f), pd.NaT) for c, f in zip(P.ins_code, P.fy_end)]
+    # زمان دانستن (point-in-time): max(نخستین اعلام EPS سال مالی، تاریخ نسخهٔ منبع هر مؤلفه) + ۱ روز (rahavard_avail)
+    sd_cols = [c for c in P.columns if c.startswith("sd_")]
+    P["avail"] = [rahavard_avail(first.get((c, f), pd.NaT), *r) for c, f, r in zip(P.ins_code, P.fy_end, P[sd_cols].itertuples(index=False))]
     P["avail"] = P.avail.fillna(P.fy_end + pd.Timedelta(days=DEFAULT_LAG)) + pd.Timedelta(days=1)
+    P = P.drop(columns=sd_cols)
     recs = {c: g.sort_values("fy_end").reset_index(drop=True) for c, g in P.groupby("ins_code")}
     for c, g in load_codal(set(recs)).items():     # نمادهای بدون رهاورد، از کدال (اگر جمع شده باشد)
         recs[c] = g

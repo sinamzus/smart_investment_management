@@ -41,12 +41,12 @@ def pay_map():
         f = ROOT / "data" / "corporate_actions" / "dividend_payment_events.csv"
         m, dflt = {}, 90
         if f.exists():
-            from fetch_corporate_actions import j2g
+            import jalali
             E = pd.read_csv(f, dtype={"ex_date": str}).fillna({"ex_date": ""})
             E = E[(E.ex_date != "") & (E.pay_j.notna())]
             for _, r in E.iterrows():
                 ex = pd.Timestamp(r.ex_date)
-                pay = pd.Timestamp(j2g(*map(int, r.pay_j.split("/"))))
+                pay = pd.Timestamp(jalali.parse_j(r.pay_j, strict=False))
                 m.setdefault(norm(r.symbol), []).append((ex, max(pay, ex)))
             lag = pd.to_numeric(E.lag_ex, errors="coerce").clip(lower=0)
             w = E.wK.fillna(0)

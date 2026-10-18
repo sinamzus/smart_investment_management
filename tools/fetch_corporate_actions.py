@@ -105,39 +105,14 @@ def get_json(path: str):
     return json.loads(get(API + path).decode("utf-8"))
 
 
-# ── تاریخ شمسی → میلادی (الگوریتم استاندارد، بدون وابستگی) ──────────────────
+# ── تاریخ شمسی → میلادی: پیاده‌سازی مشترک tools/jalali.py (اعتبارسنجی؛ تاریخ نامعتبر ValueError) ──
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import jalali as _jal  # noqa: E402
+
+
 def j2g(jy: int, jm: int, jd: int) -> str:
-    jy -= 979
-    jm -= 1
-    jd -= 1
-    j_dm = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29]
-    g_dm = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    j_day = 365 * jy + (jy // 33) * 8 + ((jy % 33) + 3) // 4
-    j_day += sum(j_dm[:jm]) + jd
-    g_day = j_day + 79
-    gy = 1600 + 400 * (g_day // 146097)
-    g_day %= 146097
-    leap = True
-    if g_day >= 36525:
-        g_day -= 1
-        gy += 100 * (g_day // 36524)
-        g_day %= 36524
-        if g_day >= 365:
-            g_day += 1
-        else:
-            leap = False
-    gy += 4 * (g_day // 1461)
-    g_day %= 1461
-    if g_day >= 366:
-        leap = False
-        g_day -= 1
-        gy += g_day // 365
-        g_day %= 365
-    i = 0
-    while g_day >= g_dm[i] + (1 if i == 1 and leap else 0):
-        g_day -= g_dm[i] + (1 if i == 1 and leap else 0)
-        i += 1
-    return f"{gy:04d}-{i + 1:02d}-{g_day + 1:02d}"
+    """«YYYY-MM-DD» میلادی؛ تاریخ جلالی نامعتبر (مثل ۱۴۰۲/۱۲/۳۰) ValueError می‌دهد."""
+    return _jal.j2g_str(jy, jm, jd)
 
 
 _FA = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
@@ -146,7 +121,12 @@ _FA = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "012345678901234
 def jalali_text_to_iso(t: str) -> str:
     t = (t or "").translate(_FA).strip()
     m = re.match(r"^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$", t)
-    return j2g(int(m[1]), int(m[2]), int(m[3])) if m else ""
+    if not m:
+        return ""
+    try:
+        return _jal.j2g_str(int(m[1]), int(m[2]), int(m[3]), strict=False)   # متن خراش‌شده: روز نامعتبر بُرش می‌خورد
+    except ValueError:
+        return ""
 
 
 def arabic_l18(sym: str) -> str:

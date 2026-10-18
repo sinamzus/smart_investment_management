@@ -142,43 +142,26 @@ def find_list(o):
     return best
 
 
-# ── تاریخ ────────────────────────────────────────────────────────────────
+# ── تاریخ: پیاده‌سازی مشترک tools/jalali.py ──────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import jalali as _jal  # noqa: E402
+
+
 def j2g(jy: int, jm: int, jd: int) -> date:
-    jy += 1595
-    days = -355668 + 365 * jy + (jy // 33) * 8 + ((jy % 33) + 3) // 4 + jd + ((jm - 1) * 31 if jm < 7 else (jm - 7) * 30 + 186)
-    gy = 400 * (days // 146097)
-    days %= 146097
-    if days > 36524:
-        days -= 1
-        gy += 100 * (days // 36524)
-        days %= 36524
-        if days >= 365:
-            days += 1
-    gy += 4 * (days // 1461)
-    days %= 1461
-    if days > 365:
-        gy += (days - 1) // 365
-        days = (days - 1) % 365
-    gd = days + 1
-    ml = [0, 31, 29 if (gy % 4 == 0 and gy % 100 != 0) or gy % 400 == 0 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    gm = 1
-    while gm <= 12 and gd > ml[gm]:
-        gd -= ml[gm]
-        gm += 1
-    return date(gy, gm, gd)
+    """جلالی → date؛ دادهٔ سایت‌ها خراش‌شده است، پس روز نامعتبر به آخرین روز ماه بُرش می‌خورد (strict=False)."""
+    return _jal.j2g(jy, jm, jd, strict=False)
 
 
 def to_date(v) -> str | None:
     s = norm(v)
-    m = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})", s)
-    if m:
-        y, mo, d = map(int, m.groups())
+    m = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})", s) or re.match(r"^(\d{4})(\d{2})(\d{2})$", s)
+    if not m:
+        return None
+    y, mo, d = map(int, m.groups())
+    try:
         return (j2g(y, mo, d) if y < 1700 else date(y, mo, d)).isoformat()
-    m = re.match(r"^(\d{4})(\d{2})(\d{2})$", s)
-    if m:
-        y, mo, d = map(int, m.groups())
-        return (j2g(y, mo, d) if y < 1700 else date(y, mo, d)).isoformat()
-    return None
+    except ValueError:
+        return None
 
 
 def num(v):

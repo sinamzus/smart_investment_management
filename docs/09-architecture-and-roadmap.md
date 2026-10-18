@@ -34,25 +34,27 @@
         └───────────────────────────────────────────────────────────┘
 ```
 
-### ساختار پیشنهادی مخزن
+### ساختار فعلی مخزن (وضعیت ۲۰۲۶-۱۰-۱۸)
 ```
 smart_investment_management/
-├── docs/                    # همین سند و ضمیمه‌ها
-├── src/sim/
-│   ├── data/                # security master, corporate actions, adjust, qa
-│   ├── indices/             # قواعد شاخص و محاسبه
-│   ├── factors/             # تعریف ویژگی‌ها (با lag)
-│   ├── signals/             # پردازش و ترکیب
-│   ├── portfolio/           # constructor, constraints, rebalance policy
-│   ├── execution/           # models M0..M4, fees, tca
-│   ├── accounting/          # unit-based ledger
-│   ├── analytics/           # perf, attribution, stats
-│   └── reports/
-├── configs/                 # YAML: استراتژی‌ها، قواعد شاخص، fee schedule
-├── tests/                   # unit, invariants, golden
-├── experiments/             # log آزمایش‌ها (N_trials)
-└── notebooks/
+├── docs/                    # همین سند و ضمیمه‌ها؛ CHANGELOG.md
+├── tools/                   # اسکریپت‌های تخت پایتون (هر فایل یک مرحله؛ import بین آن‌ها با sys.path)
+│   ├── fetch_*.py, parse_*.py, merge_*.py     # جمع‌آوری (روی سیستم کاربر) و تجزیه: TSETMC، کدال، رهاورد، فیپیران، فارابی، فاندای
+│   ├── rebuild_*.py, investable_replica.py    # قیمت تعدیل‌شده و بازسازی شاخص‌های رسمی (فصل ۲ و ۳)
+│   ├── signals.py, construction.py, factor_engine.py, research_stats.py, build_quality.py   # معیارها، الگوریتم‌ها، بک‌تست، آمار (فصل ۴، ۵، ۱۴)
+│   ├── sampled_replica.py, build_replica_*.py # ماکت‌ساز (فصل ۳ §۳٫۵)
+│   ├── live_ledger.py                         # استراتژی قفل‌شده، دستور اجرا `sim.trade_plan/1`، رهگیری (فصل ۱۴ §۱۴٫۹)
+│   ├── build_ui_*.py, build_lab.py            # ساخت دادهٔ UI (ui/data/*.js)
+│   ├── jalali.py                              # تقویم جلالی مشترک (تنها پیاده‌سازی)
+│   └── *_selftest.js                          # هم‌ارزی موتورهای مرورگر با پایتون (node)
+├── ui/                      # صفحهٔ ایستا (بدون سرور): index.html، موتورهای js، ui/data/*.js (commit‌شده)
+├── data/                    # CSV/CSV.GZ و JSON (منبع ورودی همهٔ محاسبه‌ها)
+│   ├── prices/, indices/, corporate_actions/, fundamentals/, funds/, derived/, research/, live/
+│   └── raw/                 # پاسخ‌های خام (HTML/PDF/JSON) برای بازتجزیه
+├── tests/                   # unittest سبک هسته (python -m unittest discover -s tests)
+└── requirements.txt
 ```
+**ساختار هدف (برای بازسازی بعدی؛ هنوز پیاده نشده):** بسته‌بندی همین مراحل در `src/sim/{data,indices,factors,signals,portfolio,execution,accounting,analytics,reports}` با پیکربندی YAML در `configs/`، ذخیره‌سازی ستونی (Parquet) به‌جای CSV، و `experiments/` برای ثبت آزمایش‌ها (N_trials). تا آن زمان، اصول زیر روی همین اسکریپت‌های تخت اعمال می‌شود.
 
 ### اصول معماری
 - **پیکربندی‌محور:** هر استراتژی یک فایل YAML (جهان، فاکتورها، وزن‌دهی، ریبالانس، اجرا، هزینه).

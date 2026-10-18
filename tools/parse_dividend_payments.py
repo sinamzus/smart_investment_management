@@ -38,7 +38,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-from fetch_corporate_actions import j2g  # noqa: E402
+import jalali  # noqa: E402
 
 os.environ.setdefault("OMP_THREAD_LIMIT", "1")   # هر فرایند tesseract یک رشته؛ موازی‌سازی با --workers
 RAW = ROOT / "data" / "raw" / "codal"
@@ -121,7 +121,8 @@ def jdate(m) -> str | None:
 
 
 def g(jd: str) -> pd.Timestamp:
-    return pd.Timestamp(j2g(*map(int, jd.split("/"))))
+    """تاریخ از متن/OCR: روز نامعتبر به آخرین روز ماه بُرش می‌خورد (ماه نامعتبر همچنان ValueError)."""
+    return pd.Timestamp(jalali.parse_j(jd, strict=False))
 
 
 def items_of(text: str) -> list:

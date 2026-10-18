@@ -88,7 +88,7 @@ def run(P: Panel, signal: str, ngroups: int = 10, tops: dict | None = None, dela
         if a < 252 + 21:
             continue
         s, ok = P.score(signal, a, qscore)
-        ok = ok & ~np.isnan(X[a + 1]) & ~np.isnan(X[min(b, n - 1)])
+        ok = ok & ~np.isnan(X[a + 1])                      # فقط روز اجرا؛ شرط «داده در پایان دوره» نگاه به آینده بود (فصل ۱۴ §۱۴٫۲٫۱)
         idx = np.where(ok)[0]
         if len(idx) < min_names:
             continue
