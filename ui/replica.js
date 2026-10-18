@@ -1,4 +1,4 @@
-/* SIM — «نمونهٔ کوچک + وام» (بخش شاخص و ماکت) و «دفتر زنده» (بخش اجرا)
+/* ماکت — «نمونهٔ کوچک + وام» (بخش شاخص و ماکت) و «دفتر زنده» (بخش اجرا)
    داده: window.SIM_LIVE (tools/build_ui_live.py) از tools/sampled_replica.py و tools/live_ledger.py. هیچ عدد ثابتی در این فایل نیست مگر متن توضیحی. */
 (function () {
 'use strict';

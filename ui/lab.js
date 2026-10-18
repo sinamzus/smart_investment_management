@@ -1,4 +1,4 @@
-/* SIM — میز پژوهش (Lab) · معیارها (Signals) · برنامهٔ اقدام (Plan)  — فصل ۱۴
+/* ماکت — میز پژوهش (Lab) · معیارها (Signals) · برنامهٔ اقدام (Plan)  — فصل ۱۴
    داده: window.SIM_LAB (tools/build_lab.py)؛ موتور: labengine.js. هیچ عدد ثابتی در این فایل نیست مگر پیش‌فرض‌های کنترل‌ها. */
 (function () {
 'use strict';
@@ -355,7 +355,7 @@ function tabLive(host) {
     }).join('')}</tbody></table></div><div><table class="dt">${th([['صنعت'], ['وزن %', 'n']])}<tbody>${Object.entries(sec).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([s, v]) => `<tr><td>${esc(s)}</td><td class="n">${f1(v, 1)}</td></tr>`).join('')}</tbody></table></div></div>`;
   $('lv-aum').onchange = e => { lab.aum = +e.target.value; tabLive(host); };
   $('lv-csv').onclick = () => download('live_target.csv', [['symbol', 'market', 'sector', 'weight_pct', 'score_z'], ...idx.map(i => [L.codes[i].p || L.codes[i].s, L.codes[i].m ? 'farabourse' : 'bourse', L.sectors[L.codes[i].sec], (w[i] / tot * 100).toFixed(4), score ? score[i].toFixed(3) : ''])]);
-  $('lv-plan').onclick = () => { window.SIM_PLAN_SRC = { name: lab.name || specText(lab.spec), w: Float64Array.from(w).map(x => x / tot) }; location.hash = '#plan'; window.SIM_SHOW('plan'); };
+  $('lv-plan').onclick = () => sendToPlan(lab.name || specText(lab.spec), Float64Array.from(w).map(x => x / tot));
 }
 function exportRunCSV() {
   const r = lab.res, st = lab.st; if (!r) return;
@@ -455,6 +455,20 @@ function renderCorr() {
 
 /* ════════════════════════════════ PLAN ════════════════════════════════ */
 const plan = { src: 'lab', aum: 100, lot: 1, min_trade: 0.001, hold: [], cost: 100 };
+/* ارسال وزن هدف از هر نما به «دستور اجرا»: گزینهٔ «ارسال‌شده» را می‌سازد، انتخاب می‌کند و نما را باز می‌کند (چه نما قبلاً ساخته شده باشد چه نه) */
+function sendToPlan(name, w) {
+  window.SIM_PLAN_SRC = { name, w };
+  window.SIM_SHOW('plan');
+  if ($('pl-src')) { fillPlanSrc(); $('pl-src').value = 'sent'; renderPlan(); }
+  toast('وزن هدف به «دستور اجرا» فرستاده شد: ' + name);
+}
+window.SIM_SEND_PLAN = sendToPlan;
+function fillPlanSrc() {
+  const cur = $('pl-src').value, sent = window.SIM_PLAN_SRC;
+  const opts = [...(sent ? [['sent', 'ارسال‌شده: ' + sent.name]] : []), ['K', 'شاخص كل (ارزش‌وزن، بورس)'], ['EW', 'كل (هم وزن) (بورس)'], ['lab', 'خروجی فعلی Lab'], ...L.library.filter(r => r.live && r.live.top && r.live.top.length).map(r => ['lib:' + r.id, 'کتابخانه · ' + r.name])];
+  $('pl-src').innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
+  if (opts.some(o => o[0] === cur)) $('pl-src').value = cur;
+}
 function initPlan() {
   const m = $('v-plan'); m.dataset.ready = 1;
   m.innerHTML = `
@@ -471,9 +485,8 @@ function initPlan() {
     <div class="panel-head"><span class="lg-badge">B</span><span class="panel-title">تقویم اقدام‌ها</span></div>
     <div class="panel-body scroll"><div class="prose" id="pl-cal"></div><table class="dt" id="pl-div"></table></div>
     <div class="lineage" id="pl-cal-lin"></div></section>`;
-  const opts = [['K', 'شاخص كل (ارزش‌وزن، بورس)'], ['EW', 'كل (هم وزن) (بورس)'], ['lab', 'خروجی فعلی Lab'], ...L.library.filter(r => r.live && r.live.top && r.live.top.length).map(r => ['lib:' + r.id, 'کتابخانه · ' + r.name])];
-  $('pl-src').innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
-  if (window.SIM_PLAN_SRC) $('pl-src').value = 'lab';
+  fillPlanSrc();
+  if (window.SIM_PLAN_SRC) $('pl-src').value = 'sent';
   ['pl-src', 'pl-aum', 'pl-min', 'pl-cost'].forEach(i => { $(i).onchange = renderPlan; }); $('pl-apply').onclick = renderPlan;
   plan.hold = store.get('hold') || ''; $('pl-hold').value = plan.hold;
   $('pl-csv').onclick = () => exportPlan('csv'); $('pl-json').onclick = () => exportPlan('json');
@@ -482,7 +495,8 @@ function initPlan() {
 function targetFor(src) {
   const k = L.k, rl = L.rows - 1, w = new Float64Array(k);
   if (src === 'K' || src === 'EW') { let s = 0; for (let i = 0; i < k; i++) if (!L.codes[i].m && CTX.ok[rl * k + i]) { w[i] = src === 'K' ? Math.exp(CTX.mcap[rl * k + i]) : 1; s += w[i]; } return { name: src === 'K' ? 'شاخص كل (ارزش‌وزن)' : 'كل (هم وزن)', w: w.map(x => x / s) }; }
-  if (src === 'lab') { if (window.SIM_PLAN_SRC) { const p = window.SIM_PLAN_SRC; return { name: p.name, w: p.w }; } if (lab.res && lab.res.live) { const x = lab.res.live.target, s = x.reduce((a, b) => a + b, 0) || 1; return { name: lab.name || specText(lab.spec), w: x.map(v => v / s) }; } return { name: '—', w }; }
+  if (src === 'sent') { const p = window.SIM_PLAN_SRC; return p ? { name: p.name, w: p.w } : { name: '—', w }; }
+  if (src === 'lab') { if (lab.res && lab.res.live) { const x = lab.res.live.target, s = x.reduce((a, b) => a + b, 0) || 1; return { name: lab.name || specText(lab.spec), w: x.map(v => v / s) }; } return { name: '—', w }; }
   const r = L.library.find(x => 'lib:' + x.id === src); if (!r || !r.live) return { name: '—', w };
   let s = 0; r.live.top.forEach(([sym, wt]) => { const i = CTX.sym.indexOf(sym); if (i >= 0) { w[i] = wt; s += wt; } });
   return { name: r.name, w: w.map(x => x / (s || 1)) };
