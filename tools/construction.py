@@ -25,6 +25,8 @@ import signals as sg  # noqa: E402
 import factor_engine as fe  # noqa: E402
 
 ALGOS: dict = {}
+AUMS = [1e10, 5e10, 1e11, 5e11, 1e12, 5e12]      # سطوح سرمایهٔ سنجش ظرفیت (ریال = ۱۰ تا ۵۰۰۰ میلیارد)
+Y_IMPACT = 1.0                                    # ضریب اثر بازار Y در Yσ√(Q/ADV) [تأیید لازم؛ ادبیات ≈ ۰٫۵–۱]
 
 
 def algo(name, fa, en, desc, ref, params):
@@ -466,9 +468,13 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
     adv_all = None
     prev_w = np.zeros(k)               # وزن رانش‌یافتهٔ دورهٔ قبل
     held = np.zeros(k, bool)
-    out = {"end": [], "sig_date": [], "S": [], "ALL": [], "to": [], "n": [], "ic": [], "w": []}
+    out = {"end": [], "sig_date": [], "S": [], "ALL": [], "CAP": [], "to": [], "n": [], "ic": [], "w": [], "impact": {a_: [] for a_ in AUMS}}
     prev_all = None
-    to_all = []
+    prev_cap = None
+    to_all, to_cap = [], []
+    def capweights(ok_, a_):
+        mc = np.where(ok_, np.nan_to_num(mk.mcap[a_]), 0.0)
+        return mc / mc.sum() if mc.sum() > 0 else mc
     first = True
     cnt = 0
     for r in lab.use:
@@ -487,6 +493,11 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
             to_all.append(0.0)
             prev_all = allw * (1 + g)
             prev_all = prev_all / prev_all.sum() if prev_all.sum() > 0 else prev_all
+            cw = capweights(ok, a)
+            out["CAP"].append(float((cw * g).sum())); to_cap.append(0.0)
+            prev_cap = cw * (1 + g); prev_cap = prev_cap / prev_cap.sum() if prev_cap.sum() > 0 else prev_cap
+            for a_ in AUMS:
+                out["impact"][a_].append(0.0)
             prev_w = prev_w * (1 + g)
             prev_w = prev_w / prev_w.sum() if prev_w.sum() > 0 else prev_w
             cnt += 1
@@ -523,6 +534,22 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
         to_all.append(np.nan if prev_all is None else 0.5 * np.abs(allw - prev_all).sum())
         prev_all = allw * (1 + g)
         prev_all = prev_all / prev_all.sum() if prev_all.sum() > 0 else prev_all
+        cw = capweights(ok, a)
+        out["CAP"].append(float((cw * g).sum()))
+        to_cap.append(np.nan if prev_cap is None else 0.5 * np.abs(cw - prev_cap).sum())
+        prev_cap = cw * (1 + g); prev_cap = prev_cap / prev_cap.sum() if prev_cap.sum() > 0 else prev_cap
+        # اثر بازار: هر نماد Δw·AUM را در ADV۶۳ روزه معامله می‌کند؛ هزینهٔ یک‌طرفه Yσ√(مشارکت) (σ روزانه)
+        if first:
+            for a_ in AUMS:
+                out["impact"][a_].append(np.nan)
+        else:
+            vv = sg.W(mk.val, a, 63)
+            advv = np.nan_to_num(np.nanmean(vv, axis=0)) if vv is not None else np.zeros(k)
+            sgm = np.nan_to_num(ctx["vol"]) if len(ctx["vol"]) == k else np.zeros(k)
+            dw = np.abs(w - prev_w)
+            for a_ in AUMS:
+                part = np.where(advv > 0, dw * a_ / np.maximum(advv, 1), 0.0)
+                out["impact"][a_].append(float((dw * Y_IMPACT * sgm * np.sqrt(np.minimum(part, 1.0))).sum()))
         m = ok & ~np.isnan(sc) & ~np.isnan(f)
         out["ic"].append(sg.spearman_rows(sc, np.where(m, f, np.nan)) if m.sum() > 30 else np.nan)
         if keep_weights:
@@ -531,8 +558,9 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
         prev_w = prev_w / prev_w.sum() if prev_w.sum() > 0 else prev_w
         first = False
     res = {"end": out["end"], "sig_date": out["sig_date"],
-           "ret": {"S": np.array(out["S"]), "ALL": np.array(out["ALL"])},
-           "to": {"S": np.array(out["to"], float), "ALL": None},
+           "ret": {"S": np.array(out["S"]), "ALL": np.array(out["ALL"]), "CAP": np.array(out["CAP"])},
+           "to": {"S": np.array(out["to"], float), "ALL": None, "CAP": np.array(to_cap, float)},
+           "impact": {a_: np.array(v, float) for a_, v in out["impact"].items()},
            "n": {"S": float(np.mean(out["n"])) if out["n"] else 0, "ALL": 0.0},
            "ic": np.array(out["ic"], float), "ngroups": 0, "tops": {}, "spec": spec}
     res["to"]["ALL"] = np.array(to_all, float)          # ALL = هم‌وزن واجدان با ریبالانس ماهانه؛ گردش واقعی

@@ -188,10 +188,10 @@ def boot_mean(x, reps=2000, block=3, seed=7):
     return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5)), float((means > 0).mean())
 
 
-def stats_of(res: dict, key: str, cost_bp: float = 100.0) -> dict:
+def stats_of(res: dict, key: str, cost_bp: float = 100.0, bench: str = "ALL") -> dict:
     """آمار یک سبد (G1..Gn یا TOP) نسبت به ALL: ناخالص/خالص، t، IR، برد، افت، گردش، پایداری، بوت‌استرپ."""
-    r, a = res["ret"][key], res["ret"]["ALL"]
-    to, toa = res["to"][key], res["to"]["ALL"]
+    r, a = res["ret"][key], res["ret"][bench]
+    to, toa = res["to"][key], res["to"][bench]
     rn, an = net(r, to, cost_bp), net(a, toa, cost_bp)
     ex_g, ex_n = r - a, rn - an
     half = len(ex_n) // 2

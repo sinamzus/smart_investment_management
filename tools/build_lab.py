@@ -144,6 +144,12 @@ def finalize(lab, S, R):
     for rid, r in runs.items():
         res = r["res"]
         r["stats"] = fe.stats_of(res, "S", COST)
+        sc = fe.stats_of(res, "S", COST, bench="CAP")                      # مرجع دوم: ارزش‌وزن واجدان
+        r["stats"].update({"excess_net_cap": sc["excess_net"], "t_net_cap": sc["t_net"], "ir_cap": sc["ir"], "ann_cap_net": sc["ann_all_net"],
+                           "t_h1_cap": sc["t_h1"], "t_h2_cap": sc["t_h2"], "ex_h1_cap": sc["ex_h1"], "ex_h2_cap": sc["ex_h2"]})
+        rn = fe.net(res["ret"]["S"], res["to"]["S"], COST)
+        an = fe.net(res["ret"]["ALL"], res["to"]["ALL"], COST)
+        r["capacity"] = {str(int(a_)): fe.ann(rn - np.nan_to_num(imp)) - fe.ann(an) for a_, imp in res["impact"].items()}   # برتری خالص پس از اثر بازار
         r["ic"] = fe.ic_stats({"ic": res["ic"]})
     # آزمون‌های چندگانه
     sr_list, ids, D = [], [], {}
@@ -192,7 +198,14 @@ def top_holdings(lab, res, n=400):
     i = np.argsort(-w)[:n]
     i = i[w[i] > 0]
     mk = lab.mk
-    return {"date": str(L["date"].date()), "n": int((w > 0).sum()), "top": [[nrm(mk.sym[j]), round(float(w[j]) * 100, 3), None if np.isnan(L["score"][j]) else round(float(L["score"][j]), 2),
+    vv = sg.W(mk.val, mk.n - 1, 63)
+    adv = np.nan_to_num(np.nanmean(vv, axis=0)) if vv is not None else np.zeros(mk.k)
+    build = {}
+    for a_ in cn.AUMS:
+        pos = w > 0
+        days = np.where(adv[pos] > 0, np.ceil(w[pos] * a_ / np.maximum(adv[pos], 1) / 0.1), 99)
+        build[str(int(a_))] = {"wdays": float((w[pos] * days).sum() / w[pos].sum()), "pct_gt1": float((days > 1).mean() * 100), "max_days": float(days.max())}
+    return {"build": build, "date": str(L["date"].date()), "n": int((w > 0).sum()), "top": [[nrm(mk.sym[j]), round(float(w[j]) * 100, 3), None if np.isnan(L["score"][j]) else round(float(L["score"][j]), 2),
                                                                            str(mk.sector[j]), str(mk.market[j])] for j in i]}
 
 
@@ -278,7 +291,9 @@ def export(mk, lab, R):
         res, st = r["res"], r["stats"]
         lib.append({"id": rid, "group": r["group"], "name": r["name"], "spec": r["spec"],
                     "end": [str(d.date()) for d in res["end"]], "ret": [round(float(x), 5) for x in res["ret"]["S"]],
-                    "all": [round(float(x), 5) for x in res["ret"]["ALL"]],
+                    "all": [round(float(x), 5) for x in res["ret"]["ALL"]], "cap": [round(float(x), 5) for x in res["ret"]["CAP"]],
+                    "to_cap": [None if x != x else round(float(x), 4) for x in res["to"]["CAP"]],
+                    "impact": {str(int(a_)): [None if x != x else round(float(x), 5) for x in v] for a_, v in res["impact"].items()}, "capacity": r.get("capacity"),
                     "to": [None if x != x else round(float(x), 4) for x in res["to"]["S"]], "to_all": [None if x != x else round(float(x), 4) for x in res["to"]["ALL"]],
                     "stats": {a: (None if (isinstance(b, float) and b != b) else b) for a, b in st.items()}, "ic": r["ic"], "dsr": r.get("dsr"), "verdict": r["verdict"],
                     "bhy": r.get("bhy"), "live": (top_holdings(lab, res) if r["group"] != "sig" else None), "ic_series": [None if x != x else round(float(x), 4) for x in res["ic"]]})
@@ -286,7 +301,7 @@ def export(mk, lab, R):
             "codes": codes, "divs": divs, "px": [0 if x != x else float(x) for x in mk.close[-1]], "sectors": sectors, "ok": b64(ok), "fw": b64(np.nan_to_num(fw, nan=-9).astype(np.float32)), "mcap": b64(np.nan_to_num(mcap, nan=-99)),
             "vol": b64(np.nan_to_num(vol, nan=-1)), "adv": b64(np.nan_to_num(adv, nan=-1)), "signals": sig,
             "zoo": R["zoo"], "fm": R["fm"], "corr": R["corr"], "dec": R["dec"], "library": lib, "multi": R["multi"], "cost_bp": COST,
-            "algos": [{c: v for c, v in a.items() if c != "fn"} for a in cn.ALGOS.values()]}
+            "aums": [int(a_) for a_ in cn.AUMS], "y_impact": cn.Y_IMPACT, "algos": [{c: v for c, v in a.items() if c != "fn"} for a in cn.ALGOS.values()]}
     OUT_JS.write_text("window.SIM_LAB = " + json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=lambda o: None if o != o else (float(o) if hasattr(o, "item") else str(o))) + ";\n", encoding="utf-8")
     slim = {"zoo": R["zoo"], "fm": R["fm"], "multi": R["multi"], "dec": R["dec"],
             "library": [{k_: v for k_, v in x.items() if k_ not in ("end", "ret", "all", "to", "to_all")} for x in lib]}

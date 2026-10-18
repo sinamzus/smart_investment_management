@@ -32,13 +32,13 @@ function ensureData(cb) {
   s.onerror = () => { pending = null; ['v-lab', 'v-sig', 'v-plan'].forEach(id => { const m = $(id); if (m && !m.dataset.ready) m.innerHTML = '<p style="padding:24px">ui/data/lab.js پیدا نشد. اجرا کنید: <code>python tools/build_lab.py</code></p>'; }); };
   document.head.appendChild(s);
 }
-const toRes = r => ({ end: r.end, ret: r.ret, all: r.all, to: r.to.map(v => v == null ? NaN : v), toAll: (r.to_all || r.all.map(() => 0)).map(v => v == null ? NaN : v), n: r.ret.map(() => r.stats.names), ic: (r.ic_series || r.ret.map(() => NaN)).map(v => v == null ? NaN : v) });
+const toRes = r => ({ cap: r.cap || [], toCap: (r.to_cap || []).map(v => v == null ? NaN : v), impact: (L.aums || []).map(a => ((r.impact || {})[String(a)] || []).map(v => v == null ? NaN : v)), end: r.end, ret: r.ret, all: r.all, to: r.to.map(v => v == null ? NaN : v), toAll: (r.to_all || r.all.map(() => 0)).map(v => v == null ? NaN : v), n: r.ret.map(() => r.stats.names), ic: (r.ic_series || r.ret.map(() => NaN)).map(v => v == null ? NaN : v) });
 const sigName = n => (L.signals.find(s => s.name === n) || {}).fa || n;
 const sigMeta = n => L.signals.find(s => s.name === n);
 const isJS = spec => E.JS_ALGOS.includes(spec.algo) && !['fm_lib'].includes(spec.combine);
 
 /* ════════════════════════════════ LAB ════════════════════════════════ */
-const lab = { spec: null, res: null, st: null, tab: 'perf', saved: [], overlay: new Set(), trials: 0, view: null, dec: null, srLib: null, cost: 100 };
+const lab = { bench: 'eq', spec: null, res: null, st: null, tab: 'perf', saved: [], overlay: new Set(), trials: 0, view: null, dec: null, srLib: null, cost: 100 };
 const DEFAULT = { signals: [['vol_252', 1], ['size', 1], ['div_yield', 1]], combine: 'equal', neutral: true, algo: 'topfrac', params: { entry: 0.2, exit: 0.3 }, universe: { markets: ['bourse', 'farabourse'], min_adv: 0 }, rebalance_every: 1, partial: 1, max_w: null, cost_bp: 100 };
 const PRESETS = {
   'کم‌نوسان': { signals: [['vol_252', 1]], combine: 'equal' },
@@ -83,8 +83,10 @@ function initLab() {
   </section>
   <section class="panel lb-main" style="--lg:var(--lg-b)">
     <div class="panel-head"><span class="lg-badge">R</span><span class="panel-title" id="lb-title">نتیجه</span><span class="chip" id="lb-chip"></span>
-      <div class="seg" id="lb-tabs"><button data-t="perf" aria-pressed="true">عملکرد</button><button data-t="dec" aria-pressed="false">دهک‌ها</button><button data-t="ic" aria-pressed="false">IC و پریمیوم</button><button data-t="stab" aria-pressed="false">پایداری</button><button data-t="hard" aria-pressed="false">آمار سخت</button><button data-t="live" aria-pressed="false">پرتفوی زنده</button></div>
+      <div class="seg" id="lb-tabs"><button data-t="perf" aria-pressed="true">عملکرد</button><button data-t="dec" aria-pressed="false">دهک‌ها</button><button data-t="ic" aria-pressed="false">IC و پریمیوم</button><button data-t="stab" aria-pressed="false">پایداری</button><button data-t="hard" aria-pressed="false">آمار سخت</button><button data-t="cap" aria-pressed="false">ظرفیت</button><button data-t="live" aria-pressed="false">پرتفوی زنده</button></div>
       <div class="panel-tools"><button class="tool" id="lb-csv">CSV</button></div></div>
+    <div class="ctl"><label data-tip="مرجع سنجش برتری: هم‌وزن واجدان پریمیوم اندازه/نقدناپذیری را در خود دارد؛ ارزش‌وزن واجدان مرجع مدیرِ ارزش‌وزن است.">مرجع <span class="seg" id="lb-bench"><button data-b="eq" aria-pressed="true">هم‌وزن واجدان</button><button data-b="cap" aria-pressed="false">ارزش‌وزن واجدان</button></span></label>
+      <span class="mute">برتری، t، IR، پایداری و حکم همه نسبت به این مرجع‌اند</span></div>
     <div class="kpis" id="lb-kpis"></div>
     <div class="panel-body scroll" id="lb-view"></div>
     <div class="lineage" id="lb-lin"></div>
@@ -110,6 +112,7 @@ function initLab() {
   $$$('#lb-tabs button').forEach(b => b.onclick = () => { lab.tab = b.dataset.t; $$$('#lb-tabs button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderTab(); });
   $$$('#lb-stabs button').forEach(b => b.onclick = () => { lab.side = b.dataset.t; $$$('#lb-stabs button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderSide(); });
   ['lb-libgrp', 'lb-libsort'].forEach(i => { $(i).onchange = renderSide; });
+  $$$('#lb-bench button').forEach(b => b.onclick = () => { lab.bench = b.dataset.b; $$$('#lb-bench button').forEach(x => x.setAttribute('aria-pressed', x === b)); if (lab.res) { lab.st = E.stats(lab.res, lab.cost, jy, lab.bench); renderKPIs(); renderTab(); renderSide(); } });
   $('lb-csv').onclick = exportRunCSV;
   lab.side = 'saved';
   lab.saved = store.get('saved') || [];
@@ -172,7 +175,7 @@ function runLab(count) {
   toast('در حال اجرا…');
   setTimeout(() => {
     try {
-      const t0 = performance.now(); lab.res = E.run(CTX, s); lab.cost = s.cost_bp; lab.st = E.stats(lab.res, s.cost_bp, jy); lab.dec = null; lab.name = null;
+      const t0 = performance.now(); lab.res = E.run(CTX, s); lab.cost = s.cost_bp; lab.st = E.stats(lab.res, s.cost_bp, jy, lab.bench); lab.dec = null; lab.name = null;
       if (count) lab.trials++; store.set('spec', s);
       $('lb-cnt').textContent = `آزمایش‌های این نشست: ${lab.trials} · ${Math.round(performance.now() - t0)} ms`;
       renderKPIs(); renderTab(); toast('اجرا شد');
@@ -186,7 +189,7 @@ function specText(s) {
 }
 function renderKPIs() {
   const st = lab.st, v = E.verdict(st, lab.dec ? lab.dec.spearman : null);
-  const K = [['بازده خالص سالانه', f1(st.ann_net) + '٪', ''], ['مرجع (هم‌وزن واجدان)', f1(st.ann_all_net) + '٪', ''], ['برتری خالص', sg1(st.excess_net) + '٪', st.excess_net >= 0 ? 'up' : 'down'], ['t خالص (نیوی‌وست)', f1(st.t_net, 2), tcls(st.t_net)],
+  const K = [['بازده خالص سالانه', f1(st.ann_net) + '٪', ''], [lab.bench === 'cap' ? 'مرجع (ارزش‌وزن واجدان)' : 'مرجع (هم‌وزن واجدان)', f1(st.ann_all_net) + '٪', ''], ['برتری خالص', sg1(st.excess_net) + '٪', st.excess_net >= 0 ? 'up' : 'down'], ['t خالص (نیوی‌وست)', f1(st.t_net, 2), tcls(st.t_net)],
     ['IR', f1(st.ir, 2), ''], ['TE سالانه', f1(st.te) + '٪', ''], ['بیشترین افت فعال', f1(st.mdd_active) + '٪', 'down'], ['گردش سالانه', f1(st.turn_ann, 0) + '٪', ''], ['تعداد نماد', f1(st.names, 0), '']];
   $('lb-kpis').innerHTML = K.map(([k, x, c]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${x}</div></div>`).join('');
   $('lb-title').textContent = lab.name || 'نتیجهٔ اجرا'; $('lb-title').dataset.tip = specText(lab.spec);
@@ -202,6 +205,7 @@ function renderTab() {
   if (t === 'ic') return tabIC(host);
   if (t === 'stab') return tabStab(host);
   if (t === 'hard') return tabHard(host);
+  if (t === 'cap') return tabCap(host);
   if (t === 'live') return tabLive(host);
 }
 const cst = { i: null };
@@ -211,7 +215,7 @@ function tabPerf(host) {
   const lv = levels(st.rn), la = levels(st.an), lg = levels(res.ret), ex = levels(st.exn).map(x => (x / 100 - 1) * 100), d = dd(lv);
   const over = [...lab.overlay].map(i => lab.saved[i]).filter(Boolean);
   const extra = over.map((o, j) => ({ v: alignSeries(o, dates), color: ['var(--ch-4)', 'var(--warn)', 'var(--up)', 'var(--down)'][j % 4], w: 1.1, name: o.name, fmt: v => f1(v, 1) }));
-  $('lb-leg').innerHTML = `<span><i style="color:var(--ch-1)"></i>استراتژی (خالص)</span><span><i style="color:var(--ch-2)"></i>هم‌وزن واجدان (خالص)</span><span><i style="color:var(--ch-3)"></i>استراتژی (ناخالص)</span>` + over.map((o, j) => `<span><i style="color:${['var(--ch-4)', 'var(--warn)', 'var(--up)', 'var(--down)'][j % 4]}"></i>${esc(o.name)}</span>`).join('') + '<span class="readout" id="lb-ro"></span>';
+  $('lb-leg').innerHTML = `<span><i style="color:var(--ch-1)"></i>استراتژی (خالص)</span><span><i style="color:var(--ch-2)"></i>${lab.bench === 'cap' ? 'ارزش‌وزن واجدان (خالص)' : 'هم‌وزن واجدان (خالص)'}</span><span><i style="color:var(--ch-3)"></i>استراتژی (ناخالص)</span>` + over.map((o, j) => `<span><i style="color:${['var(--ch-4)', 'var(--warn)', 'var(--up)', 'var(--down)'][j % 4]}"></i>${esc(o.name)}</span>`).join('') + '<span class="readout" id="lb-ro"></span>';
   const draw = () => { ChartKit.paneChart($('lb-chart'), dates, [
     { frac: 0.55, log: true, series: [{ v: lv, color: 'var(--ch-1)', w: 1.7, name: 'استراتژی (خالص)', fmt: v => f1(v, 1) }, { v: la, color: 'var(--ch-2)', w: 1.2, name: 'هم‌وزن واجدان', fmt: v => f1(v, 1) }, { v: lg, color: 'var(--ch-3)', w: 1, dash: true, name: 'ناخالص', fmt: v => f1(v, 1) }, ...extra], fmt: v => fmt(v, 0) },
     { frac: 0.25, zero: true, series: [{ v: ex, color: 'var(--ch-1)', w: 1.3, name: 'بازده فعال تجمعی', fmt: v => sg1(v, 1) + '٪' }], fmt: v => fmt(v, 0) + '٪' },
@@ -271,6 +275,24 @@ function tabHard(host) {
     <tr><td>بهترین استراتژی کتابخانه</td><td class="n">${esc(rc.best_id || '—')}</td></tr></tbody></table></div></div>
     <div class="lb-note"><b>حکم: ${esc(v.v)}</b> — ${esc(v.why)}. هر بار «اجرا» می‌زنید N بزرگ‌تر و آستانه سخت‌تر می‌شود: این همان هزینهٔ جست‌وجوی پارامتر است. PBO بالای ۵۰٪ یعنی بهترین بک‌تست درون‌نمونه به‌طور متوسط بیرون‌نمونه زیر میانه است. Reality Check و SPA می‌پرسند آیا بهترین استراتژی کتابخانه را می‌توان از مرجع بهتر دانست؛ p بزرگ یعنی خیر.</div>`;
 }
+function buildDays(w, aum) {
+  const k = L.k, rl = L.rows - 1; let tw = 0, wd = 0, n = 0, g1 = 0, mx = 0;
+  for (let i = 0; i < k; i++) if (w[i] > 0) { const av = CTX.adv[rl * k + i], adv = av < 0 ? 0 : Math.exp(av) - 1, d = adv > 0 ? Math.ceil(w[i] * aum / adv / 0.1) : 99; tw += w[i]; wd += w[i] * d; n++; if (d > 1) g1++; mx = Math.max(mx, d); }
+  return { wdays: wd / (tw || 1), pct_gt1: n ? g1 / n * 100 : NaN, max_days: mx };
+}
+function tabCap(host) {
+  const res = lab.res, st = lab.st, aums = L.aums || [];
+  if (!res.impact || !res.impact.length || !res.impact[0].length) { host.innerHTML = '<div class="lb-note">سری اثر بازار برای این اجرا نیست.</div>'; return; }
+  const { w } = liveWeights(), rows = aums.map((aum, j) => {
+    const x = st.rn.map((v, i) => v - (isNaN(res.impact[j][i]) ? 0 : res.impact[j][i]));
+    const b = (lab.lib && lab.lib.live && lab.lib.live.build) ? lab.lib.live.build[String(aum)] : buildDays(w, aum);
+    return { aum, ex: E.annOf(x) - E.annOf(st.an), cost: (E.annOf(st.rn) - E.annOf(x)), b };
+  });
+  const half = rows.find(r => r.ex < st.excess_net / 2), zero = rows.find(r => r.ex < 0);
+  host.innerHTML = `<div class="lb-note">اثر بازار هر نماد = <b>Y·σ·√(Δw·سرمایه ÷ ADV)</b> (Y = ${L.y_impact} [تأیید لازم]؛ σ روزانهٔ ۱۲۶ روزه؛ ADV ارزش معاملات روزانهٔ ۶۳ روزه) روی هر معاملهٔ ریبالانس، افزون بر هزینهٔ رفت‌وبرگشت ${lab.cost} bp. ستون آخر: ساخت پرتفوی زندهٔ این استراتژی از نقد با سقف مشارکت ۱۰٪ ADV. این مدل ساده است؛ اثر صف و حد نوسان در فصل ۶ آمده و اینجا نیست.<br>
+    <b>خوانش:</b> برتری خالص پایه ${sg1(st.excess_net)}٪ ${half ? `به نصف در ${fmt(half.aum / 1e9, 0)} میلیارد ریال می‌رسد` : 'در سطوح بررسی‌شده از نصف نمی‌افتد'}${zero ? ` و در ${fmt(zero.aum / 1e9, 0)} میلیارد ریال منفی می‌شود` : ''}.</div>
+    <table class="dt">${th([['سرمایه (میلیارد ریال)', 'n'], ['برتری خالص پس از اثر بازار %', 'n'], ['هزینهٔ اثر بازار (واحد درصد در سال)', 'n'], ['روز لازم برای ساخت (وزنی)', 'n'], ['نمادهای نیازمند بیش از یک روز %', 'n'], ['بیشترین روز', 'n']])}<tbody>${rows.map(r => `<tr><td class="n">${fmt(r.aum / 1e9, 0)}</td><td class="n ${r.ex >= 0 ? 'up' : 'down'}">${sg1(r.ex)}</td><td class="n">${f1(r.cost)}</td><td class="n">${f1(r.b.wdays, 1)}</td><td class="n">${f1(r.b.pct_gt1, 0)}</td><td class="n ${r.b.max_days > 5 ? 'down' : ''}">${f1(r.b.max_days, 0)}</td></tr>`).join('')}</tbody></table>`;
+}
 function liveWeights() {
   if (lab.lib && lab.lib.live) { const w = new Float64Array(L.k); lab.lib.live.top.forEach(([s, wt]) => { const i = CTX.sym.indexOf(s); if (i >= 0) w[i] = wt / 100; }); return { w, score: null }; }
   return { w: lab.res.live.target, score: lab.res.live.score };
@@ -315,20 +337,20 @@ function renderSide() {
   if (side === 'saved') {
     host.innerHTML = th([[''], ['نام'], ['برتری %', 'n'], ['t', 'n'], ['IR', 'n'], ['گردش', 'n'], ['']]) + '<tbody>' + (lab.saved.map((o, i) => `<tr data-i="${i}"><td><input type="checkbox" data-o="${i}" ${lab.overlay.has(i) ? 'checked' : ''} title="نمایش روی نمودار"></td><td class="nm" title="${esc(specText(o.spec))}">${esc(o.name)}</td><td class="n ${o.st.excess_net >= 0 ? 'up' : 'down'}">${sg1(o.st.excess_net)}</td><td class="n ${tcls(o.st.t_net)}">${f1(o.st.t_net, 2)}</td><td class="n">${f1(o.st.ir, 2)}</td><td class="n">${f1(o.st.turn_ann, 0)}</td><td><button class="tool" data-d="${i}" title="حذف">×</button></td></tr>`).join('') || '<tr><td colspan="7" class="mute" style="white-space:normal">اجراهای ذخیره‌شدهٔ شما اینجا می‌آیند. با «ذخیرهٔ این اجرا» اضافه کنید و با تیک، روی نمودار عملکرد مقایسه کنید.</td></tr>') + '</tbody>';
     $$$('#lb-list tr[data-i]').forEach(tr => tr.onclick = e => { if (e.target.closest('input,button')) return; const o = lab.saved[+tr.dataset.i]; setSpec(JSON.parse(JSON.stringify(o.spec))); runLab(false); lab.name = o.name; });
-    $$$('#lb-list input[data-o]').forEach(c => c.onchange = () => { const i = +c.dataset.o; if (c.checked) { lab.overlay.add(i); const o = lab.saved[i]; if (!o.net) { const r = E.run(CTX, o.spec); const st = E.stats(r, o.cost, jy); o.net = st.rn; o.res = r; } } else lab.overlay.delete(i); if (lab.tab === 'perf') tabPerf($('lb-view')); });
+    $$$('#lb-list input[data-o]').forEach(c => c.onchange = () => { const i = +c.dataset.o; if (c.checked) { lab.overlay.add(i); const o = lab.saved[i]; if (!o.net) { const r = E.run(CTX, o.spec); const st = E.stats(r, o.cost, jy, lab.bench); o.net = st.rn; o.res = r; } } else lab.overlay.delete(i); if (lab.tab === 'perf') tabPerf($('lb-view')); });
     $$$('#lb-list button[data-d]').forEach(b => b.onclick = () => { lab.saved.splice(+b.dataset.d, 1); lab.overlay.clear(); store.set('saved', lab.saved.map(o => ({ name: o.name, spec: o.spec, st: o.st, cost: o.cost }))); renderSide(); });
     lab.saved.forEach(o => { if (!o.net && lab.overlay.size) { /* بارگذاری تنبل */ } });
     $('lb-side-lin').innerHTML = '<span><b>ذخیره</b> در مرورگر (localStorage)</span>';
   } else {
     const g = $('lb-libgrp').value, key = $('lb-libsort').value, rows = L.library.filter(r => !g || r.group === g).slice().sort((a, b) => (b.stats[key] ?? -1e9) * (key === 'turn_ann' ? -1 : 1) - (a.stats[key] ?? -1e9) * (key === 'turn_ann' ? -1 : 1));
-    host.innerHTML = th([['استراتژی'], ['برتری %', 'n'], ['t', 'n'], ['IR', 'n'], ['گردش', 'n'], ['حکم']]) + '<tbody>' + rows.map(r => `<tr data-id="${esc(r.id)}"><td class="nm" title="${esc(r.id)}">${esc(r.name)}</td><td class="n ${r.stats.excess_net >= 0 ? 'up' : 'down'}">${sg1(r.stats.excess_net)}</td><td class="n ${tcls(r.stats.t_net)}">${f1(r.stats.t_net, 2)}</td><td class="n">${f1(r.stats.ir, 2)}</td><td class="n">${f1(r.stats.turn_ann, 0)}</td><td><span class="chip ${r.verdict.verdict === 'استقرار' ? 'ok' : r.verdict.verdict === 'شاهد ضعیف' ? 'warn' : 'bad'}">${esc(r.verdict.verdict)}</span></td></tr>`).join('') + '</tbody>';
+    host.innerHTML = th([['استراتژی'], ['برتری %', 'n'], ['t', 'n'], ['IR', 'n'], ['گردش', 'n'], ['حکم']]) + '<tbody>' + rows.map(r => `<tr data-id="${esc(r.id)}"><td class="nm" title="${esc(r.id)}">${esc(r.name)}</td><td class="n ${(lab.bench === 'cap' ? r.stats.excess_net_cap : r.stats.excess_net) >= 0 ? 'up' : 'down'}">${sg1(lab.bench === 'cap' ? r.stats.excess_net_cap : r.stats.excess_net)}</td><td class="n ${tcls(lab.bench === 'cap' ? r.stats.t_net_cap : r.stats.t_net)}">${f1(lab.bench === 'cap' ? r.stats.t_net_cap : r.stats.t_net, 2)}</td><td class="n">${f1(lab.bench === 'cap' ? r.stats.ir_cap : r.stats.ir, 2)}</td><td class="n">${f1(r.stats.turn_ann, 0)}</td><td><span class="chip ${r.verdict.verdict === 'استقرار' ? 'ok' : r.verdict.verdict === 'شاهد ضعیف' ? 'warn' : 'bad'}">${esc(r.verdict.verdict)}</span></td></tr>`).join('') + '</tbody>';
     $$$('#lb-list tr[data-id]').forEach(tr => tr.onclick = () => openLibrary(tr.dataset.id));
     $('lb-side-lin').innerHTML = `<span><b>N</b> ${L.multi.N} استراتژی</span><span><b>هزینه</b> ${L.cost_bp} bp</span><span>کلیک روی ردیف: نمایش نتیجه؛ برای الگوریتم‌های قابل اجرا در مرورگر spec هم بارگذاری می‌شود</span>`;
   }
 }
 function openLibrary(id) {
   const r = L.library.find(x => x.id === id); if (!r) return;
-  lab.lib = r; lab.res = toRes(r); lab.cost = L.cost_bp; lab.st = E.stats(lab.res, lab.cost, jy); lab.dec = null; lab.name = r.name;
+  lab.lib = r; lab.res = toRes(r); lab.cost = L.cost_bp; lab.st = E.stats(lab.res, lab.cost, jy, lab.bench); lab.dec = null; lab.name = r.name;
   if (r.id.startsWith('sig:') && L.dec[r.id.split(':')[1]]) { const d = L.dec[r.id.split(':')[1]]; lab.dec = { ann: d.ann_net, spread_t: d.spread_t, spread_ann: NaN, spearman: spearmanArr(d.ann_net), up: d.ann_net.slice(1).filter((v, i) => v > d.ann_net[i]).length }; }
   if (isJS(r.spec)) { try { setSpec(JSON.parse(JSON.stringify(r.spec))); } catch (e) { /* ممکن است معیار نباشد */ } }
   lab.spec = JSON.parse(JSON.stringify(r.spec));
