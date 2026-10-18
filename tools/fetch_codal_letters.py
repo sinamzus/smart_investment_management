@@ -242,9 +242,18 @@ def run(a):
         page, seen, stop = 1, 0, False
         while not stop and page <= a.max_pages:
             d = list_page(h, code, page)
-            L = (d or {}).get("Letters") or []
+            for k in range(4):                                                       # خطا (None) با «پایان فهرست» (Letters خالی) فرق دارد: خطا → ۱۰ دقیقه صبر و تلاش دوباره
+                if d is not None:
+                    break
+                print(f"{code}: صفحه {page} پاسخ نداد (محدودیت نرخ/شبکه)؛ {10 * (k + 1)} دقیقه صبر", flush=True)
+                time.sleep(600 * (k + 1))
+                d = list_page(h, code, page)
+            if d is None:
+                print(f"{code}: صفحه {page} هنوز پاسخ نمی‌دهد؛ اجرا را بعداً با همان دستور ادامه دهید", flush=True)
+                return
+            L = d.get("Letters") or []
             if not L:
-                print(f"{code}: صفحه {page} خالی/خطا؛ پایان این کد", flush=True)
+                print(f"{code}: صفحه {page} خالی؛ پایان این کد", flush=True)
                 break
             for x in L:
                 y = int((jdate(x.get("PublishDateTime") or x.get("SentDateTime")) or "0000")[:4])
