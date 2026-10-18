@@ -79,10 +79,10 @@ const METHODS = { top: 'N بزرگ‌ترین', strat: 'طبقه‌ای (صنع�
 const LIQN = { 0: ['بدون فیلتر', 'همهٔ واجدان بورس نامزد نگهداری‌اند.'], 1: ['ملایم', 'نماد باید دست‌کم ۵۰ روز از ۶۳ روز اخیر معامله شده و میانهٔ ارزش معاملاتش بالاتر از صدک ۲۰ واجدان باشد.'],
   2: ['متوسط', 'دست‌کم ۵۶ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۴۰ واجدان.'], 3: ['سخت', 'دست‌کم ۶۰ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۶۰ واجدان.'] };
 const S = { method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, loan: 20, rb: 30, rc: 0, cost: 100, j0: 0, pdate: 'live', aum: 500 };
-let R = null, host = null, last = null;
+let R = null, R0 = null, host = null, last = null;
 
 function mount(el) {
-  host = el; R = root.SIM_REP;
+  host = el; R = R0 = root.SIM_REP;
   if (!R) { el.innerHTML = '<section class="panel"><div class="panel-body" style="padding:24px">دادهٔ ماکت‌ساز پیدا نشد. اجرا کنید: <code>python tools/build_replica_panel.py</code></div></section>'; return; }
   prep(R);
   if (!R.Ns.includes(S.N)) S.N = R.Ns[Math.floor(R.Ns.length / 2)];
@@ -110,6 +110,7 @@ function mount(el) {
     <div class="lineage" id="rb-read"></div>
     <div class="panel-body" style="padding:var(--s-3)"><div class="mute" style="font-size:var(--fs-xs)" id="rb-ch1-t"></div><div id="rb-ch1"></div><div class="mute" style="font-size:var(--fs-xs);margin-top:8px" id="rb-ch2-t"></div><div id="rb-ch2"></div><div class="mute" id="rb-hov" style="font-size:var(--fs-2xs);min-height:1.4em"></div></div>
   </section>
+  <div id="rb-enh"></div>
   <section class="panel" style="--lg:var(--lg-b)">
     <div class="panel-head"><span class="lg-badge">3</span><span class="panel-title"${tip('همین تنظیمات را اگر از ابتدای هر سال شمسی شروع می‌کردیم: خطای ردیابی و تفاوت بازده تا امروز.')}>اگر از سال‌های گذشته شروع می‌کردیم</span></div>
     <div class="panel-body scroll" style="max-height:300px"><table class="dt" id="rb-years"></table></div>
@@ -123,9 +124,9 @@ function mount(el) {
     <div class="panel-body scroll" style="max-height:440px"><table class="dt" id="rb-ptab"></table></div>
     <div class="lineage" id="rb-plin"></div>
   </section>`;
-  const seg = (id, key, cb) => $(id).querySelectorAll('button').forEach(b => { b.onclick = () => { S[key] = key === 'liq' ? +b.dataset.v : b.dataset.v; cb && cb(); render(); }; });
+  const seg = (id, key, cb) => $(id).querySelectorAll('button').forEach(b => { b.onclick = () => { if (key !== 'mode') stale(); S[key] = key === 'liq' ? +b.dataset.v : b.dataset.v; cb && cb(); render(); }; });
   seg('rb-method', 'method'); seg('rb-liq', 'liq'); seg('rb-mode', 'mode');
-  $('rb-n').onchange = e => { S.N = +e.target.value; render(); };
+  $('rb-n').onchange = e => { stale(); S.N = +e.target.value; render(); };
   $('rb-amt').onchange = e => { S[S.mode === 'loan' ? 'loan' : 'cash'] = +e.target.value; render(); };
   $('rb-rb').onchange = e => { S.rb = +e.target.value; render(); }; $('rb-rc').onchange = e => { S.rc = +e.target.value; render(); };
   $('rb-cost').onchange = e => { S.cost = +e.target.value; render(); };
@@ -133,14 +134,19 @@ function mount(el) {
   $('rb-date').onchange = e => { S.pdate = e.target.value; renderPort(); };
   $('rb-aum').onchange = e => { S.aum = +e.target.value; renderPort(); };
   $('rb-n').value = S.N;
-  $('rb-chip').textContent = `${dj(R.sig[0])} → ${R.asof ? '' : ''}${dj(R.dates[R.dates.length - 1])} · ${nm} ریبالانس ماهانه`;
+  if (root.SIM_ENH_MOUNT) root.SIM_ENH_MOUNT($('rb-enh'), root.SIM_RB_API);
+  setChip();
   render();
 }
 const opts = () => ({ mode: S.mode === 'none' ? 'none' : S.mode === 'beta' ? 'beta' : 'fixed', L: S.mode === 'cash' ? 1 - S.cash / 100 : S.mode === 'loan' ? 1 + S.loan / 100 : 1, rb: S.rb / 100, rc: S.rc / 100, cost: S.cost, j0: S.j0 });
-const curKey = () => keyOf(S.method, S.N, S.liq);
+const curKey = () => R === R0 ? keyOf(S.method, S.N, S.liq) : 'enh';
+const stale = () => { if (R !== R0) { R = R0; if (root.SIM_ENH_STALE) root.SIM_ENH_STALE(); } };
+root.SIM_RB_API = { set(Rx) { R = Rx || R0; if (host) render(); }, state: () => ({ method: S.method, N: S.N, liq: S.liq }) };
 
+function setChip() { $('rb-chip').textContent = `${dj(R.sig[0])} → ${dj(R.dates[R.dates.length - 1])} · ${R.sig.length} ریبالانس ماهانه${R === R0 ? '' : ' · هدف تیلت‌شده'}`; }
 function render() {
   if (!host) return;
+  setChip();
   ['rb-method', 'rb-liq', 'rb-mode'].forEach(id => $(id).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v) === String({ 'rb-method': S.method, 'rb-liq': S.liq, 'rb-mode': S.mode }[id]))));
   $('rb-amt-l').style.display = S.mode === 'cash' || S.mode === 'loan' ? '' : 'none';
   if (S.mode === 'cash' || S.mode === 'loan') { $('rb-amt-t').textContent = S.mode === 'cash' ? 'نقد ٪' : 'وام ٪'; $('rb-amt').value = S[S.mode]; $('rb-amt').max = S.mode === 'cash' ? 50 : 50; }
@@ -204,7 +210,8 @@ function renderYears(o, key) {
 function portOf() {
   const key = curKey(), c = R.configs[key], nm = R.mstart.length, live = S.pdate === 'live', j = live ? nm - 1 : +S.pdate;
   const sel = live ? [c.live[0], c.live[1]] : c.sel[j], bj = live ? R.live_b : R.b[j], bmap = new Map(bj[0].map((i, p) => [i, bj[1][p] / 1e5]));
-  const rows = sel[0].map((i, p) => ({ i, w: sel[1][p] / 1e5, b: bmap.get(i) || 0, nm: R.names[i] })).sort((a, b) => b.w - a.w);
+  const b0j = R.b0 ? (live ? R.live_b0 : R.b0[j]) : null, b0map = b0j ? new Map(b0j[0].map((i, p) => [i, b0j[1][p] / 1e5])) : null;
+  const rows = sel[0].map((i, p) => ({ i, w: sel[1][p] / 1e5, b: bmap.get(i) || 0, b0: b0map ? (b0map.get(i) || 0) : null, nm: R.names[i] })).sort((a, b) => b.w - a.w);
   return { live, j, rows, bmap, cap: live ? c.live[2] : c.cap[j], key, bj };
 }
 function renderPort() {
@@ -218,11 +225,11 @@ function renderPort() {
     ['ظرفیت یک‌روزه (میلیارد ریال)', f(P.cap, 0), 'بزرگ‌ترین سرمایه‌ای که این پرتفوی را در یک روز با ۱۰٪ مشارکت در ارزش معاملات روزانهٔ ضعیف‌ترین نماد می‌سازد.'],
     ...(after ? [['TE یک سال بعد', f(after.te, 2) + '٪', 'خطای ردیابی واقعی در ۲۵۲ روز پس از این تاریخ با تنظیمات فعلی (اگر پرتفوی هر ماه به‌روز می‌شد).'], ['رشد نسبی یک سال بعد', sg(after.td) + '٪', 'رشد ماکت ÷ رشد شاخص − ۱ در ۲۵۲ روز بعد از این تاریخ.'], ['L این ماه', f(Lm, 2), 'نسبت سهام به سرمایه در این ماه با تنظیمات نقد/وام فعلی.']] : [])]
     .map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v num">${v}</div></div>`).join('');
-  const hd = [['#', 'rank', 'رتبه بر پایهٔ وزن ماکت.'], ['نماد', '', 'نماد.'], ['صنعت', '', 'صنعت.'], ['وزن ماکت ٪', 'n', 'وزن نماد در پرتفوی نمونه.'], ['وزن شاخص ٪', 'n', 'وزن ارزش‌بازاری نماد در شاخص هدف.'], ['اختلاف', 'n', 'وزن ماکت منهای وزن شاخص (واحد درصد).'],
+  const hd = [['#', 'rank', 'رتبه بر پایهٔ وزن ماکت.'], ['نماد', '', 'نماد.'], ['صنعت', '', 'صنعت.'], ['وزن ماکت ٪', 'n', 'وزن نماد در پرتفوی نمونه.'], ['وزن ' + (R.b0 ? 'هدف' : 'شاخص') + ' ٪', 'n', 'وزن نماد در هدف (شاخص رسمی یا هدف تیلت‌شده).'], ...(R.b0 ? [['وزن شاخص رسمی ٪', 'n', 'وزن ارزش‌بازاری نماد در «شاخص كل» رسمی (تقریب بدون شناوری).']] : []), ['اختلاف', 'n', 'وزن ماکت منهای وزن شاخص (واحد درصد).'],
     ...(P.live ? [['ارزش معاملات روزانه (میلیارد ریال)', 'n', 'میانهٔ ۶۳ روزهٔ ارزش معاملات.'], ['روز لازم', 'n', 'روز لازم برای ساخت با سرمایهٔ ورودی و ۱۰٪ مشارکت.']] : [])];
   $('rb-ptab').innerHTML = `<thead><tr>${hd.map(([t, c, d]) => `<th class="${c}"${tip(d)}>${t}</th>`).join('')}</tr></thead><tbody>` + P.rows.map((r, p) => {
     const ad = adv[r.i], days = ad ? r.w * aumR / 1e9 / (R.part * ad) : NaN;
-    return `<tr><td class="rank">${p + 1}</td><td>${esc(r.nm.s)}</td><td>${esc(r.nm.sec)}</td><td class="n">${f(100 * r.w, 2)}</td><td class="n">${f(100 * r.b, 2)}</td><td class="n ${r.w >= r.b ? 'up' : 'down'}">${sg(100 * (r.w - r.b), 2)}</td>` + (P.live ? `<td class="n">${f(ad, 1)}</td><td class="n ${days > 5 ? 'down' : ''}">${f(days, 1)}</td>` : '') + '</tr>';
+    return `<tr><td class="rank">${p + 1}</td><td>${esc(r.nm.s)}</td><td>${esc(r.nm.sec)}</td><td class="n">${f(100 * r.w, 2)}</td><td class="n">${f(100 * r.b, 2)}</td>${R.b0 ? `<td class="n">${f(100 * r.b0, 2)}</td>` : ''}<td class="n ${r.w >= r.b ? 'up' : 'down'}">${sg(100 * (r.w - r.b), 2)}</td>` + (P.live ? `<td class="n">${f(ad, 1)}</td><td class="n ${days > 5 ? 'down' : ''}">${f(days, 1)}</td>` : '') + '</tr>';
   }).join('') + '</tbody>';
   $('rb-plin').innerHTML = `<span><b${tip('وزن هدف از ارزش بازار نمادهای واجد بورس در آخرین روز سیگنال.')}>وزن شاخص</b> تقریب ارزش‌وزن بدون شناوری آزاد</span><span><b${tip('نمادهایی از شاخص که در نمونه نیستند.')}>خارج از نمونه</b> ${P.bj[0].length - nmT} نماد با مجموع وزن ${f(100 * (1 - cov), 0)}٪</span>`;
   $('rb-plan').style.display = P.live ? '' : 'none';
