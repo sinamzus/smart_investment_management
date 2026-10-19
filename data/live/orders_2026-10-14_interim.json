@@ -3,9 +3,9 @@
  "plan_id": "2e7723256937",
  "strategy": "c1-rank-partial50-v1",
  "spec_hash": "cfb43bd36eb5e919",
- "code_commit": "e83c7a2",
+ "code_commit": "69bf24f",
  "asof": "2026-10-14",
- "created": "2026-10-18T08:09:32.547969+00:00",
+ "created": "2026-10-19T00:55:28.319627+00:00",
  "official_month_end": false,
  "cold_start": true,
  "kappa": 1.0,
@@ -21,7 +21,7 @@
  "turnover_oneway": 1.0,
  "orders": [
   {
-   "id": "ba02a2380f",
+   "id": "3638f8b2c7",
    "type": "rebalance",
    "symbol": "ناما",
    "ins_code": "10411249540376641",
@@ -36,7 +36,7 @@
    "market": "farabourse"
   },
   {
-   "id": "9c3ef03d23",
+   "id": "98b8bbeb0c",
    "type": "rebalance",
    "symbol": "کربن",
    "ins_code": "11326461864120062",
@@ -51,7 +51,7 @@
    "market": "farabourse"
   },
   {
-   "id": "6935e05006",
+   "id": "b057df7ff5",
    "type": "rebalance",
    "symbol": "شفام",
    "ins_code": "11427387039523955",
@@ -66,7 +66,7 @@
    "market": "farabourse"
   },
   {
-   "id": "c75d03f0ed",
+   "id": "ad2ed1e500",
    "type": "rebalance",
    "symbol": "وسپهر",
    "ins_code": "114312662654155",
@@ -81,7 +81,7 @@
    "market": "farabourse"
   },
   {
-   "id": "333f26b8ff",
+   "id": "ffbc2c4e49",
    "type": "rebalance",
    "symbol": "داسوه",
    "ins_code": "12387472624849835",
@@ -96,7 +96,7 @@
    "market": "bourse"
   },
   {
-   "id": "6705a6ea68",
+   "id": "d3d479ccc1",
    "type": "rebalance",
    "symbol": "مدیریت",
    "ins_code": "12490072956930435",
@@ -111,7 +111,7 @@
    "market": "farabourse"
   },
   {
-   "id": "fdb2bb1226",
+   "id": "83d4966f32",
    "type": "rebalance",
    "symbol": "خریخت",
    "ins_code": "12752224677923341",
@@ -126,7 +126,7 @@
    "market": "bourse"
   },
   {
-   "id": "4ce9ea41ae",
+   "id": "0e227f5766",
    "type": "rebalance",
    "symbol": "درهآور",
    "ins_code": "13243992182070788",
@@ -141,7 +141,7 @@
    "market": "farabourse"
   },
   {
-   "id": "4dde6344c7",
+   "id": "7cf31263c1",
    "type": "rebalance",
    "symbol": "شنفت",
    "ins_code": "14073782708315535",
@@ -156,7 +156,7 @@
    "market": "bourse"
   },
   {
-   "id": "9d5dcfd29e",
+   "id": "e62595cfb9",
    "type": "rebalance",
    "symbol": "غگلپا",
    "ins_code": "14312030900097668",
@@ -171,7 +171,7 @@
    "market": "farabourse"
   },
   {
-   "id": "5de2a9b3fa",
+   "id": "1c9cc06cdd",
    "type": "rebalance",
    "symbol": "کیمیا",
    "ins_code": "14427168056799610",
@@ -186,7 +186,7 @@
    "market": "bourse"
   },
   {
-   "id": "6753e198f8",
+   "id": "bbdfa9b86e",
    "type": "rebalance",
    "symbol": "تکیمیا",
    "ins_code": "14825677919842501",
@@ -201,7 +201,7 @@
    "market": "farabourse"
   },
   {
-   "id": "3f8e8088de",
+   "id": "6c90271d13",
    "type": "rebalance",
    "symbol": "پردیس",
    "ins_code": "15039949673085566",
@@ -216,7 +216,7 @@
    "market": "bourse"
   },
   {
-   "id": "19f1fcea3f",
+   "id": "3ae274ea96",
    "type": "rebalance",
    "symbol": "لطیف",
    "ins_code": "16422980660132735",
@@ -231,7 +231,7 @@
    "market": "farabourse"
   },
   {
-   "id": "d8ebbce144",
+   "id": "58e8aeb93e",
    "type": "rebalance",
    "symbol": "درازی",
    "ins_code": "16567465928886309",
@@ -246,7 +246,7 @@
    "market": "farabourse"
   },
   {
-   "id": "cabc7326af",
+   "id": "596f851425",
    "type": "rebalance",
    "symbol": "فمراد",
    "ins_code": "18004480270695404",
@@ -261,7 +261,7 @@
    "market": "bourse"
   },
   {
-   "id": "b10366b325",
+   "id": "75e25d11b2",
    "type": "rebalance",
    "symbol": "کلر",
    "ins_code": "1822787329898392",
@@ -276,7 +276,7 @@
    "market": "farabourse"
   },
   {
-   "id": "27e2450d02",
+   "id": "15524bee96",
    "type": "rebalance",
    "symbol": "امید",
    "ins_code": "18599703143458101",
@@ -291,7 +291,7 @@
    "market": "bourse"
   },
   {
-   "id": "232f9f5d2d",
+   "id": "0ddb8504f9",
    "type": "rebalance",
    "symbol": "ثرود",
    "ins_code": "18883380772506226",
@@ -306,7 +306,7 @@
    "market": "farabourse"
   },
   {
-   "id": "77846294bf",
+   "id": "076a6d2af6",
    "type": "rebalance",
    "symbol": "وهامون",
    "ins_code": "19348717261145458",
@@ -321,7 +321,7 @@
    "market": "farabourse"
   },
   {
-   "id": "e852208291",
+   "id": "87b98570dd",
    "type": "rebalance",
    "symbol": "دکیمی",
    "ins_code": "20024911381434086",
@@ -336,7 +336,7 @@
    "market": "bourse"
   },
   {
-   "id": "8140c85353",
+   "id": "59daf82e72",
    "type": "rebalance",
    "symbol": "شصدف",
    "ins_code": "204092872752957",
@@ -351,7 +351,7 @@
    "market": "farabourse"
   },
   {
-   "id": "6865870b15",
+   "id": "d46e8728aa",
    "type": "rebalance",
    "symbol": "کنور",
    "ins_code": "20411759370751096",
@@ -366,7 +366,7 @@
    "market": "bourse"
   },
   {
-   "id": "cdad8e131d",
+   "id": "68f4bc2b37",
    "type": "rebalance",
    "symbol": "غشهد",
    "ins_code": "20487994977117557",
@@ -381,7 +381,7 @@
    "market": "bourse"
   },
   {
-   "id": "b8a1307d0d",
+   "id": "a142585f73",
    "type": "rebalance",
    "symbol": "نیان",
    "ins_code": "20652241232631918",
@@ -396,7 +396,7 @@
    "market": "farabourse"
   },
   {
-   "id": "03dd8392b4",
+   "id": "84ddad52e1",
    "type": "rebalance",
    "symbol": "شغدیر",
    "ins_code": "21772258644715569",
@@ -411,7 +411,7 @@
    "market": "bourse"
   },
   {
-   "id": "e35bce4548",
+   "id": "2f7628bd3e",
    "type": "rebalance",
    "symbol": "حتوکا",
    "ins_code": "22260326095996531",
@@ -426,7 +426,7 @@
    "market": "bourse"
   },
   {
-   "id": "e84ce93b9c",
+   "id": "3d26d19032",
    "type": "rebalance",
    "symbol": "غدام",
    "ins_code": "2254054929817435",
@@ -441,7 +441,7 @@
    "market": "bourse"
   },
   {
-   "id": "3774d54465",
+   "id": "82096038da",
    "type": "rebalance",
    "symbol": "کپرور",
    "ins_code": "22941065011246116",
@@ -456,7 +456,7 @@
    "market": "farabourse"
   },
   {
-   "id": "163225e415",
+   "id": "f0352f9d9d",
    "type": "rebalance",
    "symbol": "کتوسعه",
    "ins_code": "23374429962331387",
@@ -471,7 +471,7 @@
    "market": "farabourse"
   },
   {
-   "id": "cf7516e97b",
+   "id": "88863a8d74",
    "type": "rebalance",
    "symbol": "چافست",
    "ins_code": "23936607891892333",
@@ -486,7 +486,7 @@
    "market": "bourse"
   },
   {
-   "id": "bf2e351262",
+   "id": "594db80fe9",
    "type": "rebalance",
    "symbol": "غدشت",
    "ins_code": "2434703913394836",
@@ -501,7 +501,7 @@
    "market": "bourse"
   },
   {
-   "id": "09b9068fd0",
+   "id": "0947a13bca",
    "type": "rebalance",
    "symbol": "کانسار",
    "ins_code": "24653108506137885",
@@ -516,7 +516,7 @@
    "market": "farabourse"
   },
   {
-   "id": "8523e2b53e",
+   "id": "45eca5d205",
    "type": "rebalance",
    "symbol": "وپویا",
    "ins_code": "24785665268004766",
@@ -531,7 +531,7 @@
    "market": "farabourse"
   },
   {
-   "id": "a7c79d0850",
+   "id": "7d17932521",
    "type": "rebalance",
    "symbol": "فلامی",
    "ins_code": "25286509736208688",
@@ -546,7 +546,7 @@
    "market": "bourse"
   },
   {
-   "id": "0aba8407f4",
+   "id": "6e975c27c7",
    "type": "rebalance",
    "symbol": "ساروج",
    "ins_code": "25417476013479486",
@@ -561,7 +561,7 @@
    "market": "farabourse"
   },
   {
-   "id": "2a705ac634",
+   "id": "7da524d8a1",
    "type": "rebalance",
    "symbol": "جم پیلن",
    "ins_code": "27096851668435724",
@@ -576,7 +576,7 @@
    "market": "bourse"
   },
   {
-   "id": "cffd139709",
+   "id": "3fc4149cda",
    "type": "rebalance",
    "symbol": "شکربن",
    "ins_code": "27308217070238237",
@@ -591,7 +591,7 @@
    "market": "bourse"
   },
   {
-   "id": "7981beb44a",
+   "id": "37f0e2f6f3",
    "type": "rebalance",
    "symbol": "فغدیر",
    "ins_code": "28147934478934110",
@@ -606,7 +606,7 @@
    "market": "farabourse"
   },
   {
-   "id": "af489ec15b",
+   "id": "7587a22877",
    "type": "rebalance",
    "symbol": "وبوعلی",
    "ins_code": "28328710198554144",
@@ -621,7 +621,7 @@
    "market": "bourse"
   },
   {
-   "id": "be2ab9f6c0",
+   "id": "8f78526853",
    "type": "rebalance",
    "symbol": "فجام",
    "ins_code": "30765727085936322",
@@ -636,7 +636,7 @@
    "market": "bourse"
   },
   {
-   "id": "1fb83c2ce4",
+   "id": "718fa7f394",
    "type": "rebalance",
    "symbol": "شسینا",
    "ins_code": "30974710508383145",
@@ -651,7 +651,7 @@
    "market": "bourse"
   },
   {
-   "id": "74ac0baefb",
+   "id": "9a101688af",
    "type": "rebalance",
    "symbol": "غگرجی",
    "ins_code": "31024260997481994",
@@ -666,7 +666,7 @@
    "market": "bourse"
   },
   {
-   "id": "aa70be00f1",
+   "id": "1576303ef6",
    "type": "rebalance",
    "symbol": "خچرخش",
    "ins_code": "33783140337377394",
@@ -681,7 +681,7 @@
    "market": "bourse"
   },
   {
-   "id": "6b5edaa6a3",
+   "id": "51727b22b0",
    "type": "rebalance",
    "symbol": "سمازن",
    "ins_code": "33808206014018431",
@@ -696,7 +696,7 @@
    "market": "bourse"
   },
   {
-   "id": "9209779e1f",
+   "id": "9b28d59147",
    "type": "rebalance",
    "symbol": "رنیک",
    "ins_code": "33854964748757477",
@@ -711,7 +711,7 @@
    "market": "farabourse"
   },
   {
-   "id": "ab3eda52d6",
+   "id": "8658361e3f",
    "type": "rebalance",
    "symbol": "شپاس",
    "ins_code": "35178706978554988",
@@ -726,7 +726,7 @@
    "market": "farabourse"
   },
   {
-   "id": "15359f0e65",
+   "id": "e5cc836ce1",
    "type": "rebalance",
    "symbol": "اردستان",
    "ins_code": "35331248532537562",
@@ -741,7 +741,7 @@
    "market": "bourse"
   },
   {
-   "id": "125b6978b5",
+   "id": "c03a7318ce",
    "type": "rebalance",
    "symbol": "کیا",
    "ins_code": "3542690854557886",
@@ -756,7 +756,7 @@
    "market": "farabourse"
   },
   {
-   "id": "f2f816fca8",
+   "id": "2222250c42",
    "type": "rebalance",
    "symbol": "کدما",
    "ins_code": "3623921205367364",
@@ -771,7 +771,7 @@
    "market": "bourse"
   },
   {
-   "id": "1bdc7e2ac3",
+   "id": "b2c5e24618",
    "type": "rebalance",
    "symbol": "والماس",
    "ins_code": "36282416082320053",
@@ -786,7 +786,7 @@
    "market": "farabourse"
   },
   {
-   "id": "81e3459d51",
+   "id": "549dc1e49b",
    "type": "rebalance",
    "symbol": "اعتلا",
    "ins_code": "36773155987365094",
@@ -801,7 +801,7 @@
    "market": "farabourse"
   },
   {
-   "id": "586d8a700a",
+   "id": "d1bb7a5ace",
    "type": "rebalance",
    "symbol": "شفا",
    "ins_code": "36899214178084525",
@@ -816,7 +816,7 @@
    "market": "bourse"
   },
   {
-   "id": "7cffd63d7a",
+   "id": "e1b3ed8e65",
    "type": "rebalance",
    "symbol": "سیدکو",
    "ins_code": "37281199178613855",
@@ -831,7 +831,7 @@
    "market": "bourse"
   },
   {
-   "id": "ea2afab473",
+   "id": "e04537f878",
    "type": "rebalance",
    "symbol": "قشهد",
    "ins_code": "37631109616997982",
@@ -846,7 +846,7 @@
    "market": "bourse"
   },
   {
-   "id": "fec77245a9",
+   "id": "63a30c8fbe",
    "type": "rebalance",
    "symbol": "خدیزل",
    "ins_code": "38084304113529336",
@@ -861,7 +861,7 @@
    "market": "farabourse"
   },
   {
-   "id": "74780f5f69",
+   "id": "6248c24dd0",
    "type": "rebalance",
    "symbol": "شتوکا",
    "ins_code": "38555056423456635",
@@ -876,7 +876,7 @@
    "market": "farabourse"
   },
   {
-   "id": "0bd58bf396",
+   "id": "eea2c9a587",
    "type": "rebalance",
    "symbol": "کیمیاتک",
    "ins_code": "39884565732277052",
@@ -891,7 +891,7 @@
    "market": "bourse"
   },
   {
-   "id": "0868dbd8c9",
+   "id": "ed8e4adc13",
    "type": "rebalance",
    "symbol": "شدوص",
    "ins_code": "40611478183231802",
@@ -906,7 +906,7 @@
    "market": "bourse"
   },
   {
-   "id": "0154ab7e8e",
+   "id": "0148684a88",
    "type": "rebalance",
    "symbol": "چخزر",
    "ins_code": "41122066907413786",
@@ -921,7 +921,7 @@
    "market": "farabourse"
   },
   {
-   "id": "accfdff08c",
+   "id": "762a5318d8",
    "type": "rebalance",
    "symbol": "تلیسه",
    "ins_code": "41781090739318251",
@@ -936,7 +936,7 @@
    "market": "farabourse"
   },
   {
-   "id": "b2e03d694f",
+   "id": "926bcd1ade",
    "type": "rebalance",
    "symbol": "کبافق",
    "ins_code": "43256212620530446",
@@ -951,7 +951,7 @@
    "market": "bourse"
   },
   {
-   "id": "765b2c4503",
+   "id": "a9af89f997",
    "type": "rebalance",
    "symbol": "وسبحان",
    "ins_code": "43283802997035462",
@@ -966,7 +966,7 @@
    "market": "farabourse"
   },
   {
-   "id": "022d16be48",
+   "id": "73371da839",
    "type": "rebalance",
    "symbol": "شفارس",
    "ins_code": "43781018754867729",
@@ -981,7 +981,7 @@
    "market": "bourse"
   },
   {
-   "id": "ea89788714",
+   "id": "0257b072b0",
    "type": "rebalance",
    "symbol": "شرانل",
    "ins_code": "44013656953678055",
@@ -996,7 +996,7 @@
    "market": "farabourse"
   },
   {
-   "id": "6905d87dc1",
+   "id": "65d2d15fa9",
    "type": "rebalance",
    "symbol": "فروسیل",
    "ins_code": "44846320603450383",
@@ -1011,7 +1011,7 @@
    "market": "farabourse"
   },
   {
-   "id": "f052d3be8a",
+   "id": "a1e4161c26",
    "type": "rebalance",
    "symbol": "وسینا",
    "ins_code": "45050389997905274",
@@ -1026,7 +1026,7 @@
    "market": "bourse"
   },
   {
-   "id": "ac44b9daa3",
+   "id": "3636135cd7",
    "type": "rebalance",
    "symbol": "سفانو",
    "ins_code": "4528607775462304",
@@ -1041,7 +1041,7 @@
    "market": "bourse"
   },
   {
-   "id": "eb378b620c",
+   "id": "08050a5914",
    "type": "rebalance",
    "symbol": "وتوکا",
    "ins_code": "47232550823972469",
@@ -1056,7 +1056,7 @@
    "market": "bourse"
   },
   {
-   "id": "47a5736e0d",
+   "id": "7da93f6b34",
    "type": "rebalance",
    "symbol": "وخاور",
    "ins_code": "47333458678352378",
@@ -1071,7 +1071,7 @@
    "market": "bourse"
   },
   {
-   "id": "4a701a0c04",
+   "id": "46d9594038",
    "type": "rebalance",
    "symbol": "واعتبار",
    "ins_code": "47841327496247362",
@@ -1086,7 +1086,7 @@
    "market": "bourse"
   },
   {
-   "id": "c0678fca60",
+   "id": "1f17e93365",
    "type": "rebalance",
    "symbol": "وبانک",
    "ins_code": "48010225447410247",
@@ -1101,7 +1101,7 @@
    "market": "bourse"
   },
   {
-   "id": "40065108c5",
+   "id": "aa5a1bdfcc",
    "type": "rebalance",
    "symbol": "بمولد",
    "ins_code": "48261930411425125",
@@ -1116,7 +1116,7 @@
    "market": "farabourse"
   },
   {
-   "id": "1a08301043",
+   "id": "fc7dec1ace",
    "type": "rebalance",
    "symbol": "بپویا",
    "ins_code": "48517714910707769",
@@ -1131,7 +1131,7 @@
    "market": "bourse"
   },
   {
-   "id": "e824cc6076",
+   "id": "32aef31709",
    "type": "rebalance",
    "symbol": "کمنگنز",
    "ins_code": "50341528161302545",
@@ -1146,7 +1146,7 @@
    "market": "bourse"
   },
   {
-   "id": "5ffb1663d6",
+   "id": "1fe02ae213",
    "type": "rebalance",
    "symbol": "زمگسا",
    "ins_code": "5054819322815158",
@@ -1161,7 +1161,7 @@
    "market": "bourse"
   },
   {
-   "id": "6178c14904",
+   "id": "96c9a5a0d1",
    "type": "rebalance",
    "symbol": "کمرجان",
    "ins_code": "50633804639547462",
@@ -1176,7 +1176,7 @@
    "market": "farabourse"
   },
   {
-   "id": "9236adc9d5",
+   "id": "65a43cff0f",
    "type": "rebalance",
    "symbol": "فرود",
    "ins_code": "51017863148152520",
@@ -1191,7 +1191,7 @@
    "market": "farabourse"
   },
   {
-   "id": "20ea9e61b1",
+   "id": "fd20206e71",
    "type": "rebalance",
    "symbol": "دکپسول",
    "ins_code": "52382684379473036",
@@ -1206,7 +1206,7 @@
    "market": "farabourse"
   },
   {
-   "id": "c5f0b79e24",
+   "id": "23e72aefb1",
    "type": "rebalance",
    "symbol": "چکارن",
    "ins_code": "53113471126689455",
@@ -1221,7 +1221,7 @@
    "market": "bourse"
   },
   {
-   "id": "7edf767f3e",
+   "id": "18b1eeecfb",
    "type": "rebalance",
    "symbol": "فروس",
    "ins_code": "54419429862704331",
@@ -1236,7 +1236,7 @@
    "market": "bourse"
   },
   {
-   "id": "8cb55bb149",
+   "id": "76efd0903c",
    "type": "rebalance",
    "symbol": "زبینا",
    "ins_code": "54482686501491508",
@@ -1251,7 +1251,7 @@
    "market": "farabourse"
   },
   {
-   "id": "688c6230b4",
+   "id": "b96710d5d0",
    "type": "rebalance",
    "symbol": "غمینو",
    "ins_code": "5516102131364383",
@@ -1266,7 +1266,7 @@
    "market": "farabourse"
   },
   {
-   "id": "f16c03179d",
+   "id": "564da15e03",
    "type": "rebalance",
    "symbol": "لسرما",
    "ins_code": "55897939403232751",
@@ -1281,7 +1281,7 @@
    "market": "bourse"
   },
   {
-   "id": "33e2b7c851",
+   "id": "55784a3ed5",
    "type": "rebalance",
    "symbol": "بخاور",
    "ins_code": "5599691633622269",
@@ -1296,7 +1296,7 @@
    "market": "farabourse"
   },
   {
-   "id": "92ef70ab60",
+   "id": "cd98152689",
    "type": "rebalance",
    "symbol": "فسوژ",
    "ins_code": "56375665074210467",
@@ -1311,7 +1311,7 @@
    "market": "farabourse"
   },
   {
-   "id": "899f300dbf",
+   "id": "2aa2b8b272",
    "type": "rebalance",
    "symbol": "شرنگی",
    "ins_code": "57157873359416943",
@@ -1326,7 +1326,7 @@
    "market": "farabourse"
   },
   {
-   "id": "e02b0fff99",
+   "id": "0f14ec608c",
    "type": "rebalance",
    "symbol": "غگز",
    "ins_code": "57551382352708199",
@@ -1341,7 +1341,7 @@
    "market": "farabourse"
   },
   {
-   "id": "52cdfb8908",
+   "id": "596a07aac0",
    "type": "rebalance",
    "symbol": "فنفت",
    "ins_code": "58462435595049907",
@@ -1356,7 +1356,7 @@
    "market": "farabourse"
   },
   {
-   "id": "226435af1e",
+   "id": "6f1c2b5e9c",
    "type": "rebalance",
    "symbol": "لوتوس",
    "ins_code": "59142194115401696",
@@ -1371,7 +1371,7 @@
    "market": "bourse"
   },
   {
-   "id": "865a64a93d",
+   "id": "425087afdb",
    "type": "rebalance",
    "symbol": "شمس",
    "ins_code": "59522975635235187",
@@ -1386,7 +1386,7 @@
    "market": "farabourse"
   },
   {
-   "id": "ca072d4996",
+   "id": "e2659ac6de",
    "type": "rebalance",
    "symbol": "تماوند",
    "ins_code": "60162288821230099",
@@ -1401,7 +1401,7 @@
    "market": "farabourse"
   },
   {
-   "id": "604d015835",
+   "id": "6224a42b4f",
    "type": "rebalance",
    "symbol": "مهرمام",
    "ins_code": "60369091709615715",
@@ -1416,7 +1416,7 @@
    "market": "farabourse"
   },
   {
-   "id": "4b8b60b8e6",
+   "id": "5693bab8e4",
    "type": "rebalance",
    "symbol": "ثجنوب",
    "ins_code": "60887982279284651",
@@ -1431,7 +1431,7 @@
    "market": "farabourse"
   },
   {
-   "id": "67f78451c0",
+   "id": "69a8a33944",
    "type": "rebalance",
    "symbol": "شپارس",
    "ins_code": "61102694810476197",
@@ -1446,7 +1446,7 @@
    "market": "bourse"
   },
   {
-   "id": "a22fc1e7fd",
+   "id": "547c9e6d65",
    "type": "rebalance",
    "symbol": "ولکار",
    "ins_code": "61469668095573716",
@@ -1461,7 +1461,7 @@
    "market": "bourse"
   },
   {
-   "id": "4083827689",
+   "id": "43d647ef31",
    "type": "rebalance",
    "symbol": "پتوسعه",
    "ins_code": "6233172939132588",
@@ -1476,7 +1476,7 @@
    "market": "farabourse"
   },
   {
-   "id": "ccb30cdd37",
+   "id": "9e042c85d8",
    "type": "rebalance",
    "symbol": "کی بی سی",
    "ins_code": "62977319271289925",
@@ -1491,7 +1491,7 @@
    "market": "farabourse"
   },
   {
-   "id": "83a141ed29",
+   "id": "fc8f6b314d",
    "type": "rebalance",
    "symbol": "بپیوند",
    "ins_code": "64619251116188373",
@@ -1506,7 +1506,7 @@
    "market": "farabourse"
   },
   {
-   "id": "4de047a5f0",
+   "id": "5f6f318f45",
    "type": "rebalance",
    "symbol": "ریشمک",
    "ins_code": "6478064539164167",
@@ -1521,7 +1521,7 @@
    "market": "farabourse"
   },
   {
-   "id": "0424145ec1",
+   "id": "818e608fd6",
    "type": "rebalance",
    "symbol": "گوهران",
    "ins_code": "65018804181564924",
@@ -1536,7 +1536,7 @@
    "market": "farabourse"
   },
   {
-   "id": "d292106fb0",
+   "id": "0a81c2dd45",
    "type": "rebalance",
    "symbol": "سکرد",
    "ins_code": "65321970913593427",
@@ -1551,7 +1551,7 @@
    "market": "bourse"
   },
   {
-   "id": "ea38905b19",
+   "id": "1d7e60cd0b",
    "type": "rebalance",
    "symbol": "نبابک",
    "ins_code": "65378630011538741",
@@ -1566,7 +1566,7 @@
    "market": "farabourse"
   },
   {
-   "id": "f722352586",
+   "id": "7dace00fb6",
    "type": "rebalance",
    "symbol": "اپال",
    "ins_code": "655060129740445",
@@ -1581,7 +1581,7 @@
    "market": "bourse"
   },
   {
-   "id": "a1f62486a2",
+   "id": "6f410235e0",
    "type": "rebalance",
    "symbol": "آواک",
    "ins_code": "65663173216130783",
@@ -1596,7 +1596,7 @@
    "market": "farabourse"
   },
   {
-   "id": "7396ff50b2",
+   "id": "e32b1ebf5e",
    "type": "rebalance",
    "symbol": "گکوثر",
    "ins_code": "66599109405217136",
@@ -1611,7 +1611,7 @@
    "market": "farabourse"
   },
   {
-   "id": "ece9e3d28a",
+   "id": "35c288ce5a",
    "type": "rebalance",
    "symbol": "وپایا",
    "ins_code": "67244978897607661",
@@ -1626,7 +1626,7 @@
    "market": "farabourse"
   },
   {
-   "id": "e776da298e",
+   "id": "b226cda6c7",
    "type": "rebalance",
    "symbol": "شبصیر",
    "ins_code": "68517032834363488",
@@ -1641,7 +1641,7 @@
    "market": "farabourse"
   },
   {
-   "id": "08ed92943e",
+   "id": "3a9967ab86",
    "type": "rebalance",
    "symbol": "ثباغ",
    "ins_code": "68909035712962732",
@@ -1656,7 +1656,7 @@
    "market": "farabourse"
   },
   {
-   "id": "5d7787fca7",
+   "id": "76e8244967",
    "type": "rebalance",
    "symbol": "دبالک",
    "ins_code": "71510396252618330",
@@ -1671,7 +1671,7 @@
    "market": "farabourse"
   },
   {
-   "id": "4a67216e62",
+   "id": "b681678e80",
    "type": "rebalance",
    "symbol": "نان",
    "ins_code": "8000351713789858",
@@ -1686,7 +1686,7 @@
    "market": "farabourse"
   },
   {
-   "id": "3f33c7b93f",
+   "id": "48b2e54897",
    "type": "rebalance",
    "symbol": "غدانه",
    "ins_code": "8234855558996646",
@@ -1701,7 +1701,7 @@
    "market": "farabourse"
   },
   {
-   "id": "00224ae3a4",
+   "id": "8f0c99f3f2",
    "type": "rebalance",
    "symbol": "فگستر",
    "ins_code": "8725363201030474",
@@ -1716,7 +1716,7 @@
    "market": "farabourse"
   },
   {
-   "id": "fde856faf2",
+   "id": "da854c1a0d",
    "type": "rebalance",
    "symbol": "فسپا",
    "ins_code": "8977441217024425",
@@ -1731,7 +1731,7 @@
    "market": "bourse"
   },
   {
-   "id": "d7e0200cf8",
+   "id": "c00a232a2b",
    "type": "rebalance",
    "symbol": "زفارس",
    "ins_code": "9155145921347611",
@@ -1746,7 +1746,7 @@
    "market": "farabourse"
   },
   {
-   "id": "f8e0c2cd90",
+   "id": "d17746b968",
    "type": "rebalance",
    "symbol": "حپارسا",
    "ins_code": "917857106093847",
@@ -1761,7 +1761,7 @@
    "market": "farabourse"
   },
   {
-   "id": "9e2390bc13",
+   "id": "0da5d5c2a6",
    "type": "rebalance",
    "symbol": "آردینه",
    "ins_code": "9956888831468521",
