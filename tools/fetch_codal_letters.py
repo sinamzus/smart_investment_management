@@ -9,6 +9,9 @@
     python tools/fetch_codal_letters.py --codes ن-67 --log l.txt   # فقط یک نوع اطلاعیه
     python tools/fetch_codal_letters.py --reparse           # فقط از متن خام دوباره استخراج کن (بدون شبکه)
 
+نرخ (۲۰۲۶-۱۰-۱۹): پیش‌فرض یک درخواست در هر ۱۵ ثانیه و حداکثر ۹۰ درخواست در هر ساعت (--delay، --per-hour)؛ پس از ۴۲۹، ۲۰ دقیقه صبر و سقف ×۰٫۸.
+همیشه فقط یک فرایند کدال در یک زمان؛ پروکسی محیط را خالی کنید: env -u HTTP_PROXY -u HTTPS_PROXY python ...
+
 روش: برای هر کد اطلاعیه (بدون نماد) فهرست همهٔ نامه‌ها صفحه‌به‌صفحه خوانده می‌شود (جدیدترین اول؛ توقف پس از سال --since)، نمادهای خارج از
 فهرست نمادهای فعال کنار می‌روند، و صفحهٔ HTML هر نامه (نه PDF، نه OCR) دانلود و به متن تبدیل می‌شود. متن خام (هرچه تجزیه‌گر بعداً بهتر شود) در
 data/corporate_actions/codal_letters_raw.csv.gz ذخیره می‌شود؛ جدول استخراج‌شده: codal_capital_events.csv.
@@ -206,10 +209,67 @@ def selftest():
     assert g.get("superseded") == 1, g
     h2 = parse_letter("ن-67", "آگهی ثبت افزایش سرمایه(اصلاحیه)", "این اطلاعیه اصلاحیه اطلاعیه شماره ( 1611885 ) می باشد.")
     assert h2.get("amends") == "1611885", h2
+    assert budget_wait([], 100.0, 3) == 0 and budget_wait([0, 10, 20], 100.0, 3) == 3500 and budget_wait([0, 10, 20], 3601.0, 3) == 0, "budget_wait"
+    assert budget_wait([0, 10, 20, 30], 100.0, 3) == 3510                    # سقف ۳: باید تا خروج درخواست دوم (۱۰) از پنجره صبر کرد
     print("selftest OK")
 
 
 # ── شبکه ─────────────────────────────────────────────────────────────────────
+def budget_wait(times, now, cap, window=3600.0):
+    """چند ثانیه صبر لازم است تا در هر پنجرهٔ window ثانیه‌ای بیش از cap درخواست نرود (times: زمان درخواست‌های قبلی، صعودی)."""
+    recent = [t for t in times if now - t < window]
+    return 0.0 if len(recent) < cap else recent[len(recent) - cap] + window - now
+
+
+class Pacer:
+    """نرخ‌دهنده برای کدال (۲۰۲۶-۱۰-۱۹، فصل ۱۰ بند ۷l): به‌جای «زدن تا ۴۲۹ و بعد صبر کوتاه»، از اول زیر حد می‌ماند.
+    ۱) فاصلهٔ کمینه بین دو درخواست (--delay، ±۱۰٪ لرزش)؛ ۲) سقف درخواست در هر ۶۰ دقیقهٔ لغزان (--per-hour)؛
+    ۳) اگر باز ۴۲۹ آمد: ۲۰ دقیقه صبر (قاعدهٔ پروژه) و سقف ساعتی ×۰٫۸ تا پایان اجرا. هر ۴۲۹ و هر صفحه با ساعت در لاگ می‌آید تا حد واقعی سنجیده شود.
+    مشاهدهٔ ۲۰۲۶-۱۰-۱۹ با فاصلهٔ ۶ ثانیه: پس از استراحت ~۸۵ تا ۱۵۰ درخواست، پس از هر ۴۲۹ و صبر ۱۵ تا ۳۰ دقیقه فقط ۲۰ تا ۵۰ درخواست
+    ⇒ حدود ۲۵ درخواست در ساعت در عمل. [راستی‌آزمایی نشده] حد دقیق کدال اعلام نشده است."""
+
+    COOL = 1200.0
+
+    def __init__(self, delay, per_hour):
+        import random
+        import requests
+        from fetch_codal_fundamentals import HEADERS
+        self.s, self.delay, self.cap, self.rnd = requests.Session(), delay, per_hour, random.Random(7)
+        self.s.headers.update(HEADERS)
+        self.times, self.n429, self.n = [], 0, 0
+
+    def _pace(self):
+        now = time.time()
+        gap = (self.times[-1] + self.delay * self.rnd.uniform(0.9, 1.1) - now) if self.times else 0.0
+        w = max(gap, budget_wait(self.times, now, int(self.cap)))
+        if w > 0:
+            time.sleep(w)
+        self.times = [t for t in self.times if time.time() - t < 3600] + [time.time()]
+
+    def get(self, url, params=None, binary=False, tries=4):
+        net_wait = 60
+        for _ in range(tries):
+            self._pace()
+            try:
+                r = self.s.get(url, params=params, timeout=60)
+            except Exception as e:                       # noqa: BLE001
+                print(f"   {time.strftime('%H:%M')} خطای شبکه: {str(e)[:80]}؛ {net_wait}s", flush=True)
+                time.sleep(net_wait)
+                net_wait = min(net_wait * 2, 900)
+                continue
+            if r.status_code == 429:
+                self.n429 += 1
+                self.cap = max(20, self.cap * 0.8)
+                print(f"   {time.strftime('%H:%M')} ۴۲۹ پس از {self.n} درخواست موفق؛ ۲۰ دقیقه صبر؛ سقف ساعتی → {self.cap:.0f}", flush=True)
+                time.sleep(self.COOL)
+                continue
+            if r.status_code != 200:
+                return None
+            self.n += 1
+            return r.content if binary else r.json()
+        return None
+
+
 def list_page(h, code, page):
     return h.get(API, params={"Symbol": "", "Category": -1, "LetterCode": code, "Length": -1, "Audited": "true", "NotAudited": "true", "Consolidatable": "true",
                               "NotConsolidatable": "true", "Childs": "true", "Mains": "true", "Publisher": "false", "AuditorRef": -1, "CompanyState": -1,
@@ -231,13 +291,12 @@ def get_html(h, url):
 
 
 def run(a):
-    from fetch_codal_fundamentals import Http
-    h = Http(a.delay)
+    h = Pacer(a.delay, a.per_hour)
     OUT.mkdir(parents=True, exist_ok=True)
     raw, done_f = OUT / "codal_letters_raw.csv.gz", OUT / "codal_letters_done.csv"
     done = set(done_f.read_text(encoding="utf-8").split()) if done_f.exists() else set()
     uni = universe()
-    print(f"نمادهای هدف: {len(uni)}؛ انجام‌شده: {len(done)}", flush=True)
+    print(f"نمادهای هدف: {len(uni)}؛ انجام‌شده: {len(done)}؛ شروع {time.strftime('%Y-%m-%d %H:%M')}، فاصله {a.delay}s، سقف {a.per_hour} درخواست در ساعت", flush=True)
     for code in a.codes:
         page, seen, stop = 1, 0, False
         while not stop and page <= a.max_pages:
@@ -266,7 +325,7 @@ def run(a):
                     continue
                 t = get_html(h, x.get("Url") or "")
                 if not t:
-                    h.delay = min(h.delay * 2, 20.0)                                 # تطبیق‌پذیر: پس از شکست، تأخیر دو برابر
+                    h.delay = min(h.delay * 2, 60.0)                                 # تطبیق‌پذیر: پس از شکست، تأخیر دو برابر
                     print(f"  بدون HTML: {sym} {tn}؛ تأخیر → {h.delay:.1f}s", flush=True)
                     continue
                 h.delay = max(a.delay, h.delay * 0.92)                              # پس از موفقیت، آرام‌آرام کمتر
@@ -276,7 +335,7 @@ def run(a):
                 with open(done_f, "a", encoding="utf-8") as g:
                     g.write(tn + "\n")
                 done.add(tn); seen += 1
-            print(f"{code}: صفحه {page}/{-(-int(d.get('Total', 0)) // 20)}؛ ذخیره‌شده {seen}", flush=True)
+            print(f"{time.strftime('%m-%d %H:%M')} {code}: صفحه {page}/{-(-int(d.get('Total', 0)) // 20)}؛ ذخیره‌شده {seen}؛ درخواست موفق {h.n}، ۴۲۹: {h.n429}", flush=True)
             page += 1
     reparse()
 
@@ -300,8 +359,7 @@ def reparse():
 
 
 def test(a):
-    from fetch_codal_fundamentals import Http
-    h = Http(a.delay)
+    h = Pacer(a.delay, a.per_hour)
     d = list_page(h, "ن-67", 1)
     L = (d or {}).get("Letters") or []
     print("Total:", (d or {}).get("Total"), "· نامه‌های صفحهٔ ۱:", len(L))
@@ -323,8 +381,7 @@ def test(a):
 
 def test_code(a):
     """نمونه‌برداری از یک کد: ۸ نامهٔ نخست (برای ن-57 فقط نامه‌هایی که متنشان «افزایش سرمایه» دارد) و استخراج‌شان."""
-    from fetch_codal_fundamentals import Http
-    h = Http(a.delay)
+    h = Pacer(a.delay, a.per_hour)
     d = list_page(h, a.test_code, 1)
     L = (d or {}).get("Letters") or []
     print(a.test_code, "Total:", (d or {}).get("Total"), "· صفحهٔ ۱:", len(L))
@@ -351,7 +408,8 @@ def main():
     ap.add_argument("--reparse", action="store_true")
     ap.add_argument("--codes", default=",".join(DEFAULT_CODES))
     ap.add_argument("--since", type=int, default=1399, help="قدیمی‌ترین سال انتشار (جلالی)")
-    ap.add_argument("--delay", type=float, default=6.0, help="کف تأخیر بین درخواست‌ها (ثانیه)؛ پس از ۴۲۹ خودکار بیشتر می‌شود")
+    ap.add_argument("--delay", type=float, default=15.0, help="کمینهٔ فاصله بین دو درخواست (ثانیه)")
+    ap.add_argument("--per-hour", type=int, default=90, help="سقف درخواست در هر ۶۰ دقیقهٔ لغزان؛ پس از هر ۴۲۹ ×۰٫۸ می‌شود")
     ap.add_argument("--max-pages", type=int, default=400)
     ap.add_argument("--log")
     a = ap.parse_args()
