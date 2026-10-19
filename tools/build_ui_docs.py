@@ -17,20 +17,28 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "ui" / "data" / "docs.js"
+CRLF, LF = chr(13) + chr(10), chr(10)
+
+
+def read(p):
+    """پایان سطر یکسان (LF) تا hash به تبدیل CRLF/LF گیت وابسته نباشد."""
+    return p.read_text(encoding="utf-8").replace(CRLF, LF)
+
+
+def title_of(md, default):
+    return next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), default)
 
 
 def collect():
     files = []
     for p in sorted((ROOT / "docs").glob("[0-9][0-9]-*.md")):
-        md = p.read_text(encoding="utf-8")
-        title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), p.stem)
-        files.append({"n": int(p.name[:2]), "file": p.name, "title": title, "md": md})
+        md = read(p)
+        files.append({"n": int(p.name[:2]), "file": p.name, "title": title_of(md, p.stem), "md": md})
     for name, key in (("README.md", "readme"), ("CHANGELOG.md", "changelog")):
         p = ROOT / "docs" / name
         if p.exists():
-            md = p.read_text(encoding="utf-8")
-            title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), name)
-            files.append({"n": key, "file": name, "title": title, "md": md})
+            md = read(p)
+            files.append({"n": key, "file": name, "title": title_of(md, name), "md": md})
     return files
 
 
