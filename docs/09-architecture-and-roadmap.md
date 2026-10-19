@@ -42,7 +42,7 @@ smart_investment_management/
 │   ├── fetch_*.py, parse_*.py, merge_*.py     # جمع‌آوری (روی سیستم کاربر) و تجزیه: TSETMC، کدال، رهاورد، فیپیران، فارابی، فاندای
 │   ├── rebuild_*.py, investable_replica.py    # قیمت تعدیل‌شده و بازسازی شاخص‌های رسمی (فصل ۲ و ۳)
 │   ├── signals.py, construction.py, factor_engine.py, research_stats.py, build_quality.py   # معیارها، الگوریتم‌ها، بک‌تست، آمار (فصل ۴، ۵، ۱۴)
-│   ├── sampled_replica.py, build_replica_*.py # ماکت‌ساز (فصل ۳ §۳٫۵)
+│   ├── sampled_replica.py, build_replica_*.py # همتاساز (فصل ۳ §۳٫۵)
 │   ├── live_ledger.py                         # استراتژی قفل‌شده، دستور اجرا `sim.trade_plan/1`، رهگیری (فصل ۱۴ §۱۴٫۹)
 │   ├── build_ui_*.py, build_lab.py            # ساخت دادهٔ UI (ui/data/*.js)
 │   ├── jalali.py                              # تقویم جلالی مشترک (تنها پیاده‌سازی)

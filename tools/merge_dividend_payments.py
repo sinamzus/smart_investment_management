@@ -101,7 +101,7 @@ def attach_ex_and_weights(E: pd.DataFrame, R: pd.DataFrame) -> pd.DataFrame:
     E["ex_date"], E["y"], E["wt"], E["market"] = ex, y, wt, mk
     E["lag_ex"] = [(g(p) - pd.Timestamp(e)).days if e else np.nan for p, e in zip(E.pay_j, E.ex_date)]
     E["wK"] = E.wt * E.y
-    E["wEW"] = E.y.where(E.market == "bourse", 0.0)      # وزن‌ها فقط برای جهان شاخص‌های رسمی (بورس)؛ رویداد فرابورسی فقط آمار تأخیر/ماکت صندوق‌هاست
+    E["wEW"] = E.y.where(E.market == "bourse", 0.0)      # وزن‌ها فقط برای جهان شاخص‌های رسمی (بورس)؛ رویداد فرابورسی فقط آمار تأخیر/همتای صندوق‌هاست
     return E
 
 

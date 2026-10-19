@@ -12,7 +12,7 @@
   ۳ اهرم L: ۱ (بدون وام) یا «تراز بتا» L = ۱/β (β رگرسیون ۲۵۲ روزهٔ نمونه روی شاخص هدف، بُرش [۰٫۷، ۱٫۵]).
     L > ۱: وام (L−۱)×NAV با نرخ rb؛ L < ۱: بخش نقد بدون بهره. وام و L هر ماه بازتنظیم می‌شود.
   ۴ هزینه: گردش یک‌طرفه × هزینهٔ رفت‌وبرگشت؛ بهرهٔ وام روزانه از NAV کم می‌شود.
-  ۵ ارزیابی روی بازده روزانه در برابر «شاخص كل» رسمی (بازده کل) و در برابر ماکت ارزش‌وزن کامل خودمان
+  ۵ ارزیابی روی بازده روزانه در برابر «شاخص كل» رسمی (بازده کل) و در برابر همتای ارزش‌وزن کامل خودمان
     (دومی فقط خطای نمونه‌گیری را نشان می‌دهد؛ اولی خطای وزن/شناوری و داده را هم دارد).
 محدودیت: بدون صف/حد نوسان/توقف؛ وزن شناور آزاد نداریم؛ نرخ وام و دسترسی به وام (مارجین) واقعی نیست **[تأیید لازم]**.
 """
@@ -179,19 +179,19 @@ def main():
     mk, K = load()
     K = K.fillna(0)
     ok = np.isin(mk.market, ["bourse"])
-    # ماکت ارزش‌وزن کامل (همهٔ واجدان) برای جدا کردن خطای نمونه‌گیری
+    # همتای ارزش‌وزن کامل (همهٔ واجدان) برای جدا کردن خطای نمونه‌گیری
     Cfull = pd.Series(0.0, index=mk.dates)
     X = np.nan_to_num(mk.X)
     mc = np.nan_to_num(mk.mcap)
     rows = []
-    # ماکت کامل: وزن ارزش بازار روز قبل (ریبالانس روزانه) — تقریب کران پایین خطای وزن
+    # همتای کامل: وزن ارزش بازار روز قبل (ریبالانس روزانه) — تقریب کران پایین خطای وزن
     for t in range(1, mk.n):
         idx = np.where(mk.eligible(t - 1, require_trade=False) & ok & (mc[t - 1] > 0))[0]
         if len(idx):
             w = mc[t - 1, idx] / mc[t - 1, idx].sum()
             Cfull.iloc[t] = float(w @ X[t, idx])
     base = evaluate(pd.Series((1 + Cfull[Cfull.index >= START]).cumprod()), K, Cfull)
-    print(f"ماکت کامل (وزن بازار، ریبالانس روزانه) در برابر شاخص كل رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}\n")
+    print(f"همتای کامل (وزن بازار، ریبالانس روزانه) در برابر شاخص كل رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}\n")
     import json
     json.dump({"rate": a.rate, "cost_bp": a.cost, "from": str(START.date()), "to": str(mk.dates[-1].date()), "n_eligible_last": int((mk.eligible(mk.n - 1, require_trade=False) & ok).sum()),
                "full_replica": {k: float(v) for k, v in base.items()}}, open(ROOT / "data" / "research" / "sampled_replica_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
@@ -204,7 +204,7 @@ def main():
                     print("خطا", N, m, lev, type(e).__name__, e); continue
                 ev = evaluate(s, K, Cfull)
                 rows.append({"N": N, "method": m, "leverage": lev, "mean_L": L, "turnover_oneway_pct": 100 * to, **ev})
-                print(f"N={N:3d} {m:5s} L={'1' if lev == 'none' else 'β'} (L̄={L:.2f}) بازده {ev['ann_pct']:6.1f}٪ شاخص {ev['ann_index_pct']:6.1f}٪ فاصله {ev['gap_pct']:+6.1f} TE_رسمی {ev['te_vs_official_pct']:5.2f} TE_ماکت {ev['te_vs_fullreplica_pct']:5.2f} β={ev['beta']:.2f} ρ={ev['corr']:.3f} گردش {100 * to:4.0f}٪", flush=True)
+                print(f"N={N:3d} {m:5s} L={'1' if lev == 'none' else 'β'} (L̄={L:.2f}) بازده {ev['ann_pct']:6.1f}٪ شاخص {ev['ann_index_pct']:6.1f}٪ فاصله {ev['gap_pct']:+6.1f} TE_رسمی {ev['te_vs_official_pct']:5.2f} TE_همتا {ev['te_vs_fullreplica_pct']:5.2f} β={ev['beta']:.2f} ρ={ev['corr']:.3f} گردش {100 * to:4.0f}٪", flush=True)
     out = pd.DataFrame(rows)
     out.to_csv(ROOT / "data" / "research" / "sampled_replica.csv", index=False, encoding="utf-8-sig")
     print("\nذخیره شد: data/research/sampled_replica.csv")

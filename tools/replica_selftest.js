@@ -1,4 +1,4 @@
-// هم‌ارزی موتور مرورگری ماکت‌ساز (ui/builder.js) با پایتون (tools/sampled_replica.py → data/research/sampled_replica.csv)
+// هم‌ارزی موتور مرورگری همتاساز (ui/builder.js) با پایتون (tools/sampled_replica.py → data/research/sampled_replica.csv)
 //   node tools/replica_selftest.js
 // برای سطح نقدشوندگی ۰، نرخ وام ۳۰٪، هزینه ۱۰۰bp، شروع از نخستین ماه؛ هر دو حالت «بدون وام» و «تراز بتا».
 global.window = global;

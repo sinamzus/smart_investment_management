@@ -131,7 +131,7 @@ function select(ctx, method, N, liq, bt, j, iters) {
   return { sel, w: sel.map(i => b[i] / s) };
 }
 
-/** سری ماهانه و روزانهٔ ماکت (بدون اهرم) و «هدف تیلت‌شده» (خرید همهٔ واجدان با b′)؛ فرمت سازگار با builder.js. progress(j, nm) اختیاری. */
+/** سری ماهانه و روزانهٔ همتا (بدون اهرم) و «هدف تیلت‌شده» (خرید همهٔ واجدان با b′)؛ فرمت سازگار با builder.js. progress(j, nm) اختیاری. */
 async function runEnh(ctx, cfg, zFor, progress) {
   const k = ctx.k, nm = ctx.nH, d0 = ctx.months[0].a + 1, L = ctx.T - d0, r = new Float64Array(L), tr = new Float64Array(L);
   const to = [], beta = [], cap = [], sel = [], bsm = [], tto = [];
@@ -218,7 +218,7 @@ function mount(el, api) {
   el.innerHTML = `
   <section class="panel" style="--lg:var(--lg-d, var(--lg-a))">
     <div class="panel-head"><span class="lg-badge">+</span><span class="panel-title"${tip('هدف را از «شاخص كل» رسمی تغییر بده (تیلت صنعت یا معیار، سقف وزن، آمیخته با هم‌وزن…) و با همان N سهم بساز. TE هدف در برابر شاخص همان ریسک فعال شماست.')}>شاخص بهبودیافته · تیلت و قیدها</span><span class="chip" id="en-chip"${tip('وضعیت: شاخص رسمی یا هدف تیلت‌شده.')}>شاخص رسمی</span></div>
-    <div class="lb-note">بالای نما: روش، تعداد سهام و نقدشوندگی همان است که در پنل ماکت‌ساز انتخاب کرده‌اید؛ اینجا فقط <b>هدف</b> را عوض می‌کنید. نتایج درون‌نمونه‌اند: تیلتی که پس از دیدن نتیجه انتخاب شود اعتبار آماری ندارد.</div>
+    <div class="lb-note">بالای نما: روش، تعداد سهام و نقدشوندگی همان است که در پنل همتاساز انتخاب کرده‌اید؛ اینجا فقط <b>هدف</b> را عوض می‌کنید. نتایج درون‌نمونه‌اند: تیلتی که پس از دیدن نتیجه انتخاب شود اعتبار آماری ندارد.</div>
     <div class="ctl">
       <label${tip('وزن ∝ ارزش بازار^γ. ۱ = ارزش‌وزن (شاخص)، ۰٫۵ = ریشهٔ ارزش بازار، ۰ = هم‌وزن. وزن‌دهی تنوع‌بخش در ادبیات.')}>توان اندازه γ <input type="number" id="en-gamma" value="1" min="0" max="1" step="0.1"></label>
       <label${tip('آمیختن با هم‌وزن: w = (۱−α)·شاخص + α·(۱/n). غلظت را کم و دم کوچک‌ها را زیاد می‌کند.')}>آمیخته با هم‌وزن α <input type="number" id="en-ew" value="0" min="0" max="1" step="0.1"></label>
@@ -228,7 +228,7 @@ function mount(el, api) {
     <div class="ctl">
       <label${tip('تیلت بر پایهٔ یکی از معیارهای Lab (Z مقطعی هر ماه): وزن × e^{λz}. اولین استفاده Lab را بارگذاری می‌کند.')}>معیار <select id="en-sig"><option value="">— بدون —</option></select></label>
       <label${tip('شدت تیلت معیار؛ λ = ۰٫۵ یعنی یک انحراف معیار بالاتر، وزن ≈ ۱٫۶ برابر.')}>شدت λ <input type="number" id="en-lam" value="0.5" min="-2" max="2" step="0.25"></label>
-      <button class="tool" id="en-run"${tip('هدف تیلت‌شده را می‌سازد و با N سهم ماکت می‌کند؛ بهینه‌سازی در مرورگر چند ثانیه طول می‌کشد.')}>محاسبه</button>
+      <button class="tool" id="en-run"${tip('هدف تیلت‌شده را می‌سازد و با N سهم همتاسازی می‌کند؛ بهینه‌سازی در مرورگر چند ثانیه طول می‌کشد.')}>محاسبه</button>
       <button class="tool" id="en-reset"${tip('بازگشت به «شاخص كل» رسمی بدون تیلت.')}>بازنشانی</button>
       <span class="mute" id="en-prog"></span>
     </div>
@@ -282,13 +282,13 @@ function summary(R, cfg) {
     ['نسبت اطلاعات', f(mT.gap / mT.te, 2), 'بازده اضافی ÷ TE. بالای ۰٫۵ در ادبیات خوب است، ولی اینجا درون‌نمونه است.'],
     ['t تفاضل ماهانه', f(tstat, 2), 'آمارهٔ t میانگین تفاضل ماهانهٔ هدف−شاخص (ساده، بدون تصحیح چندگانگی). |t| < ۲ یعنی بی‌معنا؛ تیلت‌های آزموده‌شده را در Lab با Bonferroni/DSR بسنجید.'],
     ['گردش ماهانهٔ هدف', f(100 * tov, 1) + '٪', 'گردش یک‌طرفهٔ ماهانهٔ خریدن همهٔ هدف (پیش از نمونه‌گیری).'],
-    ['TE ماکت در برابر شاخص', f(m.te, 2) + '٪', 'ماکت N‌سهمی هدف در برابر «شاخص كل» (با هزینهٔ ۱۰۰bp، بدون اهرم).']];
+    ['TE همتا در برابر شاخص', f(m.te, 2) + '٪', 'همتای N‌سهمی هدف در برابر «شاخص كل» (با هزینهٔ ۱۰۰bp، بدون اهرم).']];
   $('en-kpi').innerHTML = kp.map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v num">${v}</div></div>`).join('');
   const t = cfg.tilt, parts = [];
   if (t.gamma !== 1) parts.push(`توان اندازه ${t.gamma}`); if (t.ew) parts.push(`آمیخته با هم‌وزن ${f(100 * t.ew, 0)}٪`); if (t.cap) parts.push(`سقف ${f(100 * t.cap, 0)}٪`); if (t.kappa) parts.push(`کم‌نوسان κ=${t.kappa}`);
   if (t.lam && t.sig) parts.push(`معیار ${t.sig} λ=${t.lam}`);
   const sc = Object.entries(t.sec).filter(([, v]) => v).map(([s, v]) => `${ctx.sectors[s]} ${v > 0 ? '+' : ''}${v}٪`); if (sc.length) parts.push('صنعت: ' + sc.join('، '));
-  $('en-lin').innerHTML = `<span><b${tip('تیلت‌های اعمال‌شده روی هدف.')}>تیلت</b> ${parts.length ? esc(parts.join(' · ')) : 'هیچ؛ هدف = شاخص رسمی'}</span><span><b${tip('خطاهای پایین‌تر (نمودار، KPI و جدول سال‌ها) اکنون ماکت را در برابر شاخص رسمی می‌سنجند، نه در برابر هدف تیلت‌شده.')}>مرجع</b> شاخص كل رسمی؛ «وزن شاخص» در جدول پرتفوی = وزن هدف تیلت‌شده</span>`;
+  $('en-lin').innerHTML = `<span><b${tip('تیلت‌های اعمال‌شده روی هدف.')}>تیلت</b> ${parts.length ? esc(parts.join(' · ')) : 'هیچ؛ هدف = شاخص رسمی'}</span><span><b${tip('خطاهای پایین‌تر (نمودار، KPI و جدول سال‌ها) اکنون همتا را در برابر شاخص رسمی می‌سنجند، نه در برابر هدف تیلت‌شده.')}>مرجع</b> شاخص كل رسمی؛ «وزن شاخص» در جدول پرتفوی = وزن هدف تیلت‌شده</span>`;
 }
 
 root.SIM_ENH_MOUNT = mount;

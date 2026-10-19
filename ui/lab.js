@@ -33,7 +33,7 @@ function ensureData(cb) {
   s.onerror = () => { pending = null; ['v-lab', 'v-sig', 'v-plan'].forEach(id => { const m = $(id); if (m && !m.dataset.ready) m.innerHTML = '<p style="padding:24px">ui/data/lab.js پیدا نشد. اجرا کنید: <code>python tools/build_lab.py</code></p>'; }); };
   document.head.appendChild(s);
 }
-window.SIM_ENSURE_LAB = ensureData;                                     // برای نماهای دیگر که به شبکهٔ نمادهای Lab نیاز دارند (ماکت‌ساز)
+window.SIM_ENSURE_LAB = ensureData;                                     // برای نماهای دیگر که به شبکهٔ نمادهای Lab نیاز دارند (همتاساز)
 const toRes = r => ({ cap: r.cap || [], toCap: (r.to_cap || []).map(v => v == null ? NaN : v), impact: (L.aums || []).map(a => ((r.impact || {})[String(a)] || []).map(v => v == null ? NaN : v)), end: r.end, ret: r.ret, all: r.all, to: r.to.map(v => v == null ? NaN : v), toAll: (r.to_all || r.all.map(() => 0)).map(v => v == null ? NaN : v), n: r.ret.map(() => r.stats.names), ic: (r.ic_series || r.ret.map(() => NaN)).map(v => v == null ? NaN : v) });
 const sigName = n => (L.signals.find(s => s.name === n) || {}).fa || n;
 const sigMeta = n => L.signals.find(s => s.name === n);
@@ -561,7 +561,7 @@ window.SIM_SEND_PLAN = sendToPlan;
 function fillPlanSrc() {
   const cur = $('pl-src').value, sent = window.SIM_PLAN_SRC;
   const opts = [...(sent ? [['sent', 'ارسال‌شده: ' + sent.name]] : []), ['K', 'شاخص كل (ارزش‌وزن، بورس)'], ['EW', 'كل (هم وزن) (بورس)'], ['lab', 'خروجی فعلی Lab'], ...L.library.filter(r => r.live && r.live.top && r.live.top.length).map(r => ['lib:' + r.id, 'کتابخانه · ' + r.name])];
-  const srcTip = v => v === 'sent' ? 'وزن هدفی که از نمای دیگری (ماکت‌ساز، شاخص بهبودیافته، Lab) فرستاده شده.' : v === 'K' ? 'وزن ارزش بازار همهٔ واجدان بورس؛ تقریب «شاخص كل» رسمی.' : v === 'EW' ? 'وزن برابر همهٔ واجدان بورس؛ تقریب «كل (هم وزن)».' : v === 'lab' ? 'پرتفوی زندهٔ آخرین اجرای سازندهٔ Lab (وزن هدف امروز).' : 'پرتفوی زندهٔ امروز این استراتژی از کتابخانهٔ پایتون؛ آمار آن در Lab ← کتابخانه.';
+  const srcTip = v => v === 'sent' ? 'وزن هدفی که از نمای دیگری (همتاساز، شاخص بهبودیافته، Lab) فرستاده شده.' : v === 'K' ? 'وزن ارزش بازار همهٔ واجدان بورس؛ تقریب «شاخص كل» رسمی.' : v === 'EW' ? 'وزن برابر همهٔ واجدان بورس؛ تقریب «كل (هم وزن)».' : v === 'lab' ? 'پرتفوی زندهٔ آخرین اجرای سازندهٔ Lab (وزن هدف امروز).' : 'پرتفوی زندهٔ امروز این استراتژی از کتابخانهٔ پایتون؛ آمار آن در Lab ← کتابخانه.';
   $('pl-src').innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}" data-tip="${esc(srcTip(v))}">${esc(t)}</option>`).join('');
   if (opts.some(o => o[0] === cur)) $('pl-src').value = cur;
 }

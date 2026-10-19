@@ -1,4 +1,4 @@
-/* همتا — «نمونهٔ کوچک + وام» (بخش شاخص و ماکت) و «دفتر زنده» (بخش اجرا)
+/* همتا — «نمونهٔ کوچک + وام» (بخش شاخص و همتا) و «دفتر زنده» (بخش اجرا)
    داده: window.SIM_LIVE (tools/build_ui_live.py) از tools/sampled_replica.py و tools/live_ledger.py. هیچ عدد ثابتی در این فایل نیست مگر متن توضیحی. */
 (function () {
 'use strict';
@@ -14,7 +14,7 @@ const sam = { method: 'opt', lev: 'none', metric: 'te_vs_official_pct' };
 const METHODS = { top: 'N بزرگ‌ترین', strat: 'طبقه‌ای (صنعت)', opt: 'بهینه‌سازی TE' };
 const COLORS = { top: 'var(--ch-2)', strat: 'var(--warn)', opt: 'var(--ch-1)' };
 const METRICS = [['te_vs_official_pct', 'TE در برابر شاخص رسمی (٪)', 'خطای ردیابی سالانه (انحراف معیار بازده روزانهٔ تفاضلی × √۲۵۲) نسبت به «شاخص كل» رسمی؛ کمتر بهتر.'],
-  ['te_vs_fullreplica_pct', 'TE در برابر ماکت کامل (٪)', 'فقط خطای نمونه‌گیری: نمونه در برابر خریدِ همهٔ واجدان با وزن بازار؛ خطای وزن/شناوری و داده را ندارد.'],
+  ['te_vs_fullreplica_pct', 'TE در برابر همتای کامل (٪)', 'فقط خطای نمونه‌گیری: نمونه در برابر خریدِ همهٔ واجدان با وزن بازار؛ خطای وزن/شناوری و داده را ندارد.'],
   ['gap_pct', 'فاصلهٔ بازده سالانه (واحد درصد)', 'بازده سالانهٔ نمونه منهای شاخص رسمی؛ منفی یعنی عقب‌ماندن. این فاصله ریسک نیست و ممکن است به‌علت حذف دم کوچک‌ها سیستماتیک باشد.']];
 const STEPS = [
   ['وزن هدف', 'ارزش بازار نمادهای واجد بورس ÷ مجموع؛ تقریب وزن «شاخص كل» (شناور آزاد نداریم).'],
@@ -23,7 +23,7 @@ const STEPS = [
   ['وام / اهرم', 'بدون وام (L = ۱)، یا «تراز بتا»: L = ۱/β با β نمونه روی شاخص (بُرش ۰٫۷ تا ۱٫۵). L > ۱ وام است با نرخ سالانه؛ L < ۱ بخشی نقد بدون بهره.'],
   ['ریبالانس', 'هر پایان ماه جلالی؛ وزن‌ها بین ریبالانس‌ها با بازده رانش می‌کنند؛ وام و L هر ماه بازتنظیم می‌شود.'],
   ['هزینه', 'گردش یک‌طرفه × هزینهٔ رفت‌وبرگشت؛ بهرهٔ وام روزانه از NAV کم می‌شود.'],
-  ['ارزیابی', 'بازده روزانه در برابر «شاخص كل» رسمی (بازده کل) و در برابر ماکت ارزش‌وزن کاملِ خودمان (فقط خطای نمونه‌گیری).']];
+  ['ارزیابی', 'بازده روزانه در برابر «شاخص كل» رسمی (بازده کل) و در برابر همتای ارزش‌وزن کاملِ خودمان (فقط خطای نمونه‌گیری).']];
 
 function initSam() {
   const m = $('v-sam'); m.dataset.ready = 1;
@@ -61,10 +61,10 @@ function renderSam() {
   const rows = D.replica.filter(r => r.leverage === sam.lev && (sam.method === 'all' || r.method === sam.method));
   const Ns = [...new Set(D.replica.map(r => r.N))].sort((a, b) => a - b);
   const best = k => { const r = D.replica.filter(x => x.leverage === sam.lev && x.method === k && x.te_vs_official_pct <= 2).sort((a, b) => a.N - b.N)[0]; return r ? r.N : null; };
-  $('sm-kpis').innerHTML = [['کف خطا (خرید همهٔ واجدان)', f(FR.te_vs_official_pct, 2) + '٪', 'TE ماکت کامل در برابر شاخص رسمی: تفاوت وزن شناور، ترکیب اعضا و داده؛ با نمونه‌گیری کمتر نمی‌شود.'],
+  $('sm-kpis').innerHTML = [['کف خطا (خرید همهٔ واجدان)', f(FR.te_vs_official_pct, 2) + '٪', 'TE همتای کامل در برابر شاخص رسمی: تفاوت وزن شناور، ترکیب اعضا و داده؛ با نمونه‌گیری کمتر نمی‌شود.'],
     ['کمترین N با TE ≤ ۲٪ (بهینه‌سازی)', best('opt') ? best('opt') + ' سهم' : '—', 'کوچک‌ترین تعداد سهام که در این حالت اهرم، روش بهینه‌سازی TE را به ≤ ۲٪ می‌رساند.'],
     ['کمترین N با TE ≤ ۲٪ (N بزرگ‌ترین)', best('top') ? best('top') + ' سهم' : '—', 'همان برای روش ساده‌تر «N بزرگ‌ترین».'],
-    ['نمونهٔ واجد در آخرین ماه', M.n_eligible_last + ' سهم', 'تعداد نمادهای واجد بورس در آخرین ماه (فهرست ماکت کامل).']]
+    ['نمونهٔ واجد در آخرین ماه', M.n_eligible_last + ' سهم', 'تعداد نمادهای واجد بورس در آخرین ماه (فهرست همتای کامل).']]
     .map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v">${v}</div></div>`).join('');
   // نمودار خطی: محور x = N (رتبه‌ای)، y = معیار
   const W = 980, H = 250, pl = 46, pr = 14, pt = 12, pb = 26;
@@ -82,7 +82,7 @@ function renderSam() {
   });
   const leg = ms.map(k => `<span style="margin-inline-end:14px"><i style="display:inline-block;width:10px;height:3px;background:${COLORS[k]};vertical-align:middle;margin-inline-end:4px"></i>${METHODS[k]}</span>`).join('');
   $('sm-chart').innerHTML = `<div class="mute" style="font-size:var(--fs-xs);margin-bottom:4px" data-tip="${esc(mt[2])}">${mt[1]} · ${sam.lev === 'beta' ? 'تراز بتا' : 'بدون وام'}</div><svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block">${g}</svg><div class="mute" style="font-size:var(--fs-2xs)">${leg}</div>`;
-  const hd = [['N', 'n', 'تعداد سهام نمونه'], ['روش', '', 'روش انتخاب سهام'], ['L̄', 'n', 'میانگین اهرم؛ کمتر از ۱ یعنی بخشی نقد، بیشتر از ۱ یعنی وام.'], ['بازده سالانه', 'n', 'بازده سالانهٔ نمونه (خالص از هزینه و بهرهٔ وام).'], ['شاخص', 'n', 'بازده سالانهٔ شاخص كل رسمی (بازده کل) در همین بازه.'], ['فاصله', 'n', 'بازدهٔ نمونه منهای شاخص (واحد درصد).'], ['TE رسمی', 'n', 'خطای ردیابی در برابر شاخص رسمی (٪).'], ['TE ماکت', 'n', 'خطای نمونه‌گیری در برابر ماکت کامل (٪).'], ['بتا', 'n', 'بتای بازده روزانهٔ نمونه نسبت به شاخص.'], ['همبستگی', 'n', 'همبستگی بازده روزانه با شاخص.'], ['گردش', 'n', 'گردش یک‌طرفهٔ میانگین هر ریبالانس (٪).']];
+  const hd = [['N', 'n', 'تعداد سهام نمونه'], ['روش', '', 'روش انتخاب سهام'], ['L̄', 'n', 'میانگین اهرم؛ کمتر از ۱ یعنی بخشی نقد، بیشتر از ۱ یعنی وام.'], ['بازده سالانه', 'n', 'بازده سالانهٔ نمونه (خالص از هزینه و بهرهٔ وام).'], ['شاخص', 'n', 'بازده سالانهٔ شاخص كل رسمی (بازده کل) در همین بازه.'], ['فاصله', 'n', 'بازدهٔ نمونه منهای شاخص (واحد درصد).'], ['TE رسمی', 'n', 'خطای ردیابی در برابر شاخص رسمی (٪).'], ['TE همتا', 'n', 'خطای نمونه‌گیری در برابر همتای کامل (٪).'], ['بتا', 'n', 'بتای بازده روزانهٔ نمونه نسبت به شاخص.'], ['همبستگی', 'n', 'همبستگی بازده روزانه با شاخص.'], ['گردش', 'n', 'گردش یک‌طرفهٔ میانگین هر ریبالانس (٪).']];
   $('sm-table').innerHTML = `<thead><tr>${hd.map(([t, c, d]) => `<th class="${c}" data-tip="${esc(d)}">${t}</th>`).join('')}</tr></thead><tbody>` + rows.slice().sort((a, b) => a.N - b.N || a.method.localeCompare(b.method)).map(r => `<tr><td class="n">${r.N}</td><td>${METHODS[r.method]}</td><td class="n">${f(r.mean_L, 2)}</td><td class="n">${f(r.ann_pct)}٪</td><td class="n">${f(r.ann_index_pct)}٪</td><td class="n ${r.gap_pct >= 0 ? 'up' : 'down'}">${sg(r.gap_pct)}</td><td class="n">${f(r.te_vs_official_pct, 2)}</td><td class="n">${f(r.te_vs_fullreplica_pct, 2)}</td><td class="n">${f(r.beta, 2)}</td><td class="n">${f(r.corr, 3)}</td><td class="n">${f(r.turnover_oneway_pct, 0)}٪</td></tr>`).join('') + '</tbody>';
   const nb = D.replica.filter(r => r.leverage === 'beta'), nn = D.replica.filter(r => r.leverage === 'none');
   const dTE = (nn.reduce((a, r, i) => a + (r.te_vs_official_pct - (nb.find(x => x.N === r.N && x.method === r.method) || r).te_vs_official_pct), 0) / nn.length), dR = (nn.reduce((a, r) => a + (r.ann_pct - (nb.find(x => x.N === r.N && x.method === r.method) || r).ann_pct), 0) / nn.length);

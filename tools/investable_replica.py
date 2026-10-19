@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ماکت سرمایه‌پذیر شاخص‌های رسمی با تأخیر پرداخت سود نقدی (فصل ۳ §۳.۵).
+"""همتای سرمایه‌پذیر شاخص‌های رسمی با تأخیر پرداخت سود نقدی (فصل ۳ §۳.۵).
 
     python tools/investable_replica.py                  # جدول سناریوها
     python tools/investable_replica.py --save           # data/derived/investable_*.csv
