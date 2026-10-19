@@ -147,6 +147,7 @@ th.has-tip, .kpi .k.has-tip, .lineage b.has-tip, .legend span.has-tip, .ctl labe
 #tip .tt { font-weight: 600; margin-bottom: 2px; }
 #tip .td { color: var(--tx-2); }
 #tip .tf { margin-top: 6px; padding: 4px 6px; background: var(--bg-panel); border: var(--hair) solid var(--line); font-variant-numeric: tabular-nums; font-size: var(--fs-xs); color: var(--tx-1); }
+#tip .to { margin-top: 6px; padding-top: 6px; border-top: var(--hair) solid var(--line); color: var(--tx-1); }
 #tip .ts { margin-top: 4px; font-size: var(--fs-2xs); color: var(--tx-3); }
 @media print { .topbar,.statusbar,.ctl,.panel-tools,#tip{display:none!important} .has-tip{text-decoration:none!important} body{overflow:visible} .app{display:block;height:auto} .workspace{display:block!important;height:auto} .panel{break-inside:avoid;margin-bottom:12px} }
 

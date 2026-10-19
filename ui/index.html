@@ -24,7 +24,7 @@
     </nav>
     <label class="cmd">
       <span class="prompt">›</span>
-      <input id="cmd" placeholder="فرمان…   GO DIV   IDX EW   WIN 2016   THEME   HELP" aria-label="نوار فرمان" autocomplete="off" spellcheck="false">
+      <input id="cmd" data-tip="نوار فرمان (کلید / یا Ctrl+K). نمونه‌ها: GO LAB، GO SAM، SYM فولاد، IDX EW، WIN 2016، THEME، HELP. ↑/↓ فرمان‌های قبلی." placeholder="فرمان…   GO DIV   IDX EW   WIN 2016   THEME   HELP" aria-label="نوار فرمان" autocomplete="off" spellcheck="false">
       <kbd>/</kbd>
     </label>
     <span class="spacer"></span>
@@ -188,7 +188,7 @@
         <div class="panel-tools"><button class="tool" id="pf-csv">CSV سفارش‌ها</button></div></div>
       <div class="ctl"><label>اندازهٔ صندوق <input type="number" id="pf-nav" min="1" step="100" value="10000"> میلیارد ریال</label>
         <label>مشارکت در حجم روزانه <input type="number" id="pf-part" min="1" max="100" step="1" value="10"> %</label>
-        <label>میانگین ارزش معامله <select id="pf-adv" style="height:20px;background:var(--bg-app);color:var(--tx-1);border:1px solid var(--line-strong)"><option value="adv20">۲۰ روز</option><option value="adv60">۶۰ روز</option><option value="med60">میانهٔ ۶۰ روز</option></select></label></div>
+        <label>میانگین ارزش معامله <select id="pf-adv" style="height:20px;background:var(--bg-app);color:var(--tx-1);border:1px solid var(--line-strong)"><option value="adv20" data-tip="میانگین ارزش معاملات ۲۰ روز اخیر؛ به تغییر اخیر نقدشوندگی حساس‌تر است.">۲۰ روز</option><option value="adv60" data-tip="میانگین ارزش معاملات ۶۰ روز اخیر؛ پایدارتر، ولی چند روز معاملهٔ بزرگ آن را بالا می‌برد.">۶۰ روز</option><option value="med60" data-tip="میانهٔ ارزش معاملات ۶۰ روز؛ در برابر روزهای استثنایی (بلوک، صف) مقاوم‌ترین برآورد ظرفیت است.">میانهٔ ۶۰ روز</option></select></label></div>
       <div class="kpis" id="pf-kpis"></div>
       <div class="panel-body"><table class="dt" id="pf-tab"></table></div>
       <div class="lineage" id="pf-lin"></div></section>

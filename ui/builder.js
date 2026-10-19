@@ -94,7 +94,7 @@ function mount(el) {
     <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('شاخص كل را با تعدادی سهم بسازید، نقدشوندگی را فیلتر کنید، نقد یا وام اضافه کنید و ببینید اگر از هر تاریخ گذشته شروع می‌کردید تا امروز چقدر خطا داشتید.')}>ماکت‌ساز · بازسازی شاخص با نمونهٔ کوچک</span><span class="chip" id="rb-chip"${tip('بازه و دادهٔ این نما.')}></span></div>
     <div class="ctl">
       <label${tip('روش انتخاب سهام نمونه از میان نامزدهای نگهداری.')}>روش <span class="seg" id="rb-method">${Object.entries(METHODS).map(([k, t]) => `<button data-v="${k}" aria-pressed="false"${tip('روش انتخاب: ' + t)}>${t}</button>`).join('')}</span></label>
-      <label${tip('تعداد سهام نمونه؛ هرچه بیشتر، خطای ردیابی کمتر و هزینهٔ اجرا بیشتر.')}>تعداد سهام <select id="rb-n">${R.Ns.map(n => `<option>${n}</option>`).join('')}</select></label>
+      <label${tip('تعداد سهام نمونه؛ هرچه بیشتر، خطای ردیابی کمتر و هزینهٔ اجرا بیشتر.')}>تعداد سهام <select id="rb-n">${R.Ns.map(n => `<option data-tip="نمونهٔ ${n} سهمی: ${n < 30 ? 'ردیابی ضعیف (TE بالای ۴٪)؛ فقط برای سرمایهٔ خیلی کوچک.' : n < 80 ? 'سازش خطای ردیابی و هزینه (TE ≈ ۳ تا ۴٪ با بهینه‌سازی).' : 'نزدیک کف خطا (TE ≈ ۲٪ با بهینه‌سازی)؛ نیاز به نقدشوندگی بیشتر.'}">${n}</option>`).join('')}</select></label>
       <label${tip('فقط نمادهای نقدشونده اجازهٔ ورود به نمونه دارند؛ وزن هدف همچنان از کل واجدان بورس است، پس خطا بالاتر می‌رود ولی اجرا شدنی‌تر می‌شود.')}>نقدشوندگی <span class="seg" id="rb-liq">${Object.keys(R.liq).map(q => `<button data-v="${q}" aria-pressed="false"${tip(LIQN[q][1])}>${LIQN[q][0]}</button>`).join('')}</span></label>
     </div>
     <div class="ctl">

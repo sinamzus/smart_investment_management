@@ -9,6 +9,7 @@ const jyf = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year: 'numer
 const jy = d => jyf.format(new Date(d + 'T00:00:00Z'));
 const store = { get: k => { try { return JSON.parse(localStorage.getItem('sim.lab.' + k)); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem('sim.lab.' + k, JSON.stringify(v)); } catch (e) { /* بی‌اهمیت */ } } };
 let L = null, CTX = null, pending = null;
+const FAM_TIP = { momentum: 'روند گذشتهٔ قیمت: مومنتوم ۳ تا ۱۲ ماه، بازگشت کوتاه‌مدت، نزدیکی به اوج ۵۲ هفته، مومنتوم صنعت.', risk: 'نوسان، ریسک نزولی، برآوردگرهای بازه‌ای (OHLC)، بتا و نوسان ایدیوسینکراتیک.', liquidity: 'اندازه (ارزش بازار)، نقدناپذیری آمیهود، ارزش و گردش معاملات، روزهای بدون تغییر قیمت.', investment: 'بازده نقدی سود و انتشار سهام (افزایش سرمایهٔ نقدی و جایزه).', quality: 'نسبت‌های مالی: ROE، ROA، حاشیه‌ها، اهرم، نسبت جاری، ثبات و بهبود سودآوری (با زمان دانستن PIT).', value: 'بازده سود هر سهم (E/P).' };
 const FAM = { momentum: 'مومنتوم و روند', risk: 'ریسک و نوسان', liquidity: 'نقدشوندگی و اندازه', investment: 'سرمایه‌گذاری و سود', quality: 'کیفیت (بنیادی)', value: 'ارزش (بنیادی)' };
 const FAMCOL = { momentum: 'var(--ch-2)', risk: 'var(--ch-3)', liquidity: 'var(--warn)', investment: 'var(--up)', quality: 'var(--accent-tx)', value: 'var(--down)' };
 const f1 = (x, d = 1) => x == null || x !== x ? '—' : fmt(x, d);
@@ -51,6 +52,24 @@ const PRESETS = {
   'انتخاب پویای ۵ معیار': { signals: null, combine: 'topk_icir', topk: 5 },
 };
 const COMB = [['equal', 'میانگین وزنی Z'], ['rank', 'میانگین رتبه‌ای'], ['ic', 'وزن‌دهی با IC (۳۶ ماه)'], ['icir', 'وزن‌دهی با ICIR'], ['fm', 'وزن Fama–MacBeth'], ['ridge', 'ریج (FM با جریمه)'], ['topk_icir', 'انتخاب پویای k معیار برتر']];
+const COMB_TIP = {
+  equal: 'Z هر معیار (وینسورشده، خنثی‌شده به صنعت) با وزن ثابت شما جمع می‌شود. ساده و مقاوم؛ در فصل ۱۴ از روش‌های برآوردی بهتر بود.',
+  rank: 'به‌جای Z، رتبهٔ درصدی هر معیار میانگین می‌شود؛ به داده‌های پرت و توزیع‌های کج حساس نیست. بهترین روش c1 در فصل ۱۴.',
+  ic: 'وزن هر معیار ∝ میانگین IC آن در ۳۶ ماه گذشته (فقط داده‌های پیشین). معیارهای اخیراً موفق وزن بیشتری می‌گیرند؛ ناپایدارتر.',
+  icir: 'وزن ∝ میانگین IC ÷ انحراف معیار IC در ۳۶ ماه (نسبت اطلاعاتی IC)؛ ثبات معیار را پاداش می‌دهد.',
+  fm: 'وزن‌ها از ضریب‌های رگرسیون مقطعی Fama–MacBeth در ۳۶ ماه گذشته؛ هم‌خطی معیارها را در نظر می‌گیرد ولی پرنوسان است.',
+  ridge: 'مثل Fama–MacBeth با جریمهٔ ریج که ضریب‌ها را به صفر نزدیک می‌کند؛ کمی پایدارتر.',
+  topk_icir: 'هر ماه k معیار با بیشترین |ICIR| در ۳۶ ماه گذشته انتخاب می‌شوند (علامت از IC). در فصل ۱۴ شکست خورد: گردش بسیار بالا.',
+};
+const PARAM_TIP = {
+  G: 'سهام واجد بر پایهٔ امتیاز به G گروه هم‌اندازه تقسیم می‌شوند (۵ = پنجک، ۱۰ = دهک).',
+  k: 'کدام گروه نگه داشته شود؛ G یعنی قوی‌ترین گروه.',
+  entry: 'نماد وقتی وارد سبد می‌شود که در این سهم برتر امتیاز باشد (۰٫۲ = ۲۰٪ برتر).',
+  exit: 'نماد نگه‌داشته‌شده تا وقتی در این سهم برتر بماند خارج نمی‌شود (بافر). بزرگ‌تر از ورود ⇒ گردش کمتر.',
+  N: 'تعداد نمادهای سبد (برترین N بر پایهٔ امتیاز).',
+  buffer: 'نماد نگه‌داشته‌شده تا رتبهٔ N + بافر خارج نمی‌شود؛ گردش را کم می‌کند.',
+  lam: 'شدت تمایل وزن به امتیاز: وزن ∝ e^{λ·z}. ۰ = هم‌وزن، بزرگ‌تر = متمرکزتر.',
+};
 
 function initLab() {
   const m = $('v-lab'); m.dataset.ready = 1;
@@ -60,26 +79,26 @@ function initLab() {
       <div class="panel-tools"><button class="tool" id="lb-reset" title="بازنشانی به پیش‌فرض">بازنشانی</button></div></div>
     <div class="panel-body scroll lb-body">
       <div class="lb-presets" id="lb-presets"></div>
-      <details open><summary>۱ · جهان سهام</summary><div class="lb-sec">
-        <label class="lb-row"><input type="checkbox" id="lb-m0" checked> بورس</label><label class="lb-row"><input type="checkbox" id="lb-m1" checked> فرابورس</label>
-        <label class="lb-row">حداقل ارزش معاملات روزانه <select id="lb-adv"><option value="0">بدون</option><option value="1e8">۱۰۰ میلیون ریال</option><option value="5e8">۵۰۰ میلیون ریال</option><option value="2e9">۲ میلیارد ریال</option><option value="1e10">۱۰ میلیارد ریال</option></select></label>
-        <label class="lb-row">ریبالانس هر <select id="lb-every"><option value="1">۱ ماه</option><option value="3">۳ ماه</option><option value="6">۶ ماه</option></select></label></div></details>
-      <details open><summary>۲ · معیارها</summary><div class="lb-sec">
+      <details open><summary data-tip="کدام سهام در هر ماه واجد انتخاب‌اند: بازار، حداقل نقدشوندگی و دورهٔ ریبالانس. واجدیت پایه: ۸۰٪ روزهای ۲۵۲ روز داده و معامله در روز سیگنال و اجرا (فصل ۱۴ §۱۴٫۲٫۱).">۱ · جهان سهام</summary><div class="lb-sec">
+        <label class="lb-row" data-tip="سهام بازار بورس تهران در جهان باشند."><input type="checkbox" id="lb-m0" checked> بورس</label><label class="lb-row" data-tip="سهام فرابورس (بازار اول و دوم) در جهان باشند. بازار پایه هیچ‌وقت در جهان نیست."><input type="checkbox" id="lb-m1" checked> فرابورس</label>
+        <label class="lb-row" data-tip="نمادی که میانگین ارزش معاملات ۶۳ روز اخیرش کمتر از این است واجد نیست. در فصل ۱۴ این فیلتر برتری را حفظ کرد ولی ظرفیت را بهتر نکرد.">حداقل ارزش معاملات روزانه <select id="lb-adv"><option value="0" data-tip="بدون فیلتر نقدشوندگی؛ نمادهای بی‌معامله باز هم با قاعدهٔ روز سیگنال/اجرا حذف می‌شوند.">بدون</option><option value="1e8" data-tip="فقط ریزترین نمادها حذف می‌شوند.">۱۰۰ میلیون ریال</option><option value="5e8" data-tip="فیلتر حساسیت فصل ۱۴ (sens:adv).">۵۰۰ میلیون ریال</option><option value="2e9" data-tip="حذف بخش بزرگی از دم کوچک؛ پریمیوم اندازه کم می‌شود.">۲ میلیارد ریال</option><option value="1e10" data-tip="فقط نمادهای پرمعامله؛ جهان کوچک و نزدیک به بزرگ‌ها.">۱۰ میلیارد ریال</option></select></label>
+        <label class="lb-row" data-tip="سبد در آخرین روز معاملاتی هر چند ماه شمسی بازسازی شود؛ بین دو ریبالانس وزن‌ها با بازده رانش می‌کنند.">ریبالانس هر <select id="lb-every"><option value="1" data-tip="ماهانه: سیگنال تازه‌تر، گردش بیشتر.">۱ ماه</option><option value="3" data-tip="فصلی: گردش ≈ نصف ماهانه، با برتری کمی کمتر (فصل ۱۴ §۱۴٫۸٫۴).">۳ ماه</option><option value="6" data-tip="شش‌ماهه: کمترین گردش؛ سیگنال کهنه‌تر.">۶ ماه</option></select></label></div></details>
+      <details open><summary data-tip="معیارهای امتیازدهی و وزن هر کدام. وزن منفی جهت معیار را برمی‌گرداند. پیش‌تنظیم‌های بالا ترکیب‌های رایج را می‌چینند.">۲ · معیارها</summary><div class="lb-sec">
         <div id="lb-sigs"></div>
-        <div class="lb-add"><input id="lb-q" placeholder="جست‌وجوی معیار…" list="lb-dl" autocomplete="off"><datalist id="lb-dl"></datalist><button class="tool" id="lb-addbtn">+ افزودن</button></div>
+        <div class="lb-add"><input id="lb-q" data-tip="نام فارسی یا انگلیسی معیار را بنویسید و از فهرست انتخاب کنید؛ «+ افزودن» آن را با وزن ۱ اضافه می‌کند." placeholder="جست‌وجوی معیار…" list="lb-dl" autocomplete="off"><datalist id="lb-dl"></datalist><button class="tool" id="lb-addbtn" data-tip="معیار نوشته‌شده را با وزن ۱ به فهرست اضافه می‌کند.">+ افزودن</button></div>
         <div class="lb-hint">وزن منفی = معکوس‌کردن جهت. جهت پیش‌فرض هر معیار «بالاتر = بازده مورد انتظار بیشتر» بر پایهٔ ادبیات است.</div></div></details>
-      <details open><summary>۳ · ترکیب</summary><div class="lb-sec">
-        <label class="lb-row">روش <select id="lb-comb"></select></label>
-        <label class="lb-row" id="lb-topk-row" hidden>k <input type="number" id="lb-topk" min="1" max="20" value="5"></label>
-        <label class="lb-row"><input type="checkbox" id="lb-neu" checked> خنثی‌سازی صنعتی</label></div></details>
-      <details open><summary>۴ · الگوریتم انتخاب و وزن‌دهی</summary><div class="lb-sec">
-        <label class="lb-row">الگوریتم <select id="lb-algo"></select></label><div id="lb-params"></div><div class="lb-hint" id="lb-algodesc"></div>
+      <details open><summary data-tip="چطور چند معیار به یک امتیاز تبدیل شوند. معماری یکپارچه: اول امتیازها ترکیب و بعد سبد ساخته می‌شود (فصل ۱۴ §۱۴٫۴).">۳ · ترکیب</summary><div class="lb-sec">
+        <label class="lb-row" data-tip="روش تبدیل چند معیار به یک امتیاز. روش‌های IC/ICIR/FM وزن‌ها را فقط از ماه‌های گذشته برآورد می‌کنند.">روش <select id="lb-comb"></select></label>
+        <label class="lb-row" id="lb-topk-row" data-tip="تعداد معیاری که انتخاب پویا هر ماه نگه می‌دارد." hidden>k <input type="number" id="lb-topk" min="1" max="20" value="5"></label>
+        <label class="lb-row" data-tip="میانگین Z هر صنعت (دست‌کم ۶ سهم) از Z نمادهای آن کم می‌شود تا انتخاب سهم از شرط‌بندی صنعتی جدا شود. صنعت هر نماد با تاریخچهٔ تغییر صنعت."><input type="checkbox" id="lb-neu" checked> خنثی‌سازی صنعتی</label></div></details>
+      <details open><summary data-tip="از امتیاز ترکیبی چطور سبد ساخته شود: کدام نمادها و با چه وزنی. بافر گردش را کم می‌کند.">۴ · الگوریتم انتخاب و وزن‌دهی</summary><div class="lb-sec">
+        <label class="lb-row" data-tip="الگوریتم ساخت سبد از امتیاز. فقط الگوریتم‌های بدون کوواریانس در مرورگر اجرا می‌شوند؛ بقیه در کتابخانه‌اند.">الگوریتم <select id="lb-algo"></select></label><div id="lb-params"></div><div class="lb-hint" id="lb-algodesc"></div>
         <div class="lb-hint">الگوریتم‌های ریسکی (min-var، ERC، HRP، max-div، MVO) به کوواریانس نیاز دارند و در تب «کتابخانه» از پیش محاسبه شده‌اند.</div></div></details>
-      <details open><summary>۵ · اصطکاک</summary><div class="lb-sec">
-        <label class="lb-row">هزینهٔ رفت‌وبرگشت <input type="number" id="lb-cost" min="0" max="500" step="5" value="125"> bp</label>
-        <label class="lb-row">ریبالانس جزئی <input type="number" id="lb-part" min="10" max="100" step="10" value="100"> ٪</label>
-        <label class="lb-row">سقف وزن هر نماد <input type="number" id="lb-maxw" min="0" max="100" step="1" value="0"> ٪ (۰ = بدون)</label></div></details>
-      <div class="lb-run"><button class="btn" id="lb-run">اجرا</button><button class="tool" id="lb-save">ذخیرهٔ این اجرا</button><span class="lb-cnt" id="lb-cnt"></span></div>
+      <details open><summary data-tip="هزینه و محدودیت‌های اجرا: هزینهٔ معامله، ریبالانس جزئی و سقف وزن.">۵ · اصطکاک</summary><div class="lb-sec">
+        <label class="lb-row" data-tip="هزینهٔ خرید + فروش به واحد bp (۱۰۰ bp = ۱٪) روی گردش هر ماه. پیش‌فرض ۱۲۵ bp: کارمزدها + مالیات ۰٫۵٪ فروش [تأیید لازم؛ فصل ۰۶ §۶٫۱].">هزینهٔ رفت‌وبرگشت <input type="number" id="lb-cost" min="0" max="500" step="5" value="125"> bp</label>
+        <label class="lb-row" data-tip="در هر ریبالانس فقط این درصد از فاصلهٔ سبد فعلی تا هدف پر می‌شود (κ). ۵۰٪ گردش را حدود یک‌سوم کم کرد و بهترین ظرفیت را داد.">ریبالانس جزئی <input type="number" id="lb-part" min="10" max="100" step="10" value="100"> ٪</label>
+        <label class="lb-row" data-tip="بیشترین وزن مجاز هر نماد پس از الگوریتم؛ مازاد بین بقیه پخش می‌شود. ۰ = بدون سقف.">سقف وزن هر نماد <input type="number" id="lb-maxw" min="0" max="100" step="1" value="0"> ٪ (۰ = بدون)</label></div></details>
+      <div class="lb-run"><button class="btn" id="lb-run" data-tip="بک‌تست ماهانهٔ همین تنظیمات در مرورگر (۱۳۹۵ تا امروز، خالص از هزینه) و پرتفوی زندهٔ امروز.">اجرا</button><button class="tool" id="lb-save" data-tip="این اجرا را در فهرست «من» نگه می‌دارد تا با اجراهای دیگر روی نمودار مقایسه شود (در همین مرورگر ذخیره می‌شود).">ذخیرهٔ این اجرا</button><span class="lb-cnt" id="lb-cnt"></span></div>
     </div>
   </section>
   <section class="panel lb-main" style="--lg:var(--lg-b)">
@@ -96,16 +115,16 @@ function initLab() {
   <section class="panel lb-side" style="--lg:var(--lg-c)">
     <div class="panel-head"><span class="lg-badge">S</span><span class="panel-title">اجراها و کتابخانه</span>
       <div class="seg" id="lb-stabs"><button data-t="saved" aria-pressed="true">من</button><button data-t="lib" aria-pressed="false">کتابخانه</button></div></div>
-    <div class="ctl" id="lb-libctl" hidden><label>گروه <select id="lb-libgrp"><option value="">همه</option><option value="sig">تک‌معیار</option><option value="algo">الگوریتم‌ها</option><option value="combo">ترکیب‌ها</option><option value="sens">حساسیت‌ها</option><option value="ref">مرجع Factor Lab</option></select></label>
-      <label>مرتب <select id="lb-libsort"><option value="t_net">t خالص</option><option value="excess_net">برتری خالص</option><option value="ir">IR</option><option value="turn_ann">گردش</option></select></label></div>
+    <div class="ctl" id="lb-libctl" hidden><label data-tip="فیلتر کتابخانهٔ ۱۲۲ استراتژی از پیش محاسبه‌شده بر پایهٔ نوع آزمایش.">گروه <select id="lb-libgrp"><option value="" data-tip="همهٔ ۱۲۲ آزمایش ثبت‌شده.">همه</option><option value="sig" data-tip="هر معیار به‌تنهایی با top-fraction بافر ۲۰/۳۰.">تک‌معیار</option><option value="algo" data-tip="سه معیار مرجع (کم‌نوسان، ROE، اندازه) با ۱۱ الگوریتم انتخاب و وزن‌دهی.">الگوریتم‌ها</option><option value="combo" data-tip="ترکیب‌های c1 تا c4 با شش روش ترکیب و انتخاب پویای معیار.">ترکیب‌ها</option><option value="sens" data-tip="حساسیت ترکیب c1 به تأخیر اجرا، جهان، بافر، ریبالانس جزئی، فصلی، فیلتر ADV و خنثی‌سازی.">حساسیت‌ها</option><option value="ref" data-tip="پنجک ۵ بدون بافر، برای مقایسه با نماهای قدیمی Factor Lab.">مرجع Factor Lab</option></select></label>
+      <label data-tip="ترتیب فهرست کتابخانه.">مرتب <select id="lb-libsort"><option value="t_net" data-tip="آمار t نیوی‌وست برتری خالص؛ بهترین معیار «آیا برتری از شانس جداست».">t خالص</option><option value="excess_net" data-tip="برتری خالص سالانه نسبت به مرجع انتخاب‌شده (واحد درصد).">برتری خالص</option><option value="ir" data-tip="نسبت اطلاعاتی: برتری ÷ خطای ردیابی (سالانه).">IR</option><option value="turn_ann" data-tip="گردش یک‌طرفهٔ سالانه؛ بیشتر یعنی هزینهٔ معامله و نیاز به نقدشوندگی بیشتر.">گردش</option></select></label></div>
     <div class="panel-body scroll"><table class="dt" id="lb-list"></table></div>
     <div class="lineage" id="lb-side-lin"></div>
   </section>`;
   // پیش‌تنظیم‌ها
   $('lb-presets').innerHTML = Object.keys(PRESETS).map(k => `<button class="tool pre" data-p="${esc(k)}" data-tip="پیش‌تنظیم «${esc(k)}»: معیارها و روش ترکیب را می‌چیند و اجرا می‌کند؛ بعد می‌توانید دست‌کاری کنید.">${esc(k)}</button>`).join('');
   $$$('#lb-presets .pre').forEach(b => b.onclick = () => applyPreset(b.dataset.p));
-  $('lb-comb').innerHTML = COMB.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
-  $('lb-algo').innerHTML = L.algos.filter(a => E.JS_ALGOS.includes(a.name)).map(a => `<option value="${a.name}">${a.fa}</option>`).join('');
+  $('lb-comb').innerHTML = COMB.map(([v, t]) => `<option value="${v}" data-tip="${esc(COMB_TIP[v] || '')}">${t}</option>`).join('');
+  $('lb-algo').innerHTML = L.algos.filter(a => E.JS_ALGOS.includes(a.name)).map(a => `<option value="${a.name}" data-tip="${esc(a.desc + (a.ref ? ' — ' + a.ref : ''))}">${a.fa}</option>`).join('');
   const fams = {}; L.signals.forEach(s => (fams[s.family] = fams[s.family] || []).push(s));
   $('lb-dl').innerHTML = L.signals.map(s => `<option value="${esc(s.fa)}">${esc(FAM[s.family] || s.family)} · ${s.name}</option>`).join('');
   $('lb-comb').onchange = syncBuilder; $('lb-algo').onchange = () => { lab.spec.algo = $('lb-algo').value; lab.spec.params = {}; renderParams(); };
@@ -147,7 +166,7 @@ function renderSigs() {
   const el = $('lb-sigs');
   el.innerHTML = lab.spec.combine === 'topk_icir' && lab.spec.signals.length > 12 ? `<div class="lb-hint">${lab.spec.signals.length} معیار نامزد (همهٔ معیارهای قیمتی)؛ k برتر هر ماه از روی ICIR ۳۶ ماه گذشته انتخاب می‌شود.</div>` :
     lab.spec.signals.map(([n, w], i) => { const m = sigMeta(n); return `<div class="lb-sig" data-i="${i}"><span class="fam" style="background:${FAMCOL[m.family]}"></span><span class="nm has-tip" data-tip="${esc(m.fa)} — ${esc(m.formula)} · مرجع: ${esc(m.ref)}">${esc(m.fa)}</span>
-      <input type="range" min="-2" max="2" step="0.25" value="${w}" class="w"><output>${w}</output><button class="tool x" title="حذف">×</button></div>`; }).join('') || '<div class="lb-hint">معیاری انتخاب نشده.</div>';
+      <input type="range" min="-2" max="2" step="0.25" value="${w}" class="w" data-tip="وزن «${esc(m.fa)}» در ترکیب (−۲ تا +۲). منفی = جهت معیار برعکس می‌شود؛ صفر = بی‌اثر."><output>${w}</output><button class="tool x" title="حذف">×</button></div>`; }).join('') || '<div class="lb-hint">معیاری انتخاب نشده.</div>';
   $$$('.lb-sig', el).forEach(r => { const i = +r.dataset.i; $$('.w', r).oninput = e => { lab.spec.signals[i][1] = +e.target.value; $$('output', r).textContent = e.target.value; }; $$('.x', r).onclick = () => { lab.spec.signals.splice(i, 1); renderSigs(); }; });
 }
 function addSignalFromBox() {
@@ -161,7 +180,7 @@ const PARAMS = { quantile: [['G', 'تعداد گروه', 5, 2, 20, 1], ['k', 'گ
   topn: [['N', 'تعداد نماد', 50, 10, 300, 5], ['buffer', 'بافر (رتبه)', 25, 0, 150, 5]], score_tilt: [['lam', 'شدت λ', 1, 0, 3, 0.25]], rank_weight: [], msci_tilt: [], inv_vol: [['entry', 'ورود', 0.3, 0.05, 0.6, 0.05], ['exit', 'خروج', 0.4, 0.05, 0.8, 0.05]] };
 function renderParams() {
   const a = lab.spec.algo, ps = PARAMS[a] || [], meta = L.algos.find(x => x.name === a);
-  $('lb-params').innerHTML = ps.map(([k, t, d, lo, hi, st]) => { const v = (lab.spec.params && lab.spec.params[k]) ?? d; return `<label class="lb-row">${t} <input type="number" data-k="${k}" min="${lo}" max="${hi}" step="${st}" value="${v}"></label>`; }).join('');
+  $('lb-params').innerHTML = ps.map(([k, t, d, lo, hi, st]) => { const v = (lab.spec.params && lab.spec.params[k]) ?? d; return `<label class="lb-row" data-tip="${esc(PARAM_TIP[k] || '')}">${t} <input type="number" data-k="${k}" min="${lo}" max="${hi}" step="${st}" value="${v}"></label>`; }).join('');
   $$$('#lb-params input').forEach(i => { i.oninput = () => { lab.spec.params = lab.spec.params || {}; lab.spec.params[i.dataset.k] = +i.value; }; });
   $('lb-algodesc').textContent = meta ? meta.desc + ' — ' + meta.ref : '';
 }
@@ -405,7 +424,7 @@ function initSig() {
     <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title">باغ‌وحش معیارها · IC و پریمیوم</span><span class="chip" id="sg-chip"></span>
       <div class="seg" id="sg-view"><button data-v="table" aria-pressed="true">جدول</button><button data-v="corr" aria-pressed="false">همبستگی</button></div>
       <div class="panel-tools"><button class="tool" id="sg-csv">CSV</button></div></div>
-    <div class="ctl"><label>خانواده <select id="sg-fam"><option value="">همه</option>${Object.entries(FAM).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label><label>جست‌وجو <input id="sg-q" placeholder="نام یا مرجع" style="width:140px"></label><span class="mute" id="sg-note"></span></div>
+    <div class="ctl"><label data-tip="فیلتر جدول معیارها بر پایهٔ خانواده.">خانواده <select id="sg-fam"><option value="" data-tip="همهٔ ۵۰ معیار.">همه</option>${Object.entries(FAM).map(([k, v]) => `<option value="${k}" data-tip="${esc(FAM_TIP[k] || '')}">${v}</option>`).join('')}</select></label><label>جست‌وجو <input id="sg-q" placeholder="نام یا مرجع" style="width:140px"></label><span class="mute" id="sg-note"></span></div>
     <div class="panel-body scroll"><table class="dt" id="sg-tab"></table><div id="sg-corr" hidden></div></div>
     <div class="lineage" id="sg-lin"></div></section>
   <section class="panel" style="--lg:var(--lg-b)">
@@ -469,7 +488,8 @@ window.SIM_SEND_PLAN = sendToPlan;
 function fillPlanSrc() {
   const cur = $('pl-src').value, sent = window.SIM_PLAN_SRC;
   const opts = [...(sent ? [['sent', 'ارسال‌شده: ' + sent.name]] : []), ['K', 'شاخص كل (ارزش‌وزن، بورس)'], ['EW', 'كل (هم وزن) (بورس)'], ['lab', 'خروجی فعلی Lab'], ...L.library.filter(r => r.live && r.live.top && r.live.top.length).map(r => ['lib:' + r.id, 'کتابخانه · ' + r.name])];
-  $('pl-src').innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
+  const srcTip = v => v === 'sent' ? 'وزن هدفی که از نمای دیگری (ماکت‌ساز، شاخص بهبودیافته، Lab) فرستاده شده.' : v === 'K' ? 'وزن ارزش بازار همهٔ واجدان بورس؛ تقریب «شاخص كل» رسمی.' : v === 'EW' ? 'وزن برابر همهٔ واجدان بورس؛ تقریب «كل (هم وزن)».' : v === 'lab' ? 'پرتفوی زندهٔ آخرین اجرای سازندهٔ Lab (وزن هدف امروز).' : 'پرتفوی زندهٔ امروز این استراتژی از کتابخانهٔ پایتون؛ آمار آن در Lab ← کتابخانه.';
+  $('pl-src').innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}" data-tip="${esc(srcTip(v))}">${esc(t)}</option>`).join('');
   if (opts.some(o => o[0] === cur)) $('pl-src').value = cur;
 }
 function initPlan() {

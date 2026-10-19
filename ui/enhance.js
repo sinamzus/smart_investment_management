@@ -242,7 +242,7 @@ function mount(el, api) {
   $('en-run').onclick = () => go(api);
   $('en-reset').onclick = () => { Object.assign(S, { gamma: 1, ew: 0, kappa: 0, cap: 0, sec: {}, sig: '' }); ['en-gamma', 'en-ew', 'en-cap', 'en-kappa'].forEach((i, n) => { $(i).value = [1, 0, 0, 0][n]; }); $('en-sig').value = ''; run = null; secTable(); api.set(null); $('en-chip').textContent = 'شاخص رسمی'; $('en-kpi').innerHTML = ''; $('en-lin').innerHTML = ''; };
   needX().then(secTable);
-  if (root.SIM_REP && root.SIM_ENSURE_LAB) root.SIM_ENSURE_LAB(() => { const L = root.SIM_LAB; $('en-sig').innerHTML = '<option value="">— بدون —</option>' + L.signals.map(s => `<option value="${esc(s.name)}">${esc(s.fa || s.name)}</option>`).join(''); });
+  if (root.SIM_REP && root.SIM_ENSURE_LAB) root.SIM_ENSURE_LAB(() => { const L = root.SIM_LAB; $('en-sig').innerHTML = '<option value="" data-tip="بدون تیلت معیار؛ فقط تیلت‌های بالا اعمال می‌شوند.">— بدون —</option>' + L.signals.map(s => `<option value="${esc(s.name)}" data-tip="${esc((s.formula || '') + (s.ref ? ' — ' + s.ref : ''))}">${esc(s.fa || s.name)}</option>`).join(''); });
 }
 function secTable() {
   if (!ctx) return;
@@ -250,7 +250,7 @@ function secTable() {
   for (let i = 0; i < ctx.k; i++) if (mc[i] > 0) { w.set(ctx.names[i].sec, (w.get(ctx.names[i].sec) || 0) + mc[i]); t += mc[i]; }
   const rows = [...w.entries()].sort((a, b) => b[1] - a[1]);
   $('en-sec').innerHTML = `<thead><tr><th${tip('صنعت.')}>صنعت</th><th class="n"${tip('وزن صنعت در شاخص (آخرین روز).')}>وزن شاخص ٪</th><th class="n"${tip('تیلت نسبی ٪: −۱۰۰ حذف، ۰ بدون تغییر، +۵۰ یعنی ۱٫۵ برابر.')}>تیلت ٪</th></tr></thead><tbody>` +
-    rows.map(([s, v]) => `<tr><td>${esc(ctx.sectors[s])}</td><td class="n">${f(100 * v / t, 1)}</td><td class="n"><input type="number" data-s="${s}" value="${S.sec[s] || 0}" min="-100" max="300" step="10" style="width:70px"></td></tr>`).join('') + '</tbody>';
+    rows.map(([s, v]) => `<tr><td>${esc(ctx.sectors[s])}</td><td class="n">${f(100 * v / t, 1)}</td><td class="n"><input type="number" data-s="${s}" data-tip="تیلت صنعت «${esc(ctx.sectors[s])}» به درصد: −۱۰۰ حذف، ۰ بدون تغییر، +۵۰ یعنی ۱٫۵ برابر وزن شاخص." value="${S.sec[s] || 0}" min="-100" max="300" step="10" style="width:70px"></td></tr>`).join('') + '</tbody>';
   $('en-sec').querySelectorAll('input').forEach(i => { i.onchange = e => { S.sec[+e.target.dataset.s] = +e.target.value; }; });
 }
 

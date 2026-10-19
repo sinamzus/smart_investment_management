@@ -3,12 +3,24 @@
    (یا فوکوس صفحه‌کلید) توضیح، فرمول و مرجع سند را نشان می‌دهد. برچسب‌های دارای راهنما خط‌چین زیرشان دارند. */
 (function () {
   const G = window.SIM_GLOSSARY; if (!G) return;
-  const SEL = 'th, .kpi .k, .panel-title, .lineage b, .legend span:not(.readout), .seg button, button.tool, .chip, .nav a, .ctl label, .ctl .mute, .statusbar span, .topbar button, .cmd, .lg-badge, .symlink, #dev td .chip, #dev td .num, #pf-tab td .chip, #qa-sec td .chip, #fn-tab td .chip, #rk-corr td, #sy-title, #sy-q, #sy-info td:first-child';
+  const SEL = 'th, .kpi .k, .panel-title, .lineage b, .legend span:not(.readout), .seg button, button.tool, .chip, .nav a, .ctl label, .ctl .mute, .statusbar span, .topbar button, .cmd, .lg-badge, .symlink, #dev td .chip, #dev td .num, #pf-tab td .chip, #qa-sec td .chip, #fn-tab td .chip, #rk-corr td, #sy-title, #sy-q, #sy-info td:first-child, summary, .lb-row, [data-tip]';
   const norm = t => t.replace(/\s+/g, ' ').trim().replace(/[\s%٪:.]+$/, '').replace(/(\D)\d+$/, '$1').trim();
   const E = {}; for (const k in G.E) E[norm(k)] = G.E[k];                 // کلیدهای واژه‌نامه هم یکسان‌سازی شوند
   const viewOf = el => { const m = el.closest('main.workspace'); return m ? m.id.replace(/^v-/, '') : ''; };
 
+  /* منوی کشویی: توضیح گزینهٔ انتخاب‌شده (data-tip یا title روی <option>) کنار راهنمای خود منو می‌آید؛
+     مرورگرها hover روی گزینه‌های باز منو را قابل‌اعتماد نشان نمی‌دهند، پس راهنمای منو همیشه گزینهٔ فعلی را هم می‌گوید. */
+  function optNote(el) {
+    const s = el.tagName === 'SELECT' ? el : (el.tagName === 'LABEL' ? el.querySelector('select') : null);
+    if (!s) return '';
+    const o = s.selectedOptions && s.selectedOptions[0], d = o && (o.dataset.tip || o.title);
+    return d ? `«${o.textContent.trim()}»: ${d}` : '';
+  }
   function lookup(el) {
+    const r = lookup0(el), o = optNote(el);
+    return o ? { ...(r || {}), d: (r && r.d) || '', o } : r;
+  }
+  function lookup0(el) {
     if (el.dataset.tip) return { d: el.dataset.tip };
     for (const [sel, fn] of G.RULES) if (el.matches(sel)) { const r = fn(el); if (r) return r; }
     if (el.matches('.nav a')) { const t = norm(el.textContent); return E[t] ? { ...E[t], t } : null; }
@@ -49,7 +61,7 @@
 
   function show(el) {
     const r = lookup(el); if (!r) return;
-    tip.innerHTML = `${r.t ? `<div class="tt">${esc(r.t)}</div>` : ''}<div class="td">${esc(r.d)}</div>${r.f ? `<div class="tf">${esc(r.f)}</div>` : ''}${r.s ? `<div class="ts">${esc(r.s)}</div>` : ''}`;
+    tip.innerHTML = `${r.t ? `<div class="tt">${esc(r.t)}</div>` : ''}${r.d ? `<div class="td">${esc(r.d)}</div>` : ''}${r.o ? `<div class="to">${esc(r.o)}</div>` : ''}${r.f ? `<div class="tf">${esc(r.f)}</div>` : ''}${r.s ? `<div class="ts">${esc(r.s)}</div>` : ''}`;
     tip.hidden = false; tip.style.left = '0px'; tip.style.top = '0px';
     const b = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, W = innerWidth, H = innerHeight, g = 8;
     let x = b.right - w; if (x < g) x = Math.min(b.left, W - w - g); x = Math.max(g, Math.min(x, W - w - g));
@@ -68,6 +80,7 @@
   document.addEventListener('pointerout', e => { if (cur && !cur.contains(e.relatedTarget)) hide(); });
   document.addEventListener('focusin', e => { const el = target(e); hide(); if (el) { cur = el; show(el); } });
   document.addEventListener('focusout', hide);
+  document.addEventListener('change', e => { const el = target(e); if (el && el === cur) show(el); });   // گزینهٔ تازهٔ منو
   document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
   addEventListener('scroll', hide, true);
   /* لمس: نگه‌داشتن انگشت (۵۰۰ میلی‌ثانیه) راهنما را نشان می‌دهد */

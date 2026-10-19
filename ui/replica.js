@@ -38,7 +38,7 @@ function initSam() {
   <section class="panel" style="--lg:var(--lg-b)">
     <div class="panel-head"><span class="lg-badge">5</span><span class="panel-title"${tip('خطای ردیابی در برابر تعداد سهام نمونه، برای هر روش و حالت اهرم.')}>نتیجه · خطای ردیابی در برابر تعداد سهام</span><span class="chip" id="sm-chip"${tip('بازه، نرخ وام و هزینه‌ای که نتایج با آن محاسبه شده‌اند.')}></span></div>
     <div class="ctl">
-      <label${tip('کدام معیار روی نمودار و ستون برجسته نشان داده شود.')}>معیار <select id="sm-metric">${METRICS.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
+      <label${tip('کدام معیار روی نمودار و ستون برجسته نشان داده شود.')}>معیار <select id="sm-metric">${METRICS.map(([k, t, d]) => `<option value="${k}" data-tip="${esc(d)}">${t}</option>`).join('')}</select></label>
       <label${tip('روش انتخاب سهام؛ «همه» هر سه را روی نمودار نشان می‌دهد.')}>روش <span class="seg" id="sm-method"><button data-v="all" aria-pressed="false"${tip('هر سه روش را با هم نشان بده.')}>همه</button>${Object.entries(METHODS).map(([k, t]) => `<button data-v="${k}" aria-pressed="false"${tip('روش انتخاب: ' + t)}>${t}</button>`).join('')}</span></label>
       <label${tip('بدون وام یعنی L = ۱؛ تراز بتا یعنی L = ۱/β (بُرش ۰٫۷–۱٫۵). L < ۱ نقدنگه‌داری است نه وام.')}>اهرم <span class="seg" id="sm-lev"><button data-v="none" aria-pressed="false"${tip('بدون وام و بدون نقد: کاملاً سرمایه‌گذاری‌شده.')}>بدون وام</button><button data-v="beta" aria-pressed="false"${tip('اهرم L = ۱/β هر ماه؛ اگر بتای نمونه > ۱ باشد L < ۱ و بخشی نقد می‌ماند.')}>تراز بتا</button></span></label>
     </div>

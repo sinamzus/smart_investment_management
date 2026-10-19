@@ -14,6 +14,7 @@
 .lb-body details:not([open]) summary::before { content: '◂'; }
 .lb-sec { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3); font-size: var(--fs-xs); color: var(--tx-2); }
 .lb-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.lb-row[hidden] { display: none; }                                 /* «k» فقط برای انتخاب پویای معیار؛ display:flex بالا hidden را بی‌اثر می‌کرد */
 .lb-row input[type=number], .lb-row select, .lb-add input, .ctl select, .ctl textarea, .ctl input[type=text] { background: var(--bg-app); border: var(--hair) solid var(--line-strong); color: var(--tx-1); border-radius: var(--radius); height: 30px; padding: 0 8px; font: var(--fs-xs) var(--font-ui); }
 .ctl textarea { height: auto; padding: 4px 6px; font-family: var(--font-num); direction: ltr; }
 .lb-row input[type=number] { width: 72px; direction: ltr; text-align: end; font-family: var(--font-num); }
