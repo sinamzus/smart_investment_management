@@ -28,6 +28,8 @@
 .lb-sig .nm { color: var(--tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-sig output { font: 11px var(--font-num); direction: ltr; text-align: end; color: var(--tx-2); }
 .lb-sig input[type=range] { width: 90px; accent-color: var(--accent); }
+.lb-sig .eff { grid-column: 2 / -1; font-size: var(--fs-2xs); color: var(--tx-3); margin-top: -2px; }
+.lb-sig .eff[hidden] { display: none; }
 .lb-add { display: flex; gap: 4px; }
 .lb-add input { flex: 1; }
 .lb-run { position: sticky; bottom: 0; display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); background: var(--bg-panel); border-top: var(--hair) solid var(--line); }

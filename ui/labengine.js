@@ -116,13 +116,31 @@ function score(ctx, spec, r) {
   if (method === 'rank') {
     const allm = new Uint8Array(k).fill(1), R = Zs.map(z => rankPct(z, allm)), den = ws.reduce((t, x) => t + Math.abs(x), 0) || 1;
     for (let i = 0; i < k; i++) { let s = 0, c = 0; for (let a = 0; a < R.length; a++) if (!isNaN(R[a][i])) { s += ws[a] * R[a][i]; c++; } out[i] = c >= need ? s / den : NaNv; }
+    out.ws = ws; out.wn = names;                                            // وزن مؤثر همین ماه (برای نمایش در سازنده)
     return out;
   }
   for (let i = 0; i < k; i++) { let s = 0, c = 0; for (let a = 0; a < Zs.length; a++) if (!isNaN(Zs[a][i])) { s += ws[a] * Zs[a][i]; c++; } out[i] = c >= need ? s : NaNv; }
   let m = 0, c = 0; for (let i = 0; i < k; i++) if (!isNaN(out[i])) { m += out[i]; c++; }
   m /= Math.max(c, 1); let v = 0; for (let i = 0; i < k; i++) if (!isNaN(out[i])) v += (out[i] - m) ** 2; const s = Math.sqrt(v / Math.max(c, 1)) || 1;
   for (let i = 0; i < k; i++) out[i] = isNaN(out[i]) ? NaNv : (out[i] - m) / s;
+  out.ws = ws; out.wn = names;
   return out;
+}
+
+/** وزن مؤثر هر معیار در هر ماه بک‌تست و امروز: سهم علامت‌دار w_i ÷ Σ|w|. در روش‌های IC، ICIR، FM، ریج و انتخاب پویا وزن‌ها هر ماه
+    از داده‌های گذشته برآورد می‌شوند و با وزن اسلایدر فرق دارند. خروجی: { n ماه، avg میانگین سهم، sel سهم ماه‌های با وزن غیرصفر، last امروز }. */
+function effWeights(ctx, spec) {
+  const rows = [...ctx.use, ctx.rows - 1], acc = {}, live = ctx.rows - 1; let n = 0, last = null;
+  for (const r of rows) {
+    const s = score(ctx, spec, r); if (!s.ws) continue;
+    const tot = s.ws.reduce((t, x) => t + Math.abs(x), 0); if (!(tot > 0)) continue;
+    const sh = s.ws.map(x => x / tot);
+    if (r === live) { last = {}; s.wn.forEach((nm, i) => { last[nm] = sh[i]; }); continue; }
+    s.wn.forEach((nm, i) => { const a = acc[nm] || (acc[nm] = { sum: 0, sel: 0 }); a.sum += sh[i]; if (s.ws[i] !== 0) a.sel++; });
+    n++;
+  }
+  const avg = {}, sel = {}; for (const [nm, a] of Object.entries(acc)) { avg[nm] = n ? a.sum / n : NaNv; sel[nm] = n ? a.sel / n : NaNv; }
+  return { n, avg, sel, last };
 }
 
 /* ── الگوریتم‌ها: ctx = {score, ok, held, mcap, vol} → وزن ── */
@@ -266,5 +284,5 @@ function deciles(ctx, spec, costBp = 125) {
   return { ann, spread_t: nwT(sp), spread_ann: mean(sp) * 1200, spearman: cv / Math.sqrt(va * vb), up: ann.slice(1).filter((v, i) => v > ann[i]).length };
 }
 
-root.LabEngine = { load, run, stats, deciles, verdict, dsr, nwT, annOf, JS_ALGOS, zAt, fwAt, okAt, score, spearman, Phi, PhiInv };
+root.LabEngine = { load, run, stats, deciles, verdict, dsr, nwT, annOf, JS_ALGOS, zAt, fwAt, okAt, score, effWeights, spearman, Phi, PhiInv };
 })(typeof window !== 'undefined' ? window : globalThis);

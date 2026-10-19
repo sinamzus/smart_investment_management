@@ -127,7 +127,7 @@ function initLab() {
   $('lb-algo').innerHTML = L.algos.filter(a => E.JS_ALGOS.includes(a.name)).map(a => `<option value="${a.name}" data-tip="${esc(a.desc + (a.ref ? ' — ' + a.ref : ''))}">${a.fa}</option>`).join('');
   const fams = {}; L.signals.forEach(s => (fams[s.family] = fams[s.family] || []).push(s));
   $('lb-dl').innerHTML = L.signals.map(s => `<option value="${esc(s.fa)}">${esc(FAM[s.family] || s.family)} · ${s.name}</option>`).join('');
-  $('lb-comb').onchange = syncBuilder; $('lb-algo').onchange = () => { lab.spec.algo = $('lb-algo').value; lab.spec.params = {}; renderParams(); };
+  $('lb-comb').onchange = syncBuilder; $('lb-neu').addEventListener('change', renderEff); $('lb-topk').addEventListener('input', renderEff); $('lb-algo').onchange = () => { lab.spec.algo = $('lb-algo').value; lab.spec.params = {}; renderParams(); };
   $('lb-addbtn').onclick = addSignalFromBox; $('lb-q').onkeydown = e => { if (e.key === 'Enter') addSignalFromBox(); };
   $('lb-run').onclick = () => runLab(true); $('lb-save').onclick = saveRun; $('lb-reset').onclick = () => { setSpec(JSON.parse(JSON.stringify(DEFAULT))); runLab(true); };
   $$$('#lb-tabs button').forEach(b => b.onclick = () => { lab.tab = b.dataset.t; $$$('#lb-tabs button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderTab(); });
@@ -161,13 +161,38 @@ function setSpec(s) {
   $('lb-algo').value = E.JS_ALGOS.includes(s.algo) ? s.algo : 'topfrac'; $('lb-cost').value = s.cost_bp ?? 125; $('lb-part').value = Math.round((s.partial ?? 1) * 100); $('lb-maxw').value = Math.round((s.max_w || 0) * 100);
   renderSigs(); renderParams(); syncBuilder();
 }
-function syncBuilder() { $('lb-topk-row').hidden = $('lb-comb').value !== 'topk_icir'; }
+function syncBuilder() { $('lb-topk-row').hidden = $('lb-comb').value !== 'topk_icir'; renderEff(); }
+/* وزن مؤثر: در روش‌های برآوردی (IC، ICIR، FM، ریج، انتخاب پویا) وزن واقعی هر ماه از داده‌های گذشته ساخته می‌شود و اسلایدر فقط وزن پایه (یا علامت) است؛
+   اینجا سهم علامت‌دار هر معیار از کل وزن، میانگین ماه‌های بک‌تست و امروز، نشان داده می‌شود (LabEngine.effWeights). */
+const ADAPTIVE = { ic: 1, icir: 1, fm: 1, ridge: 1, topk_icir: 1 };
+let effTimer = 0;
+function renderEff() {
+  clearTimeout(effTimer);
+  const cells = $$$('#lb-sigs .eff'); if (!cells.length) return;
+  const comb = $('lb-comb').value;
+  if (!ADAPTIVE[comb]) { cells.forEach(c => { c.textContent = ''; c.hidden = true; }); return; }
+  cells.forEach(c => { c.hidden = false; c.textContent = 'وزن مؤثر: در حال محاسبه…'; });
+  effTimer = setTimeout(() => {
+    try {
+      const sp = { ...lab.spec, combine: comb, topk: +$('lb-topk').value || 5, neutral: $('lb-neu').checked };
+      const e = E.effWeights(CTX, sp), pc = x => x == null || x !== x ? '—' : `<span dir="ltr" style="unicode-bidi:isolate">${sg1(100 * x, 0)}٪</span>`;   // جداسازی چپ‌به‌راست تا علامت و ٪ در متن راست‌به‌چپ جابه‌جا نشوند
+      cells.forEach(c => {
+        const nm = c.dataset.n, a = e.avg[nm], l = e.last ? e.last[nm] : null, s = e.sel[nm];
+        c.innerHTML = comb === 'topk_icir'
+          ? `انتخاب در <span dir="ltr" style="unicode-bidi:isolate">${f1(100 * s, 0)}٪</span> ماه‌ها · امروز ${l ? 'انتخاب‌شده (' + pc(l) + ')' : 'انتخاب‌نشده'}`
+          : `وزن مؤثر: میانگین ${pc(a)} · امروز ${pc(l)}`;
+        c.dataset.tip = `سهم علامت‌دار این معیار از کل وزن ترکیب. روش «${(COMB.find(x => x[0] === comb) || [0, comb])[1]}» وزن‌ها را هر ماه از ۳۶ ماه گذشته برآورد می‌کند؛ میانگین روی ${e.n} ماه بک‌تست، «امروز» وزن سبد زندهٔ امروز. اسلایدر در IC/ICIR ضریب و در FM/ریج فقط علامت است.`;
+      });
+    } catch (err) { console.error(err); cells.forEach(c => { c.textContent = ''; }); }
+  }, 60);
+}
 function renderSigs() {
   const el = $('lb-sigs');
   el.innerHTML = lab.spec.combine === 'topk_icir' && lab.spec.signals.length > 12 ? `<div class="lb-hint">${lab.spec.signals.length} معیار نامزد (همهٔ معیارهای قیمتی)؛ k برتر هر ماه از روی ICIR ۳۶ ماه گذشته انتخاب می‌شود.</div>` :
     lab.spec.signals.map(([n, w], i) => { const m = sigMeta(n); return `<div class="lb-sig" data-i="${i}"><span class="fam" style="background:${FAMCOL[m.family]}"></span><span class="nm has-tip" data-tip="${esc(m.fa)} — ${esc(m.formula)} · مرجع: ${esc(m.ref)}">${esc(m.fa)}</span>
-      <input type="range" min="-2" max="2" step="0.25" value="${w}" class="w" data-tip="وزن «${esc(m.fa)}» در ترکیب (−۲ تا +۲). منفی = جهت معیار برعکس می‌شود؛ صفر = بی‌اثر."><output>${w}</output><button class="tool x" title="حذف">×</button></div>`; }).join('') || '<div class="lb-hint">معیاری انتخاب نشده.</div>';
-  $$$('.lb-sig', el).forEach(r => { const i = +r.dataset.i; $$('.w', r).oninput = e => { lab.spec.signals[i][1] = +e.target.value; $$('output', r).textContent = e.target.value; }; $$('.x', r).onclick = () => { lab.spec.signals.splice(i, 1); renderSigs(); }; });
+      <input type="range" min="-2" max="2" step="0.25" value="${w}" class="w" data-tip="وزن «${esc(m.fa)}» در ترکیب (−۲ تا +۲). منفی = جهت معیار برعکس می‌شود؛ صفر = بی‌اثر."><output>${w}</output><button class="tool x" title="حذف">×</button><div class="eff" data-n="${esc(n)}"></div></div>`; }).join('') || '<div class="lb-hint">معیاری انتخاب نشده.</div>';
+  renderEff();
+  $$$('.lb-sig', el).forEach(r => { const i = +r.dataset.i; $$('.w', r).oninput = e => { lab.spec.signals[i][1] = +e.target.value; $$('output', r).textContent = e.target.value; renderEff(); }; $$('.x', r).onclick = () => { lab.spec.signals.splice(i, 1); renderSigs(); }; });
 }
 function addSignalFromBox() {
   const v = $('lb-q').value.trim(), s = L.signals.find(x => x.fa === v || x.name === v);
