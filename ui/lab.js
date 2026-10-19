@@ -170,7 +170,16 @@ function renderEff() {
   clearTimeout(effTimer);
   const cells = $$$('#lb-sigs .eff'); if (!cells.length) return;
   const comb = $('lb-comb').value;
-  if (!ADAPTIVE[comb]) { cells.forEach(c => { c.textContent = ''; c.hidden = true; }); return; }
+  if (!ADAPTIVE[comb]) {                                                 // روش ثابت: سهم هر معیار همان نسبت وزن اسلایدرهاست
+    const tot = lab.spec.signals.reduce((s, [, w]) => s + Math.abs(w), 0) || 1;
+    cells.forEach(c => {
+      const w = (lab.spec.signals.find(([n]) => n === c.dataset.n) || [0, 0])[1];
+      c.hidden = false;
+      c.innerHTML = `وزن مؤثر: <span dir="ltr" style="unicode-bidi:isolate">${sg1(100 * w / tot, 0)}٪</span> (ثابت در همهٔ ماه‌ها)`;
+      c.dataset.tip = `سهم علامت‌دار این معیار از کل وزن ترکیب. در روش «${(COMB.find(x => x[0] === comb) || [0, comb])[1]}» وزن‌ها همان اسلایدرها و در همهٔ ماه‌ها ثابت‌اند؛ در روش‌های IC، ICIR، FM، ریج و انتخاب پویا وزن واقعی هر ماه از ۳۶ ماه گذشته برآورد می‌شود و اینجا میانگین و امروزش نشان داده می‌شود.`;
+    });
+    return;
+  }
   cells.forEach(c => { c.hidden = false; c.textContent = 'وزن مؤثر: در حال محاسبه…'; });
   effTimer = setTimeout(() => {
     try {
