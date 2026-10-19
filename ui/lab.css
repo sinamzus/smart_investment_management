@@ -96,7 +96,7 @@ th.sortable.asc::after { content: ' ▲'; } th.sortable.desc::after { content: '
 .lb-step small { color: var(--tx-3); font-size: var(--fs-2xs); line-height: 1.6; overflow-wrap: anywhere; }
 .lb-body details.flash > summary { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* نماهای «نمونهٔ کوچک + وام» و «دفتر زنده»: پنل‌های عمودی با اسکرول */
+/* نماهای «بازسازی شاخص» و «دفتر زنده»: پنل‌های عمودی با اسکرول */
 .workspace.v-sam, .workspace.v-live { background: var(--bg-app); display: flex; flex-direction: column; gap: var(--s-4); overflow: auto; padding: var(--s-2) var(--s-5) var(--s-5); align-content: flex-start; }
 .workspace.v-sam > .panel, .workspace.v-live > .panel { flex: 0 0 auto; }
 .v-sam .lb-flow { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
@@ -112,7 +112,7 @@ th.sortable.asc::after { content: ' ▲'; } th.sortable.desc::after { content: '
 .lb-main .kpi .v { font-size: var(--fs-lg); }
 .workspace.v-sam[hidden], .workspace.v-live[hidden] { display: none; }
 
-/* «نمونهٔ کوچک + وام» (۲۰۲۶-۱۰-۱۹): پاسخ اول، سازندهٔ دوستونه مثل Lab، جزئیات زبانه‌ای، پیشرفته و روش‌شناسی تاشو */
+/* «بازسازی شاخص» (۲۰۲۶-۱۰-۱۹): پاسخ اول، سازندهٔ دوستونه مثل Lab، جزئیات زبانه‌ای، پیشرفته و روش‌شناسی تاشو */
 .rb-grid { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); align-items: stretch; }
 .rb-ctl { display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-3) var(--s-4) var(--s-4); background: var(--bg-head); border-inline-end: var(--hair) solid var(--line); }
 .rb-g { display: flex; flex-direction: column; gap: var(--s-2); }

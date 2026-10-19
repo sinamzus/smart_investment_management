@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""دادهٔ دو نمای UI «نمونهٔ کوچک + وام» و «دفتر زنده» → ui/data/live.js (window.SIM_LIVE).
+"""دادهٔ دو نمای UI «بازسازی شاخص» و «دفتر زنده» → ui/data/live.js (window.SIM_LIVE).
 
     python tools/build_ui_live.py
 

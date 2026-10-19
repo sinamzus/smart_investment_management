@@ -44,7 +44,7 @@ smart_investment_management/
 │   ├── signals.py, construction.py, factor_engine.py, research_stats.py, build_quality.py   # معیارها، الگوریتم‌ها، بک‌تست، آمار (فصل ۴، ۵، ۱۴)
 │   ├── sampled_replica.py, build_replica_*.py # همتاساز (فصل ۳ §۳٫۵)
 │   ├── live_ledger.py                         # استراتژی قفل‌شده، دستور اجرا `sim.trade_plan/1`، رهگیری (فصل ۱۴ §۱۴٫۹)
-│   ├── build_ui_*.py, build_lab.py            # ساخت دادهٔ UI (ui/data/*.js)
+│   ├── build_ui_*.py, build_lab.py            # ساخت دادهٔ UI (ui/data/*.js)؛ build_ui_docs.py: سند برای راهنمای درون‌برنامه (ui/data/docs.js)
 │   ├── jalali.py                              # تقویم جلالی مشترک (تنها پیاده‌سازی)
 │   └── *_selftest.js                          # هم‌ارزی موتورهای مرورگر با پایتون (node)
 ├── ui/                      # صفحهٔ ایستا (بدون سرور): index.html، موتورهای js، ui/data/*.js (commit‌شده)

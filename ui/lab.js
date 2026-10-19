@@ -282,7 +282,7 @@ function runLab(count) {
   toast('در حال اجرا…');
   setTimeout(() => {
     try {
-      const t0 = performance.now(); lab.res = E.run(CTX, s); lab.cost = s.cost_bp; lab.st = E.stats(lab.res, s.cost_bp, jy, lab.bench); lab.name = null; lab.lib = null;   // اجرای مرورگر: دیگر ردیف کتابخانه نیست (وگرنه پرتفوی زنده/ظرفیت/دهک‌ها از کتابخانه می‌آمد)
+      const t0 = performance.now(); lab.res = E.run(CTX, s); lab.runSpec = JSON.parse(JSON.stringify(s)); lab.cost = s.cost_bp; lab.st = E.stats(lab.res, s.cost_bp, jy, lab.bench); lab.name = null; lab.lib = null;   // اجرای مرورگر: دیگر ردیف کتابخانه نیست (وگرنه پرتفوی زنده/ظرفیت/دهک‌ها از کتابخانه می‌آمد)
       lab.dec = E.deciles(CTX, s, s.cost_bp);                              // دهک‌ها همین‌جا تا حکم به تبِ بازدیدشده وابسته نباشد (فصل ۱۴ §۱۴٫۷٫۶)
       if (count) lab.trials++; store.set('spec', s);
       $('lb-cnt').textContent = `آزمایش‌های این نشست: ${lab.trials} · ${Math.round(performance.now() - t0)} ms`;
@@ -399,9 +399,22 @@ const FTIP = {
   DIV: 'سبد ۲۰٪ با بیشترین بازده نقدی سود منهای هم‌وزن واجدان.',
   MOM: 'سبد ۲۰٪ با بیشترین مومنتوم ۱۲−۱ منهای هم‌وزن واجدان.',
 };
+const FAC_CACHE = new Map();
 function tabAttr(host) {
-  const a = E.attribution(L, lab.res, lab.cost);
-  if (!a) { host.innerHTML = '<div class="lb-note">تفکیک فاکتوری برای این اجرا ممکن نیست (کمتر از ۲۴ ماه یا ردیف‌های فاکتور در کتابخانه نیست).</div>'; return; }
+  // فاکتورها با جهان، فاصلهٔ ریبالانس و مرجعِ همین اجرا ساخته می‌شوند (نه ردیف ثابت کتابخانه)؛ هر ترکیب یک بار ساخته و نگه داشته می‌شود
+  const sp = (lab.lib && lab.lib.spec) || lab.runSpec || lab.spec || {}, univ = sp.universe || { markets: ['bourse', 'farabourse'], min_adv: 0 }, every = sp.rebalance_every || 1;
+  const key = JSON.stringify([univ.markets || ['bourse', 'farabourse'], univ.min_adv || 0, every, lab.bench]);
+  if (!FAC_CACHE.has(key)) {
+    host.innerHTML = '<div class="lb-note">در حال ساخت چهار سبد فاکتوری با جهان و ریبالانس همین اجرا…</div>';
+    const res0 = lab.res;
+    setTimeout(() => { try { FAC_CACHE.set(key, E.factorSeriesFor(CTX, { universe: univ, rebalance_every: every, cost_bp: lab.cost }, lab.bench)); } catch (e) { console.error(e); FAC_CACHE.set(key, null); } if (lab.tab === 'attr' && lab.res === res0) tabAttr(host); }, 20);
+    return;
+  }
+  const fac = FAC_CACHE.get(key), a = fac ? E.attribution(L, lab.res, lab.cost, 36, { fac, bench: lab.bench }) : null;
+  if (!a) { host.innerHTML = '<div class="lb-note">تفکیک فاکتوری برای این اجرا ممکن نیست (کمتر از ۲۴ ماه مشترک با فاکتورها).</div>'; return; }
+  const mkTxt = (univ.markets || []).length === 1 ? (univ.markets[0] === 'bourse' ? 'فقط بورس' : 'فقط فرابورس') : 'بورس و فرابورس';
+  const bTxt = lab.bench === 'cap' ? 'ارزش‌وزن واجدان' : 'هم‌وزن واجدان';
+  const ctxNote = `<div class="lb-note"><b>این تفکیک مخصوص همین اجراست:</b> برتری ناخالص استراتژی نسبت به <b>${bTxt}</b> روی پنج فاکتور رگرس شده و هر فاکتور با همان جهان (${mkTxt}${univ.min_adv ? `، کف ارزش معاملات ${fmt(univ.min_adv / 1e9, 1)} میلیارد ریال` : ''}) و همان فاصلهٔ ریبالانس (هر ${every} ماه) ساخته شده است. ستون «بازده فاکتور» فقط با عوض‌شدن جهان، ریبالانس یا مرجع تغییر می‌کند؛ β، t، آلفا و سهم‌ها با هر تغییر معیار، وزن یا الگوریتم تغییر می‌کنند.</div>`;
   const pp = x => x == null || x !== x ? '—' : `<span dir="ltr" style="unicode-bidi:isolate">${sg1(x, 1)}</span>`;
   const sh = x => a.gross_excess_ann ? `<span dir="ltr" style="unicode-bidi:isolate">${f1(100 * x / a.gross_excess_ann, 0)}٪</span>` : '—';
   const expl = a.factors.reduce((s, f) => s + f.contrib_ann, 0);
@@ -410,11 +423,11 @@ function tabAttr(host) {
     ['سهم فاکتورها', sh(expl), '', 'جمع سهم پنج فاکتور از میانگین برتری ناخالص.'],
     ['ماه‌ها', f1(a.months, 0), '', 'تعداد ماه‌های مشترک استراتژی و فاکتورها (از انتها هم‌تراز).']];
   const row = (name, tipT, b, t, fr, c, cls) => `<tr class="${cls || ''}"><td${tipT ? ` data-tip="${esc(tipT)}"` : ''}>${name}</td><td class="n">${b == null ? '' : f1(b, 2)}</td><td class="n ${tcls(t)}">${t == null ? '' : f1(t, 2)}</td><td class="n">${fr == null ? '' : pp(fr)}</td><td class="n">${pp(c)}</td><td class="n">${c == null ? '' : sh(c)}</td></tr>`;
-  host.innerHTML = `<div class="lb-note">برتری ناخالص ماهانه نسبت به هم‌وزن واجدان روی پنج فاکتور رگرس شده است. <b>واحد سهم‌ها «میانگین برتری ماهانه × ۱۲» (واحد درصد، حسابی) است</b> تا جمع‌پذیر باشند؛ این با «برتری خالص» بالای صفحه که اختلاف بازده‌های مرکب سالانه است فرق دارد (در بازده اسمی ۶۰٪ تا ۷۵٪ دومی بزرگ‌تر است). ${a.self_factor ? '<b>این استراتژی خودش یکی از فاکتورهاست</b>؛ ضریب‌ها بدیهی‌اند و t معنا ندارد.' : ''}</div>
+  host.innerHTML = ctxNote + `<div class="lb-note"><b>واحد سهم‌ها «میانگین برتری ماهانه × ۱۲» (واحد درصد، حسابی) است</b> تا جمع‌پذیر باشند؛ این با «برتری خالص» بالای صفحه که اختلاف بازده‌های مرکب سالانه است فرق دارد (در بازده اسمی ۶۰٪ تا ۷۵٪ دومی بزرگ‌تر است). ${a.self_factor ? '<b>این استراتژی خودش یکی از فاکتورهاست</b>؛ ضریب‌ها بدیهی‌اند و t معنا ندارد.' : ''}</div>
     <div class="kpis">${K.map(([k, v, s, t]) => `<div class="kpi" data-tip="${esc(t)}"><div class="k">${k}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('')}</div>
     <table class="dt"><thead><tr><th data-tip="جزء برتری.">جزء</th><th class="n" data-tip="ضریب رگرسیون (بار فاکتور): برتری استراتژی به‌ازای ۱ واحد بازدهٔ فاکتور.">β</th><th class="n" data-tip="آمار t نیوی‌وست ۳ وقفه.">t</th><th class="n" data-tip="میانگین بازدهٔ ماهانهٔ فاکتور × ۱۲ (واحد درصد).">بازده فاکتور</th><th class="n" data-tip="β × بازده فاکتور: سهم این فاکتور از برتری (میانگین ماهانه × ۱۲، واحد درصد).">سهم</th><th class="n" data-tip="سهم این جزء از برتری ناخالص.">از کل</th></tr></thead><tbody>
       ${row('آلفا (توضیح‌داده‌نشده)', 'عرض از مبدأ: برتری‌ای که با داشتن همین پنج سبد فاکتوری به دست نمی‌آمد.', null, a.alpha_t, null, a.alpha_ann)}
-      ${a.factors.map(f => row(`<span class="fam" style="background:${FCOL[f.code]}"></span>${f.fa}`, FTIP[f.code], f.beta, f.t, f.factor_ann, f.contrib_ann)).join('')}
+      ${a.factors.map(f => row(`<span class="fam" style="background:${FCOL[f.code]}"></span>${f.code === 'MKT' ? 'بازار (' + bTxt + ')' : f.fa}`, f.code === 'MKT' ? FTIP.MKT.replace('هم‌وزن واجدان', bTxt) : FTIP[f.code], f.beta, f.t, f.factor_ann, f.contrib_ann)).join('')}
       ${row('<b>برتری ناخالص</b>', 'جمع آلفا و سهم فاکتورها = میانگین برتری ماهانهٔ ناخالص × ۱۲.', null, null, null, a.gross_excess_ann, 'tot')}
       ${row('هزینهٔ معامله (نسبت به مرجع)', 'تفاوت هزینهٔ گردش استراتژی و مرجع هم‌وزن (مرجع هم هر ماه ریبالانس و هزینه دارد).', null, null, null, a.cost_ann)}
       ${row('<b>برتری خالص</b>', 'برتری ناخالص + اثر هزینه (میانگین ماهانه × ۱۲).', null, null, null, a.net_excess_ann, 'tot')}

@@ -30,3 +30,17 @@ for (const id of ['combo:c1:rank', 'sens:partial50', 'combo:c1:fm', 'algo:vol_25
   console.log(id.padEnd(30), `α JS ${a.alpha_ann.toFixed(2)} PY ${p.alpha_ann.toFixed(2)} · β اندازه JS ${a.factors[1].beta.toFixed(3)} PY ${p.factors[1].beta.toFixed(3)} · R² ${a.r2.toFixed(2)}/${p.r2.toFixed(2)}`);
 }
 console.log('بدترین اختلاف تفکیک (واحد درصد؛ β × ۱۰):', worstA.toFixed(3));
+
+// فاکتورهای هم‌جهانِ مرورگر (factorSeriesFor) با جهان پیش‌فرض باید همان ردیف‌های sig: کتابخانه باشند؛ و جهان دیگر باید فاکتور دیگری بدهد
+{
+  const t0 = Date.now(), f = E.factorSeriesFor(ctx, { universe: { markets: ['bourse', 'farabourse'], min_adv: 0 }, rebalance_every: 1, cost_bp: L.cost_bp }), dt = Date.now() - t0;
+  let mx = 0;
+  for (const [code, , sig] of E.FACTORS) {
+    const r = sig ? L.library.find(x => x.id === 'sig:' + sig) : L.library.find(x => x.id === 'sig:size'), lib = sig ? r.ret.map((v, i) => v - r.all[i]) : r.all;
+    const a = f[code], n = Math.min(a.length, lib.length); let s = 0; for (let i = 1; i <= n; i++) s += a[a.length - i] - lib[lib.length - i];
+    mx = Math.max(mx, Math.abs(1200 * s / n));
+  }
+  const g = E.factorSeriesFor(ctx, { universe: { markets: ['farabourse'], min_adv: 0 }, rebalance_every: 1, cost_bp: L.cost_bp });
+  const diff = Math.abs(g.SIZE.slice(-24).reduce((s, v) => s + v, 0) - f.SIZE.slice(-24).reduce((s, v) => s + v, 0));
+  console.log(`فاکتور هم‌جهان در برابر کتابخانه: بیشترین اختلاف میانگین سالانه ${mx.toFixed(2)} واحد درصد · ${dt}ms · فقط‌فرابورس متفاوت: ${diff > 1e-6 ? 'بله' : 'خیر'}`);
+}

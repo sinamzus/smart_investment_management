@@ -21,7 +21,7 @@
     return o ? { ...(r || {}), d: (r && r.d) || '', o } : r;
   }
   function lookup0(el) {
-    if (el.dataset.tip) return { d: el.dataset.tip };
+    if (el.dataset.tip) return { d: el.dataset.tip, doc: el.dataset.doc };
     for (const [sel, fn] of G.RULES) if (el.matches(sel)) { const r = fn(el); if (r) return r; }
     if (el.matches('.nav a')) { const t = norm(el.textContent); return E[t] ? { ...E[t], t } : null; }
     let t = norm(el.matches('.ctl label') ? (el.firstChild && el.firstChild.textContent || el.textContent) : el.textContent);
@@ -59,9 +59,20 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   let cur = null, timer = 0;
 
+  /* ارجاع‌های سند هر راهنما: data-doc عنصر، «فصل N §x» در مرجع (s) یا متن راهنما؛ پیوندشان کشوی سند را باز می‌کند (ui/docs.js) */
+  function docRefs(r, el) {
+    const A = window.SIM_DOCS_API; if (!A) return [];
+    const own = r.doc || (el.closest('[data-doc]:not(.doclink)') || {}).dataset?.doc;
+    const L = [...(own ? [A.parse(own)] : []), ...A.refs(r.s || ''), ...A.refs(r.d || '')], seen = new Set();
+    return L.filter(x => { const k = A.refStr(x); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 3);
+  }
+  let curDocs = [];
   function show(el) {
     const r = lookup(el); if (!r) return;
-    tip.innerHTML = `${r.t ? `<div class="tt">${esc(r.t)}</div>` : ''}${r.d ? `<div class="td">${esc(r.d)}</div>` : ''}${r.o ? `<div class="to">${esc(r.o)}</div>` : ''}${r.f ? `<div class="tf">${esc(r.f)}</div>` : ''}${r.s ? `<div class="ts">${esc(r.s)}</div>` : ''}`;
+    const A = window.SIM_DOCS_API; curDocs = el.matches('.doclink, .doc-btn') ? [] : docRefs(r, el);
+    const dl = curDocs.length ? `<div class="tdoc">توضیح فنی در سند: ${curDocs.map(x => `<a data-doc="${esc(A.refStr(x))}">${esc(A.labelOf(x))}</a>`).join('، ')} <span class="k">F1</span></div>` : '';
+    tip.innerHTML = `${r.t ? `<div class="tt">${esc(r.t)}</div>` : ''}${r.d ? `<div class="td">${esc(r.d)}</div>` : ''}${r.o ? `<div class="to">${esc(r.o)}</div>` : ''}${r.f ? `<div class="tf">${esc(r.f)}</div>` : ''}${r.s ? `<div class="ts">${esc(r.s)}</div>` : ''}${dl}`;
+    tip.classList.toggle('live', !!dl);
     tip.hidden = false; tip.style.left = '0px'; tip.style.top = '0px';
     const b = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, W = innerWidth, H = innerHeight, g = 8;
     let x = b.right - w; if (x < g) x = Math.min(b.left, W - w - g); x = Math.max(g, Math.min(x, W - w - g));
@@ -73,16 +84,29 @@
   const target = e => e.target.closest && e.target.closest('.has-tip');
 
   document.addEventListener('pointerover', e => {
+    if (tip.contains(e.target)) { clearTimeout(lv); return; }           // روی خود راهنما (پیوند سند)
     const el = target(e); if (el === cur) return;
+    if (!el && cur && !tip.hidden && tip.classList.contains('live')) return;   // در مسیر رسیدن به راهنمای دارای پیوند
     hide(); if (!el || e.pointerType === 'touch') return;
     cur = el; timer = setTimeout(() => show(el), 280);
   });
-  document.addEventListener('pointerout', e => { if (cur && !cur.contains(e.relatedTarget)) hide(); });
+  // راهنمای دارای پیوند سند «قابل‌ورود» است: نشانگر از عنصر به خود راهنما برود، بسته نمی‌شود تا پیوند کلیک شود
+  let lv = 0;
+  document.addEventListener('pointerout', e => {
+    if (!cur || cur.contains(e.relatedTarget) || tip.contains(e.relatedTarget)) return;
+    if (tip.classList.contains('live') && !tip.contains(e.target)) { clearTimeout(lv); lv = setTimeout(hide, 220); } else hide();   // فرصت عبور از فاصلهٔ عنصر تا راهنما
+  });
+  tip.addEventListener('pointerleave', e => { if (!(cur && cur.contains(e.relatedTarget))) hide(); });
+  tip.addEventListener('pointerenter', () => clearTimeout(lv));
+  tip.addEventListener('click', e => { if (e.target.closest('.tdoc a')) setTimeout(hide, 0); });
   document.addEventListener('focusin', e => { const el = target(e); hide(); if (el) { cur = el; show(el); } });
   document.addEventListener('focusout', hide);
   document.addEventListener('change', e => { const el = target(e); if (el && el === cur) show(el); });   // گزینهٔ تازهٔ منو
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
-  addEventListener('scroll', hide, true);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hide();
+    if (e.key === 'F1' && cur && !tip.hidden && curDocs.length && window.SIM_DOCS_API) { e.preventDefault(); window.SIM_DOCS_API.open(curDocs[0]); hide(); }
+  });
+  addEventListener('scroll', e => { if (!tip.contains(e.target)) hide(); }, true);
   /* لمس: نگه‌داشتن انگشت (۵۰۰ میلی‌ثانیه) راهنما را نشان می‌دهد */
   let lp = 0;
   document.addEventListener('touchstart', e => { const el = target(e); clearTimeout(lp); if (el) lp = setTimeout(() => { cur = el; show(el); }, 500); }, { passive: true });

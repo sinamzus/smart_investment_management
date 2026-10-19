@@ -316,11 +316,25 @@ function factorSeries(L) {
   for (const [code, , sig] of FACTORS) { if (!sig) continue; const r = lib('sig:' + sig); if (!r) return null; fac[code] = r.ret.map((v, i) => v - r.all[i]); if (!fac.MKT) fac.MKT = r.all.slice(); }
   return fac;
 }
-/** res: {ret, all, to, toAll} یک اجرا؛ خروجی هم‌شکل attribution.attribute پایتون + بتاهای غلتان ۳۶ ماهه. */
-function attribution(L, res, costBp, roll = 36) {
-  const fac = factorSeries(L); if (!fac) return null;
+/** فاکتورهای هم‌جهانِ یک اجرای مرورگر: هر فاکتور همان تعریف ردیف «sig:» کتابخانه (top-fraction ۲۰٪/۳۰٪، خنثی از صنعت) است، ولی با
+    جهان (بازارها، کف نقدشوندگی) و فاصلهٔ ریبالانس همین اجرا ساخته می‌شود؛ وگرنه برتری استراتژیِ مثلاً «فقط فرابورس» روی فاکتورهای کل بازار رگرس می‌شد.
+    bench = 'cap' ⇒ MKT و مرجع برتری، ارزش‌وزن واجدان همان جهان است. */
+function factorSeriesFor(ctx, spec, bench = 'eq') {
+  const fac = {}; let base = null;
+  for (const [code, , sig] of FACTORS) {
+    if (!sig) continue;
+    const r = run(ctx, { signals: [[sig, 1]], combine: 'equal', neutral: true, algo: 'topfrac', params: { entry: 0.2, exit: 0.3 }, universe: spec.universe, rebalance_every: spec.rebalance_every || 1, partial: 1, max_w: null, cost_bp: spec.cost_bp });
+    fac[code] = r.ret.map((v, i) => v - r.all[i]); if (!base) base = r;
+  }
+  fac.MKT = (bench === 'cap' ? base.cap : base.all).slice(); return fac;
+}
+/** res: {ret, all, to, toAll} یک اجرا؛ خروجی هم‌شکل attribution.attribute پایتون + بتاهای غلتان ۳۶ ماهه.
+    opt.fac: فاکتورهای factorSeriesFor (پیش‌فرض: ردیف‌های ثابت کتابخانه، برای برابری با پایتون)؛ opt.bench = 'cap' ⇒ برتری نسبت به ارزش‌وزن. */
+function attribution(L, res, costBp, roll = 36, opt = {}) {
+  const fac = opt.fac || factorSeries(L); if (!fac) return null;
+  const cap = opt.bench === 'cap' && res.cap && res.cap.length === res.ret.length;
   const codes = FACTORS.map(f => f[0]), n = Math.min(res.ret.length, ...codes.map(c => fac[c].length)), tail = a => a.slice(a.length - n);
-  const rs = tail(res.ret), ra = tail(res.all), ts = tail(res.to), ta = tail(res.toAll || res.all.map(() => 0)), Fc = codes.map(c => tail(fac[c])), c = costBp / 1e4;
+  const rs = tail(res.ret), ra = tail(cap ? res.cap : res.all), ts = tail(res.to), ta = tail(cap ? (res.toCap || res.cap.map(() => 0)) : (res.toAll || res.all.map(() => 0))), Fc = codes.map(c => tail(fac[c])), c = costBp / 1e4;
   const y = [], F = [], drag = [], idx = [];
   for (let i = 0; i < n; i++) { const yy = rs[i] - ra[i], ff = Fc.map(a => a[i]); if (isNaN(yy) || ff.some(isNaN)) continue; y.push(yy); F.push(ff); drag.push(((isNaN(ts[i]) ? 0 : ts[i]) - (isNaN(ta[i]) ? 0 : ta[i])) * c); idx.push(i); }
   if (y.length < 24) return null;
@@ -335,5 +349,5 @@ function attribution(L, res, costBp, roll = 36) {
     rolling: { win: roll, end: idx.slice(roll - 1).map(i => (res.end || [])[res.end ? res.end.length - n + i : 0]), beta: rolling } };
 }
 
-root.LabEngine = { load, run, stats, deciles, verdict, dsr, nwT, annOf, JS_ALGOS, zAt, fwAt, okAt, score, effWeights, attribution, FACTORS, spearman, Phi, PhiInv };
+root.LabEngine = { load, run, stats, deciles, verdict, dsr, nwT, annOf, JS_ALGOS, zAt, fwAt, okAt, score, effWeights, attribution, factorSeriesFor, FACTORS, spearman, Phi, PhiInv };
 })(typeof window !== 'undefined' ? window : globalThis);

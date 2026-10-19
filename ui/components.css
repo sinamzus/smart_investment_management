@@ -222,3 +222,34 @@ svg.chart.zoomable:focus-visible { outline: 1px dashed var(--accent); outline-of
 /* دکمه‌های تم و تراکم: گرد و واضح */
 #theme, #density { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; font-size: 16px; color: var(--tx-1); background: var(--bg-panel); border: var(--hair) solid var(--line); border-radius: 50%; }
 #theme:hover, #density:hover { background: var(--bg-hover); border-color: var(--line-strong); }
+
+/* ── راهنمای فنی درون‌برنامه (ui/docs.js؛ فصل ۱۲ §۱۲٫۸) ── */
+#tip.live { pointer-events: auto; }
+#tip .tdoc { margin-top: 6px; padding-top: 6px; border-top: var(--hair) solid var(--line); font-size: var(--fs-xs); color: var(--tx-3); }
+#tip .tdoc a { color: var(--accent-tx, var(--accent)); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#tip .tdoc .k { font: 10px var(--font-num); border: var(--hair) solid var(--line-strong); border-radius: 4px; padding: 0 4px; margin-inline-start: 4px; }
+a.doclink { color: var(--accent-tx, var(--accent)); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.doc-btn { margin-inline-start: auto; white-space: nowrap; }
+.panel-tools .doc-btn { margin-inline-start: 0; }
+#docv { position: fixed; inset-block: 0; inset-inline-end: 0; width: min(760px, 100vw); z-index: 900; display: flex; flex-direction: column;
+  background: var(--bg-panel); border-inline-start: var(--hair) solid var(--line-strong); box-shadow: 0 0 40px rgba(0,0,0,.28); }
+#docv[hidden] { display: none; }
+#docv .dv-head { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: var(--hair) solid var(--line); background: var(--bg-head); flex-wrap: wrap; }
+#docv .dv-head select { max-width: 260px; min-width: 0; flex: 1 1 140px; }
+#docv .dv-head .spacer { flex: 1 1 0; }
+#docv .dv-src { font: var(--fs-2xs) var(--font-num); direction: ltr; }
+#docv .dv-body { flex: 1; overflow: auto; padding: 16px 22px 60px; font-size: var(--fs-sm); line-height: 1.85; color: var(--tx-1); }
+#docv .dv-body h1 { font-size: 1.35em; } #docv .dv-body h2 { font-size: 1.2em; margin-top: 1.6em; } #docv .dv-body h3 { font-size: 1.08em; margin-top: 1.3em; } #docv .dv-body h4 { font-size: 1em; }
+#docv .dv-body h1, #docv .dv-body h2, #docv .dv-body h3, #docv .dv-body h4 { scroll-margin-top: 8px; line-height: 1.5; }
+#docv .dv-body code { font: .92em var(--font-num); background: var(--bg-app); padding: 0 4px; border-radius: 4px; }
+#docv .dv-body pre { background: var(--bg-app); padding: 10px; overflow: auto; border-radius: 8px; text-align: left; }
+#docv .dv-body pre code { background: none; padding: 0; }
+#docv .dv-body blockquote { margin: 8px 0; padding: 4px 12px; border-inline-start: 3px solid var(--line-strong); color: var(--tx-2); }
+#docv .dv-body li.sub { margin-inline-start: 1.4em; }
+#docv .dtbl { overflow: auto; margin: 8px 0; }
+#docv .dtbl table { border-collapse: collapse; font-size: var(--fs-xs); }
+#docv .dtbl th, #docv .dtbl td { border: var(--hair) solid var(--line); padding: 4px 8px; text-align: center; vertical-align: top; }
+#docv .dtbl th { background: var(--bg-head); }
+#docv .dv-hit { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#docv h1.dv-hit, #docv h2.dv-hit, #docv h3.dv-hit, #docv h4.dv-hit { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+@media print { #docv, .doc-btn { display: none !important; } }

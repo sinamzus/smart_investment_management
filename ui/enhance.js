@@ -188,7 +188,7 @@ async function runEnh(ctx, cfg, zFor, progress) {
 /* ═════════════════ رابط ═════════════════ */
 if (typeof window === 'undefined' || typeof document === 'undefined') { root.SIM_ENH = { loadX, tilted, select, runEnh, neutral, candidates }; if (typeof module !== 'undefined' && module.exports) module.exports = root.SIM_ENH; return; }
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const tip = t => ` data-tip="${esc(t)}"`;
+const tip = t => ` data-tip="${esc(t)}" data-doc="3:3.5/شاخص بهبودیافته"`;   // همهٔ راهنماهای این پنل به بند «شاخص بهبودیافته» سند می‌رسند
 const f = (x, d = 1) => x == null || x !== x ? '—' : fmt(x, d);
 const sg = (x, d = 1) => x == null || x !== x ? '—' : sgn(x, d);
 const S = { gamma: 1, ew: 0, kappa: 0, sig: '', lam: 0.5, cap: 0, sec: {}, iters: 120 };
