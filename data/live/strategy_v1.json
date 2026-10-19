@@ -1,7 +1,7 @@
 {
  "id": "c1-rank-partial50-v1",
- "frozen_at": "2026-10-19T06:30:53.643738+00:00",
- "code_commit": "aafb394",
+ "frozen_at": "2026-10-19T06:49:28.164095+00:00",
+ "code_commit": "d2bea49",
  "data_through": "2026-10-18",
  "spec": {
   "signals": [
