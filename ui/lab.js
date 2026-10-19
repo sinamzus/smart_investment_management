@@ -400,6 +400,18 @@ const FTIP = {
   MOM: 'سبد ۲۰٪ با بیشترین مومنتوم ۱۲−۱ منهای هم‌وزن واجدان.',
 };
 const FAC_CACHE = new Map();
+/* خوانش ساده: کدام شباهت‌ها معنادارند، به‌ویژه برای فاکتورهایی که کاربر انتخاب نکرده است */
+function readAttr(a, mine, weak) {
+  const F = a.factors.filter(f => f.code !== 'MKT'), nm = f => `«${f.fa}»`, b = f => `<span dir="ltr" style="unicode-bidi:isolate">β = ${f1(f.beta, 2)}, t = ${f1(f.t, 1)}</span>`;
+  const selSig = F.filter(f => mine(f)[1] === 'انتخاب شده' && !weak(f.t)), selWeak = F.filter(f => mine(f)[1] === 'انتخاب شده' && weak(f.t));
+  const unSig = F.filter(f => mine(f)[1] === 'انتخاب نشده' && !weak(f.t)), unWeak = F.filter(f => mine(f)[1] === 'انتخاب نشده' && weak(f.t));
+  const parts = [];
+  if (selSig.length) parts.push(`معیارهای انتخابی شما در بازده دیده می‌شوند: ${selSig.map(f => `${nm(f)} (${b(f)})`).join('، ')}.`);
+  if (selWeak.length) parts.push(`${selWeak.map(nm).join(' و ')} را انتخاب کرده‌اید ولی β آن از صفر جدا نیست؛ اثرش زیر معیارهای دیگر گم شده یا با آن‌ها هم‌پوشان است.`);
+  if (unWeak.length) parts.push(`${unWeak.map(f => `${nm(f)} (${b(f)})`).join('، ')} را انتخاب نکرده‌اید و β نزدیک صفر است، یعنی استراتژی شباهتی به آن سبد ندارد؛ عدد ستون «سهم» فقط حاصل‌ضرب این β کوچک در بازده فاکتور است، نه وزن.`);
+  if (unSig.length) parts.push(`${unSig.map(f => `${nm(f)} (${b(f)})`).join('، ')} را انتخاب نکرده‌اید ولی بازده استراتژی معنادار شبیه آن است؛ احتمالاً معیارهای انتخابی با آن همبسته‌اند (مثلاً سود نقدی بالا با کم‌نوسانی).`);
+  return `<div class="lb-note"><b>خوانش:</b> فهرست پنج فاکتور برای همهٔ استراتژی‌ها ثابت است و ربطی به معیارهای انتخابی ندارد؛ β وزن نیست، شباهت سنجیده‌شده است. ${parts.join(' ')}</div>`;
+}
 function tabAttr(host) {
   // فاکتورها با جهان، فاصلهٔ ریبالانس و مرجعِ همین اجرا ساخته می‌شوند (نه ردیف ثابت کتابخانه)؛ هر ترکیب یک بار ساخته و نگه داشته می‌شود
   const sp = (lab.lib && lab.lib.spec) || lab.runSpec || lab.spec || {}, univ = sp.universe || { markets: ['bourse', 'farabourse'], min_adv: 0 }, every = sp.rebalance_every || 1;
@@ -422,12 +434,17 @@ function tabAttr(host) {
     ['R²', f1(a.r2, 2), '', 'سهم نوسان برتری ماهانه که فاکتورها توضیح می‌دهند. بالا یعنی استراتژی عمدتاً ترکیبی از همین فاکتورهاست.'],
     ['سهم فاکتورها', sh(expl), '', 'جمع سهم پنج فاکتور از میانگین برتری ناخالص.'],
     ['ماه‌ها', f1(a.months, 0), '', 'تعداد ماه‌های مشترک استراتژی و فاکتورها (از انتها هم‌تراز).']];
-  const row = (name, tipT, b, t, fr, c, cls) => `<tr class="${cls || ''}"><td${tipT ? ` data-tip="${esc(tipT)}"` : ''}>${name}</td><td class="n">${b == null ? '' : f1(b, 2)}</td><td class="n ${tcls(t)}">${t == null ? '' : f1(t, 2)}</td><td class="n">${fr == null ? '' : pp(fr)}</td><td class="n">${pp(c)}</td><td class="n">${c == null ? '' : sh(c)}</td></tr>`;
+  // فهرست فاکتورها ثابت است و به معیارهای انتخابی ربطی ندارد: β «شباهت سنجیده‌شده» است نه وزن. ستون «در استراتژی شما» و کم‌رنگ‌شدن ردیف‌های |t| < ۲ همین را نشان می‌دهد.
+  const dyn = sp.combine === 'topk_icir', inSpec = new Set((sp.signals || []).map(x => x[0])), sigOf = Object.fromEntries(E.FACTORS.map(([c, , g]) => [c, g]));
+  const mine = f => f.code === 'MKT' ? ['info', 'مرجع', 'فاکتور بازار همان مرجع مقایسه است، نه معیار انتخاب.'] : dyn ? ['', 'پویا', 'روش «انتخاب پویای معیار برتر» هر ماه معیارها را عوض می‌کند.'] : inSpec.has(sigOf[f.code]) ? ['ok', 'انتخاب شده', 'این معیار در ساخت استراتژی شما هست؛ β مثبت و معنادار انتظار می‌رود.'] : ['', 'انتخاب نشده', 'این معیار را انتخاب نکرده‌اید. فاکتور فقط برای سنجش شباهت در رگرسیون هست؛ وزنی به آن داده نشده است.'];
+  const weak = t => t != null && Math.abs(t) < 2;
+  const row = (name, tipT, b, t, fr, c, cls, my) => `<tr class="${cls || ''}${weak(t) && b != null ? ' weak' : ''}"${weak(t) && b != null ? ' data-tip="|t| کمتر از ۲: این β از صفر جدا نیست؛ یعنی استراتژی شباهت قابل‌اتکایی به این سبد ندارد و سهمش در عمل صفر است."' : ''}><td${tipT ? ` data-tip="${esc(tipT)}"` : ''}>${name}</td><td>${my ? `<span class="chip ${my[0]}" data-tip="${esc(my[2])}">${my[1]}</span>` : ''}</td><td class="n">${b == null ? '' : f1(b, 2)}</td><td class="n ${tcls(t)}">${t == null ? '' : f1(t, 2)}</td><td class="n">${fr == null ? '' : pp(fr)}</td><td class="n">${pp(c)}</td><td class="n">${c == null ? '' : sh(c)}</td></tr>`;
   host.innerHTML = ctxNote + `<div class="lb-note"><b>واحد سهم‌ها «میانگین برتری ماهانه × ۱۲» (واحد درصد، حسابی) است</b> تا جمع‌پذیر باشند؛ این با «برتری خالص» بالای صفحه که اختلاف بازده‌های مرکب سالانه است فرق دارد (در بازده اسمی ۶۰٪ تا ۷۵٪ دومی بزرگ‌تر است). ${a.self_factor ? '<b>این استراتژی خودش یکی از فاکتورهاست</b>؛ ضریب‌ها بدیهی‌اند و t معنا ندارد.' : ''}</div>
     <div class="kpis">${K.map(([k, v, s, t]) => `<div class="kpi" data-tip="${esc(t)}"><div class="k">${k}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('')}</div>
-    <table class="dt"><thead><tr><th data-tip="جزء برتری.">جزء</th><th class="n" data-tip="ضریب رگرسیون (بار فاکتور): برتری استراتژی به‌ازای ۱ واحد بازدهٔ فاکتور.">β</th><th class="n" data-tip="آمار t نیوی‌وست ۳ وقفه.">t</th><th class="n" data-tip="میانگین بازدهٔ ماهانهٔ فاکتور × ۱۲ (واحد درصد).">بازده فاکتور</th><th class="n" data-tip="β × بازده فاکتور: سهم این فاکتور از برتری (میانگین ماهانه × ۱۲، واحد درصد).">سهم</th><th class="n" data-tip="سهم این جزء از برتری ناخالص.">از کل</th></tr></thead><tbody>
+    ${readAttr(a, mine, weak)}
+    <table class="dt"><thead><tr><th data-tip="جزء برتری.">جزء</th><th data-tip="آیا معیار این فاکتور جزو معیارهای انتخابی شما (ستون راست) هست؟ فهرست پنج فاکتور برای همهٔ استراتژی‌ها ثابت است تا بتوان آن‌ها را مقایسه کرد.">در استراتژی شما</th><th class="n" data-tip="ضریب رگرسیون (بار فاکتور)، نه وزن: برتری استراتژی به‌ازای ۱ واحد بازدهٔ فاکتور. یعنی بازده استراتژی چقدر شبیه این سبد حرکت کرده است، چه آن معیار را انتخاب کرده باشید چه نه.">β</th><th class="n" data-tip="آمار t نیوی‌وست ۳ وقفه.">t</th><th class="n" data-tip="میانگین بازدهٔ ماهانهٔ فاکتور × ۱۲ (واحد درصد).">بازده فاکتور</th><th class="n" data-tip="β × بازده فاکتور: سهم این فاکتور از برتری (میانگین ماهانه × ۱۲، واحد درصد).">سهم</th><th class="n" data-tip="سهم این جزء از برتری ناخالص.">از کل</th></tr></thead><tbody>
       ${row('آلفا (توضیح‌داده‌نشده)', 'عرض از مبدأ: برتری‌ای که با داشتن همین پنج سبد فاکتوری به دست نمی‌آمد.', null, a.alpha_t, null, a.alpha_ann)}
-      ${a.factors.map(f => row(`<span class="fam" style="background:${FCOL[f.code]}"></span>${f.code === 'MKT' ? 'بازار (' + bTxt + ')' : f.fa}`, f.code === 'MKT' ? FTIP.MKT.replace('هم‌وزن واجدان', bTxt) : FTIP[f.code], f.beta, f.t, f.factor_ann, f.contrib_ann)).join('')}
+      ${a.factors.map(f => row(`<span class="fam" style="background:${FCOL[f.code]}"></span>${f.code === 'MKT' ? 'بازار (' + bTxt + ')' : f.fa}`, f.code === 'MKT' ? FTIP.MKT.replace('هم‌وزن واجدان', bTxt) : FTIP[f.code], f.beta, f.t, f.factor_ann, f.contrib_ann, '', mine(f))).join('')}
       ${row('<b>برتری ناخالص</b>', 'جمع آلفا و سهم فاکتورها = میانگین برتری ماهانهٔ ناخالص × ۱۲.', null, null, null, a.gross_excess_ann, 'tot')}
       ${row('هزینهٔ معامله (نسبت به مرجع)', 'تفاوت هزینهٔ گردش استراتژی و مرجع هم‌وزن (مرجع هم هر ماه ریبالانس و هزینه دارد).', null, null, null, a.cost_ann)}
       ${row('<b>برتری خالص</b>', 'برتری ناخالص + اثر هزینه (میانگین ماهانه × ۱۲).', null, null, null, a.net_excess_ann, 'tot')}

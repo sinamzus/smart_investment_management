@@ -134,3 +134,4 @@ details.panel.sam-fold { display: block; }
 #rb-enh-box > #rb-enh > .panel { border: 0; box-shadow: none; margin: 0; }
 #rb-ptools[hidden], #rb-d-years[hidden], #rb-d-port[hidden] { display: none; }
 @media (max-width: 960px) { .rb-grid { grid-template-columns: 1fr; } .rb-ctl { border-inline-end: 0; border-bottom: var(--hair) solid var(--line); } }
+.dt tr.weak td { color: var(--tx-3); }   /* ردیف تفکیک فاکتوری با |t| < ۲: از صفر جدا نیست */
