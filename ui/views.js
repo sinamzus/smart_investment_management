@@ -1,4 +1,4 @@
-/* ماکت — نماهای دوم: Dividend Lab · Rebalance · Data QA · Reports · Symbol · Fund · Risk · Index Funds + روتر پنج‌بخشی
+/* همتا — نماهای دوم: Dividend Lab · Rebalance · Data QA · Reports · Symbol · Fund · Risk · Index Funds + روتر پنج‌بخشی
    داده: window.SIM_EXTRA (tools/build_ui_extra.py) و window.SIM_DATA. هیچ عدد ثابتی در این فایل نیست مگر متن توضیحی. */
 (function () {
 const X = window.SIM_EXTRA;

@@ -1,4 +1,4 @@
-/* ماکت — میز پژوهش (Lab) · معیارها (Signals) · برنامهٔ اقدام (Plan)  — فصل ۱۴
+/* همتا — میز پژوهش (Lab) · معیارها (Signals) · برنامهٔ اقدام (Plan)  — فصل ۱۴
    داده: window.SIM_LAB (tools/build_lab.py)؛ موتور: labengine.js. هیچ عدد ثابتی در این فایل نیست مگر پیش‌فرض‌های کنترل‌ها. */
 (function () {
 'use strict';
