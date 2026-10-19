@@ -30,23 +30,22 @@ function initSam() {
   if (!D.replica) { missing('v-sam', 'نتیجهٔ بازسازی', 'python tools/sampled_replica.py ; python tools/build_ui_live.py'); return; }
   const M = D.replica_meta, FR = M.full_replica;
   m.innerHTML = `
-  <section class="panel" style="--lg:var(--lg-a)">
-    <div class="panel-head"><span class="lg-badge">1</span><span class="panel-title"${tip('بازسازی «شاخص كل» بدون خرید همهٔ سهام: چند سهم لازم است، چه روشی، و وام چه کاری می‌کند. مراحل به ترتیب اجرا در هر ماه.')}>مراحل بازسازی «شاخص كل» با نمونهٔ کوچک</span></div>
-    <div class="lb-flow">${STEPS.map(([t, d], i) => `<div class="lb-step static" data-tip="${esc(d)}"><span class="no">${i + 1}</span><b>${t}</b><small>${esc(d)}</small></div>`).join('')}</div>
-  </section>
-  <div id="rb-host"></div>
-  <section class="panel" style="--lg:var(--lg-b)">
-    <div class="panel-head"><span class="lg-badge">5</span><span class="panel-title"${tip('خطای ردیابی در برابر تعداد سهام نمونه، برای هر روش و حالت اهرم.')}>نتیجه · خطای ردیابی در برابر تعداد سهام</span><span class="chip" id="sm-chip"${tip('بازه، نرخ وام و هزینه‌ای که نتایج با آن محاسبه شده‌اند.')}></span></div>
+  <section class="panel sam-answer" style="--lg:var(--lg-b)">
+    <div class="panel-head"><span class="lg-badge">1</span><span class="panel-title"${tip('خطای ردیابی در برابر تعداد سهام نمونه، برای هر روش و حالت اهرم؛ از اجرای پایتون (tools/sampled_replica.py) از ۱۳۹۷ تا امروز.')}>چند سهم برای دنبال‌کردن «شاخص كل» لازم است؟</span><span class="chip" id="sm-chip"${tip('بازه، نرخ وام و هزینه‌ای که نتایج با آن محاسبه شده‌اند.')}></span></div>
+    <div class="lineage sam-lead" id="sm-read"></div>
+    <div class="kpis" id="sm-kpis"></div>
     <div class="ctl">
       <label${tip('کدام معیار روی نمودار و ستون برجسته نشان داده شود.')}>معیار <select id="sm-metric">${METRICS.map(([k, t, d]) => `<option value="${k}" data-tip="${esc(d)}">${t}</option>`).join('')}</select></label>
       <label${tip('روش انتخاب سهام؛ «همه» هر سه را روی نمودار نشان می‌دهد.')}>روش <span class="seg" id="sm-method"><button data-v="all" aria-pressed="false"${tip('هر سه روش را با هم نشان بده.')}>همه</button>${Object.entries(METHODS).map(([k, t]) => `<button data-v="${k}" aria-pressed="false"${tip('روش انتخاب: ' + t)}>${t}</button>`).join('')}</span></label>
       <label${tip('بدون وام یعنی L = ۱؛ تراز بتا یعنی L = ۱/β (بُرش ۰٫۷–۱٫۵). L < ۱ نقدنگه‌داری است نه وام.')}>اهرم <span class="seg" id="sm-lev"><button data-v="none" aria-pressed="false"${tip('بدون وام و بدون نقد: کاملاً سرمایه‌گذاری‌شده.')}>بدون وام</button><button data-v="beta" aria-pressed="false"${tip('اهرم L = ۱/β هر ماه؛ اگر بتای نمونه > ۱ باشد L < ۱ و بخشی نقد می‌ماند.')}>تراز بتا</button></span></label>
     </div>
-    <div class="kpis" id="sm-kpis"></div>
     <div class="panel-body" id="sm-chart" style="padding:var(--s-3)"></div>
-    <div class="panel-body scroll" style="max-height:340px"><table class="dt" id="sm-table"></table></div>
-    <div class="lineage" id="sm-read"></div>
-  </section>`;
+    <details class="sam-fold sm"><summary${tip('همهٔ ترکیب‌های تعداد سهام × روش × اهرم با بازده، فاصله، خطای ردیابی، بتا و گردش.')}>جدول کامل همهٔ حالت‌ها</summary><div class="panel-body scroll" style="max-height:340px"><table class="dt" id="sm-table"></table></div></details>
+  </section>
+  <div id="rb-host"></div>
+  <details class="sam-fold panel"><summary${tip('بازسازی «شاخص كل» بدون خرید همهٔ سهام: چند سهم لازم است، چه روشی، و وام چه کاری می‌کند. مراحل به ترتیب اجرا در هر ماه.')}>روش کار: هفت گام هر ماه</summary>
+    <div class="lb-flow">${STEPS.map(([t, d], i) => `<div class="lb-step static" data-tip="${esc(d)}"><span class="no">${i + 1}</span><b>${t}</b><small>${esc(d)}</small></div>`).join('')}</div>
+  </details>`;
   if (window.SIM_RB_MOUNT) window.SIM_RB_MOUNT($('rb-host'));
   const set = (id, key) => $(id).querySelectorAll('button').forEach(b => { b.onclick = () => { sam[key] = b.dataset.v; renderSam(); }; });
   set('sm-method', 'method'); set('sm-lev', 'lev');
@@ -86,7 +85,9 @@ function renderSam() {
   $('sm-table').innerHTML = `<thead><tr>${hd.map(([t, c, d]) => `<th class="${c}" data-tip="${esc(d)}">${t}</th>`).join('')}</tr></thead><tbody>` + rows.slice().sort((a, b) => a.N - b.N || a.method.localeCompare(b.method)).map(r => `<tr><td class="n">${r.N}</td><td>${METHODS[r.method]}</td><td class="n">${f(r.mean_L, 2)}</td><td class="n">${f(r.ann_pct)}٪</td><td class="n">${f(r.ann_index_pct)}٪</td><td class="n ${r.gap_pct >= 0 ? 'up' : 'down'}">${sg(r.gap_pct)}</td><td class="n">${f(r.te_vs_official_pct, 2)}</td><td class="n">${f(r.te_vs_fullreplica_pct, 2)}</td><td class="n">${f(r.beta, 2)}</td><td class="n">${f(r.corr, 3)}</td><td class="n">${f(r.turnover_oneway_pct, 0)}٪</td></tr>`).join('') + '</tbody>';
   const nb = D.replica.filter(r => r.leverage === 'beta'), nn = D.replica.filter(r => r.leverage === 'none');
   const dTE = (nn.reduce((a, r, i) => a + (r.te_vs_official_pct - (nb.find(x => x.N === r.N && x.method === r.method) || r).te_vs_official_pct), 0) / nn.length), dR = (nn.reduce((a, r) => a + (r.ann_pct - (nb.find(x => x.N === r.N && x.method === r.method) || r).ann_pct), 0) / nn.length);
-  $('sm-read').innerHTML = `<span><b data-tip="برداشت خودکار از همین جدول؛ با تغییر داده دوباره حساب می‌شود.">خوانش</b> تعداد سهام در خطای ردیابی از اهرم مهم‌تر است؛ «تراز بتا» به‌طور میانگین TE را ${f(dTE, 1)} واحد کم و بازده را ${f(dR, 1)} واحد کم می‌کند (چون بتای نمونه > ۱ است و L < ۱ نقدنگه‌داری می‌شود، نه وام).</span><span><b data-tip="آنچه این نتایج را محدود می‌کند: بدون صف و حد نوسان، نرخ وام فرضی، درون‌نمونه.">محدودیت</b> بدون صف/حد نوسان؛ نرخ و دسترسی وام واقعی نیست <i>[تأیید لازم]</i>؛ عقب‌ماندن بازدهِ نمونه‌های بهینه نشانهٔ حذف دم کوچک‌هاست؛ جزئیات: فصل ۳ §۳٫۵.</span>`;
+  const teOf = n => { const r = D.replica.find(x => x.leverage === 'none' && x.method === 'opt' && x.N === n); return r ? f(r.te_vs_official_pct, 1) + '٪' : '—'; };
+  const ans = Ns.filter(n => [20, 30, 50, 80, 120].includes(n)).map(n => `${n} سهم ≈ ${teOf(n)}`).join('، ');
+  $('sm-read').innerHTML = `<span><b data-tip="پاسخ مستقیم از همین جدول: روش بهینه‌سازی TE، بدون وام.">پاسخ</b> خطای ردیابی سالانه با «بهینه‌سازی TE» و بدون وام: ${ans}. حتی خرید همهٔ ${M.n_eligible_last} سهم واجد هم خطای ${f(FR.te_vs_official_pct, 1)}٪ دارد (کف خطا). برای خطای ۲٪ یا کمتر دست‌کم ${best('opt') || '—'} سهم لازم است.</span>` + `<span><b data-tip="برداشت خودکار از همین جدول؛ با تغییر داده دوباره حساب می‌شود.">خوانش</b> تعداد سهام در خطای ردیابی از اهرم مهم‌تر است؛ «تراز بتا» به‌طور میانگین TE را ${f(dTE, 1)} واحد کم و بازده را ${f(dR, 1)} واحد کم می‌کند (چون بتای نمونه > ۱ است و L < ۱ نقدنگه‌داری می‌شود، نه وام).</span><span><b data-tip="آنچه این نتایج را محدود می‌کند: بدون صف و حد نوسان، نرخ وام فرضی، درون‌نمونه.">محدودیت</b> بدون صف/حد نوسان؛ نرخ و دسترسی وام واقعی نیست <i>[تأیید لازم]</i>؛ عقب‌ماندن بازدهِ نمونه‌های بهینه نشانهٔ حذف دم کوچک‌هاست؛ جزئیات: فصل ۳ §۳٫۵.</span>`;
 }
 
 /* ═══════════════ دفتر زنده ═══════════════ */

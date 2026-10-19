@@ -111,3 +111,26 @@ th.sortable.asc::after { content: ' ▲'; } th.sortable.desc::after { content: '
 .lb-main .kpi { padding: var(--s-2) var(--s-3); }
 .lb-main .kpi .v { font-size: var(--fs-lg); }
 .workspace.v-sam[hidden], .workspace.v-live[hidden] { display: none; }
+
+/* «نمونهٔ کوچک + وام» (۲۰۲۶-۱۰-۱۹): پاسخ اول، سازندهٔ دوستونه مثل Lab، جزئیات زبانه‌ای، پیشرفته و روش‌شناسی تاشو */
+.rb-grid { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); align-items: stretch; }
+.rb-ctl { display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-3) var(--s-4) var(--s-4); background: var(--bg-head); border-inline-end: var(--hair) solid var(--line); }
+.rb-g { display: flex; flex-direction: column; gap: var(--s-2); }
+.rb-gt { font-size: var(--fs-xs); font-weight: 600; color: var(--tx-1); padding-bottom: 4px; border-bottom: var(--hair) solid var(--line); margin-bottom: 2px; }
+.rb-ctl label { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px var(--s-2); font-size: var(--fs-xs); color: var(--tx-2); }
+.rb-ctl .seg { flex-wrap: wrap; justify-content: flex-start; }
+.rb-ctl select, .rb-ctl input[type=number] { background: var(--bg-app); border: var(--hair) solid var(--line-strong); color: var(--tx-1); border-radius: var(--radius); height: 30px; padding: 0 8px; font: var(--fs-xs) var(--font-ui); }
+.rb-ctl input[type=number] { width: 80px; direction: ltr; text-align: end; font-family: var(--font-num); }
+.rb-ctl select { max-width: 150px; }
+.rb-out { min-width: 0; display: flex; flex-direction: column; }
+.rb-lead, .sam-lead { font-size: var(--fs-sm); line-height: 1.9; color: var(--tx-1); padding: var(--s-3) var(--s-4); border-bottom: var(--hair) solid var(--line); }
+.rb-lead b, .sam-lead b { color: var(--accent-tx); }
+.sam-fold > summary { cursor: pointer; list-style: none; padding: var(--s-3) var(--s-4); font-size: var(--fs-sm); font-weight: 600; color: var(--tx-1); display: flex; align-items: center; gap: var(--s-2); }
+.sam-fold > summary::-webkit-details-marker { display: none; }
+.sam-fold > summary::before { content: '◂'; color: var(--tx-3); }
+.sam-fold[open] > summary::before { content: '▾'; }
+.sam-fold.sm > summary { font-size: var(--fs-xs); font-weight: 500; color: var(--tx-2); padding: var(--s-2) var(--s-4); }
+details.panel.sam-fold { display: block; }
+#rb-enh-box > #rb-enh > .panel { border: 0; box-shadow: none; margin: 0; }
+#rb-ptools[hidden], #rb-d-years[hidden], #rb-d-port[hidden] { display: none; }
+@media (max-width: 960px) { .rb-grid { grid-template-columns: 1fr; } .rb-ctl { border-inline-end: 0; border-bottom: var(--hair) solid var(--line); } }

@@ -90,46 +90,60 @@ function mount(el) {
   const startOpts = R.sig.map((d, j) => `<option value="${j}">${dj(d)}</option>`).join('');
   const dateOpts = `<option value="live">امروز (زنده) · ${esc(R.asof)}</option>` + R.sig.map((d, j) => `<option value="${j}">${dj(d)}</option>`).reverse().join('');
   el.innerHTML = `
-  <section class="panel" style="--lg:var(--lg-a)">
-    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('شاخص كل را با تعدادی سهم بسازید، نقدشوندگی را فیلتر کنید، نقد یا وام اضافه کنید و ببینید اگر از هر تاریخ گذشته شروع می‌کردید تا امروز چقدر خطا داشتید.')}>همتاساز · بازسازی شاخص با نمونهٔ کوچک</span><span class="chip" id="rb-chip"${tip('بازه و دادهٔ این نما.')}></span></div>
-    <div class="ctl">
-      <label${tip('روش انتخاب سهام نمونه از میان نامزدهای نگهداری.')}>روش <span class="seg" id="rb-method">${Object.entries(METHODS).map(([k, t]) => `<button data-v="${k}" aria-pressed="false"${tip('روش انتخاب: ' + t)}>${t}</button>`).join('')}</span></label>
-      <label${tip('تعداد سهام نمونه؛ هرچه بیشتر، خطای ردیابی کمتر و هزینهٔ اجرا بیشتر.')}>تعداد سهام <select id="rb-n">${R.Ns.map(n => `<option data-tip="نمونهٔ ${n} سهمی: ${n < 30 ? 'ردیابی ضعیف (TE بالای ۴٪)؛ فقط برای سرمایهٔ خیلی کوچک.' : n < 80 ? 'سازش خطای ردیابی و هزینه (TE ≈ ۳ تا ۴٪ با بهینه‌سازی).' : 'نزدیک کف خطا (TE ≈ ۲٪ با بهینه‌سازی)؛ نیاز به نقدشوندگی بیشتر.'}">${n}</option>`).join('')}</select></label>
-      <label${tip('فقط نمادهای نقدشونده اجازهٔ ورود به نمونه دارند؛ وزن هدف همچنان از کل واجدان بورس است، پس خطا بالاتر می‌رود ولی اجرا شدنی‌تر می‌شود.')}>نقدشوندگی <span class="seg" id="rb-liq">${Object.keys(R.liq).map(q => `<button data-v="${q}" aria-pressed="false"${tip(LIQN[q][1])}>${LIQN[q][0]}</button>`).join('')}</span></label>
-    </div>
-    <div class="ctl">
-      <label${tip('نقد ثابت: بخشی از سرمایه را بیرون از سهام نگه می‌دارد (L < ۱). وام ثابت: با نرخ وام به سهام اضافه می‌کند (L > ۱). تراز بتا: هر ماه L = ۱/β نمونه، بُرش ۰٫۷ تا ۱٫۵.')}>نقد / وام <span class="seg" id="rb-mode">
+  <section class="panel rb-panel" style="--lg:var(--lg-a)">
+    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('شاخص كل را با تعدادی سهم بسازید، نقدشوندگی را فیلتر کنید، نقد یا وام اضافه کنید و ببینید اگر از هر تاریخ گذشته شروع می‌کردید تا امروز چقدر خطا داشتید.')}>همتای خودتان را بسازید و بسنجید</span><span class="chip" id="rb-chip"${tip('بازه و دادهٔ این نما.')}></span></div>
+    <div class="rb-grid">
+      <div class="rb-ctl">
+        <div class="rb-g"><div class="rb-gt"${tip('کدام سهم‌ها و چند تا در همتا باشند.')}>۱ · نمونه</div>
+          <label${tip('روش انتخاب سهام نمونه از میان نامزدهای نگهداری.')}>روش <span class="seg" id="rb-method">${Object.entries(METHODS).map(([k, t]) => `<button data-v="${k}" aria-pressed="false"${tip('روش انتخاب: ' + t)}>${t}</button>`).join('')}</span></label>
+          <label${tip('تعداد سهام نمونه؛ هرچه بیشتر، خطای ردیابی کمتر و هزینهٔ اجرا بیشتر.')}>تعداد سهام <select id="rb-n">${R.Ns.map(n => `<option data-tip="نمونهٔ ${n} سهمی: ${n < 30 ? 'ردیابی ضعیف (TE بالای ۴٪)؛ فقط برای سرمایهٔ خیلی کوچک.' : n < 80 ? 'سازش خطای ردیابی و هزینه (TE ≈ ۳ تا ۴٪ با بهینه‌سازی).' : 'نزدیک کف خطا (TE ≈ ۲٪ با بهینه‌سازی)؛ نیاز به نقدشوندگی بیشتر.'}">${n}</option>`).join('')}</select></label>
+          <label${tip('فقط نمادهای نقدشونده اجازهٔ ورود به نمونه دارند؛ وزن هدف همچنان از کل واجدان بورس است، پس خطا بالاتر می‌رود ولی اجرا شدنی‌تر می‌شود.')}>نقدشوندگی <span class="seg" id="rb-liq">${Object.keys(R.liq).map(q => `<button data-v="${q}" aria-pressed="false"${tip(LIQN[q][1])}>${LIQN[q][0]}</button>`).join('')}</span></label>
+        </div>
+        <div class="rb-g"><div class="rb-gt"${tip('همهٔ سرمایه در سهام، یا بخشی نقد، یا وام اضافه.')}>۲ · سرمایه: نقد یا وام</div>
+          <label${tip('نقد ثابت: بخشی از سرمایه را بیرون از سهام نگه می‌دارد (L < ۱). وام ثابت: با نرخ وام به سهام اضافه می‌کند (L > ۱). تراز بتا: هر ماه L = ۱/β نمونه، بُرش ۰٫۷ تا ۱٫۵.')}>نقد / وام <span class="seg" id="rb-mode">
         <button data-v="none" aria-pressed="false"${tip('کاملاً سرمایه‌گذاری‌شده بدون وام و نقد.')}>بدون</button><button data-v="cash" aria-pressed="false"${tip('درصدی از سرمایه نقد می‌ماند.')}>نقد ثابت</button><button data-v="loan" aria-pressed="false"${tip('درصدی از سرمایه وام گرفته و در سهام می‌رود.')}>وام ثابت</button><button data-v="beta" aria-pressed="false"${tip('L = ۱/β هر ماه.')}>تراز بتا</button></span></label>
-      <label id="rb-amt-l"${tip('درصد نقد یا وام نسبت به سرمایه.')}><span id="rb-amt-t">مقدار ٪</span> <input type="number" id="rb-amt" value="10" min="0" max="50" step="5"></label>
-      <label${tip('نرخ سالانهٔ وام؛ بهره روزانه از NAV کم می‌شود. [تأیید لازم] دسترسی واقعی به وام و نرخ آن.')}>نرخ وام ٪ <input type="number" id="rb-rb" value="30" min="0" max="80" step="1"></label>
-      <label${tip('بازدهٔ سالانهٔ نقد نگه‌داشته‌شده (مثلاً صندوق درآمد ثابت)؛ صفر یعنی بدون بهره.')}>بازده نقد ٪ <input type="number" id="rb-rc" value="0" min="0" max="80" step="1"></label>
-      <label${tip('هزینهٔ رفت‌وبرگشت معامله بر حسب bp؛ در گردش یک‌طرفه × L ضرب می‌شود.')}>هزینه (bp) <input type="number" id="rb-cost" value="100" min="0" step="10"></label>
-      <label${tip('اگر همتا را از این تاریخ ساخته بودیم؛ همهٔ خطاها تا امروز از همین ماه حساب می‌شود.')}>شروع از <select id="rb-j0">${startOpts}</select></label>
-    </div>
-    <div class="kpis" id="rb-kpi"></div>
-    <div class="lineage" id="rb-read"></div>
+          <label id="rb-amt-l"${tip('درصد نقد یا وام نسبت به سرمایه.')}><span id="rb-amt-t">مقدار ٪</span> <input type="number" id="rb-amt" value="10" min="0" max="50" step="5"></label>
+          <label${tip('نرخ سالانهٔ وام؛ بهره روزانه از NAV کم می‌شود. [تأیید لازم] دسترسی واقعی به وام و نرخ آن.')}>نرخ وام ٪ <input type="number" id="rb-rb" value="30" min="0" max="80" step="1"></label>
+          <label${tip('بازدهٔ سالانهٔ نقد نگه‌داشته‌شده (مثلاً صندوق درآمد ثابت)؛ صفر یعنی بدون بهره.')}>بازده نقد ٪ <input type="number" id="rb-rc" value="0" min="0" max="80" step="1"></label>
+        </div>
+        <div class="rb-g"><div class="rb-gt"${tip('هزینهٔ معامله و تاریخ شروع آزمون.')}>۳ · سنجش</div>
+          <label${tip('هزینهٔ رفت‌وبرگشت معامله بر حسب bp؛ در گردش یک‌طرفه × L ضرب می‌شود.')}>هزینه (bp) <input type="number" id="rbx-cost" value="100" min="0" step="10"></label>
+          <label${tip('اگر همتا را از این تاریخ ساخته بودیم؛ همهٔ خطاها تا امروز از همین ماه حساب می‌شود.')}>شروع از <select id="rb-j0">${startOpts}</select></label>
+        </div>
+      </div>
+      <div class="rb-out">
+        <div class="lineage rb-lead" id="rbx-read"></div>
+        <div class="kpis" id="rb-kpi"></div>
+        <details class="sam-fold sm"><summary${tip('خطای ردیابی در برابر همتای کامل، بتا، همبستگی، اهرم میانگین، گردش و پوشش وزن شاخص.')}>شاخص‌های بیشتر</summary><div class="kpis" id="rb-kpi2"></div></details>
     <div class="panel-body" style="padding:var(--s-3)"><div class="mute" style="font-size:var(--fs-xs)" id="rb-ch1-t"></div><div id="rb-ch1"></div><div class="mute" style="font-size:var(--fs-xs);margin-top:8px" id="rb-ch2-t"></div><div id="rb-ch2"></div><div class="mute" id="rb-hov" style="font-size:var(--fs-2xs);min-height:1.4em"></div></div>
+      </div>
+    </div>
   </section>
-  <div id="rb-enh"></div>
   <section class="panel" style="--lg:var(--lg-b)">
-    <div class="panel-head"><span class="lg-badge">3</span><span class="panel-title"${tip('همین تنظیمات را اگر از ابتدای هر سال شمسی شروع می‌کردیم: خطای ردیابی و تفاوت بازده تا امروز.')}>اگر از سال‌های گذشته شروع می‌کردیم</span></div>
-    <div class="panel-body scroll" style="max-height:300px"><table class="dt" id="rb-years"></table></div>
+    <div class="panel-head"><span class="lg-badge">3</span><span class="panel-title"${tip('دو نگاه دیگر به همین همتا: اگر از سال‌های دیگر شروع می‌کردیم، و پرتفوی هر تاریخ.')}>جزئیات همین همتا</span>
+      <div class="seg" id="rb-dtabs"><button data-t="years" aria-pressed="true"${tip('همین تنظیمات را اگر از ابتدای هر سال شمسی شروع می‌کردیم: خطای ردیابی و تفاوت بازده تا امروز.')}>اگر از سال‌های گذشته شروع می‌کردیم</button><button data-t="port" aria-pressed="false"${tip('پرتفویی که در تاریخ سیگنال انتخاب‌شده می‌خریدید، با وزن شاخص مقایسه شده. «امروز» همان پرتفوی قابل اجراست.')}>پرتفوی در یک تاریخ</button></div>
+      <div class="panel-tools" id="rb-ptools" hidden><button class="tool" id="rbx-csv"${tip('وزن‌های این تاریخ به‌صورت CSV.')}>CSV</button><button class="tool" id="rb-plan"${tip('فقط برای «امروز»: وزن هدف را به نمای دستور اجرا می‌فرستد تا سفارش‌ها ساخته شود.')}>ارسال به برنامهٔ اقدام ←</button></div></div>
+    <div id="rb-d-years"><div class="panel-body scroll" style="max-height:340px"><table class="dt" id="rb-years"></table></div></div>
+    <div id="rb-d-port" hidden>
+      <div class="ctl"><label${tip('تاریخ سیگنال (پایان ماه شمسی). پرتفوی با همان آگاهی آن روز انتخاب می‌شود.')}>تاریخ <select id="rb-date">${dateOpts}</select></label>
+        <label${tip('سرمایهٔ فرضی برای محاسبهٔ روز لازم ساخت با ۱۰٪ مشارکت در ارزش معاملات روزانه (فقط «امروز»).')}>سرمایه (میلیارد ریال) <input type="number" id="rb-aum" value="500" min="1" step="10"></label></div>
+      <div class="kpis" id="rb-pkpi"></div>
+      <div class="panel-body scroll" style="max-height:440px"><table class="dt" id="rb-ptab"></table></div>
+      <div class="lineage" id="rb-plin"></div>
+    </div>
   </section>
-  <section class="panel" style="--lg:var(--lg-c)">
-    <div class="panel-head"><span class="lg-badge">4</span><span class="panel-title"${tip('پرتفویی که در تاریخ سیگنال انتخاب‌شده می‌خریدید، با وزن شاخص مقایسه شده. «امروز» همان پرتفوی قابل اجراست.')}>پرتفوی در یک تاریخ</span>
-      <div class="panel-tools"><button class="tool" id="rb-csv"${tip('وزن‌های این تاریخ به‌صورت CSV.')}>CSV</button><button class="tool" id="rb-plan"${tip('فقط برای «امروز»: وزن هدف را به نمای دستور اجرا می‌فرستد تا سفارش‌ها ساخته شود.')}>ارسال به برنامهٔ اقدام ←</button></div></div>
-    <div class="ctl"><label${tip('تاریخ سیگنال (پایان ماه شمسی). پرتفوی با همان آگاهی آن روز انتخاب می‌شود.')}>تاریخ <select id="rb-date">${dateOpts}</select></label>
-      <label${tip('سرمایهٔ فرضی برای محاسبهٔ روز لازم ساخت با ۱۰٪ مشارکت در ارزش معاملات روزانه (فقط «امروز»).')}>سرمایه (میلیارد ریال) <input type="number" id="rb-aum" value="500" min="1" step="10"></label></div>
-    <div class="kpis" id="rb-pkpi"></div>
-    <div class="panel-body scroll" style="max-height:440px"><table class="dt" id="rb-ptab"></table></div>
-    <div class="lineage" id="rb-plin"></div>
-  </section>`;
+  <details class="sam-fold panel" id="rb-enh-box"><summary${tip('پیشرفته: به‌جای دنبال‌کردن دقیق «شاخص كل»، هدف را آگاهانه تغییر دهید (تیلت صنعت یا معیار، سقف وزن، آمیخته با هم‌وزن) و با همان N سهم بسازید.')}><span class="lg-badge">4</span> شاخص بهبودیافته (پیشرفته): هدف را با تیلت و قید تغییر دهید</summary><div id="rb-enh"></div></details>`;
   const seg = (id, key, cb) => $(id).querySelectorAll('button').forEach(b => { b.onclick = () => { if (key !== 'mode') stale(); S[key] = key === 'liq' ? +b.dataset.v : b.dataset.v; cb && cb(); render(); }; });
   seg('rb-method', 'method'); seg('rb-liq', 'liq'); seg('rb-mode', 'mode');
+  $('rb-dtabs').querySelectorAll('button').forEach(b => { b.onclick = () => {                 // زبانه‌های «جزئیات همین همتا»
+    const port = b.dataset.t === 'port';
+    $('rb-dtabs').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    $('rb-d-years').hidden = port; $('rb-d-port').hidden = !port; $('rb-ptools').hidden = !port;
+  }; });
   $('rb-n').onchange = e => { stale(); S.N = +e.target.value; render(); };
   $('rb-amt').onchange = e => { S[S.mode === 'loan' ? 'loan' : 'cash'] = +e.target.value; render(); };
   $('rb-rb').onchange = e => { S.rb = +e.target.value; render(); }; $('rb-rc').onchange = e => { S.rc = +e.target.value; render(); };
-  $('rb-cost').onchange = e => { S.cost = +e.target.value; render(); };
+  $('rbx-cost').onchange = e => { S.cost = +e.target.value; render(); };
   $('rb-j0').onchange = e => { S.j0 = +e.target.value; render(); };
   $('rb-date').onchange = e => { S.pdate = e.target.value; renderPort(); };
   $('rb-aum').onchange = e => { S.aum = +e.target.value; renderPort(); };
@@ -165,10 +179,13 @@ function render() {
   const kp2 = [['میانگین L', f(sL / cnt, 2), 'میانگین نسبت سهام به سرمایه: زیر ۱ نقد، بالای ۱ وام.'], ['گردش ماهانهٔ یک‌طرفه', f(100 * sT / Math.max(cnt - 1, 1), 0) + '٪', 'میانگین سهم پرتفوی که هر ماه خرید و فروش می‌شود (پیش از ضرب در L).'],
     ['ظرفیت امروز (میلیارد ریال)', f(capNow, 0), 'بزرگ‌ترین سرمایه‌ای که پرتفوی امروز را در یک روز با ۱۰٪ مشارکت در ارزش معاملات روزانهٔ ضعیف‌ترین نماد می‌سازد.'],
     ['پوشش وزن شاخص (آخرین ماه)', f(100 * covB, 0) + '٪', 'مجموع وزن شاخص نمادهای نمونه؛ هرچه بیشتر، نمونه به شاخص نزدیک‌تر.']];
-  $('rb-kpi').innerHTML = [...kp, ...kp2].map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v num">${v}</div></div>`).join('');
+  const kpiHtml = a => a.map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v num">${v}</div></div>`).join('');
+  // چهار عدد اصلی: چقدر دقیق، چقدر عقب، از شروع تا امروز، چقدر قابل ساخت؛ بقیه در «شاخص‌های بیشتر»
+  const MAIN = new Set(['TE در برابر شاخص رسمی', 'فاصلهٔ بازده سالانه (واحد درصد)', 'تفاوت تجمعی تا امروز', 'ظرفیت امروز (میلیارد ریال)']), all = [...kp, ...kp2];
+  $('rb-kpi').innerHTML = kpiHtml(all.filter(x => MAIN.has(x[0]))); $('rb-kpi2').innerHTML = kpiHtml(all.filter(x => !MAIN.has(x[0])));
   if (m) {
     const ov = S.mode === 'none' ? 'بدون وام و نقد' : S.mode === 'cash' ? `${S.cash}٪ نقد` : S.mode === 'loan' ? `${S.loan}٪ وام` : 'تراز بتا';
-    $('rb-read').innerHTML = `<span><b${tip('جملهٔ خودکار از همین محاسبه.')}>خوانش</b> اگر از ${dj(R.sig[S.j0])} همتایی با ${S.N} سهم (${METHODS[S.method]}، نقدشوندگی ${LIQN[S.liq][0]}، ${ov}) ساخته بودیم، تا امروز (${f(yrs, 1)} سال) ارزش همتا نسبت به شاخص رسمی ${sg(m.td)}٪ تفاوت داشت و خطای ردیابی سالانه ${f(m.te, 1)}٪ بود.</span><span><b${tip('داده‌ها و فرض‌ها.')}>فرض</b> بازده کل، ریبالانس پایان ماه جلالی، اجرا روز بعد، بدون صف و حد نوسان؛ نرخ وام ${S.rb}٪ و هزینه ${S.cost}bp [تأیید لازم].</span>`;
+    $('rbx-read').innerHTML = `<span><b${tip('جملهٔ خودکار از همین محاسبه.')}>خوانش</b> اگر از ${dj(R.sig[S.j0])} همتایی با ${S.N} سهم (${METHODS[S.method]}، نقدشوندگی ${LIQN[S.liq][0]}، ${ov}) ساخته بودیم، تا امروز (${f(yrs, 1)} سال) ارزش همتا نسبت به شاخص رسمی ${sg(m.td)}٪ تفاوت داشت و خطای ردیابی سالانه ${f(m.te, 1)}٪ بود.</span><span><b${tip('داده‌ها و فرض‌ها.')}>فرض</b> بازده کل، ریبالانس پایان ماه جلالی، اجرا روز بعد، بدون صف و حد نوسان؛ نرخ وام ${S.rb}٪ و هزینه ${S.cost}bp [تأیید لازم].</span>`;
   }
   drawCharts(cv, m);
   renderYears(o, key);
@@ -233,7 +250,7 @@ function renderPort() {
   }).join('') + '</tbody>';
   $('rb-plin').innerHTML = `<span><b${tip('وزن هدف از ارزش بازار نمادهای واجد بورس در آخرین روز سیگنال.')}>وزن شاخص</b> تقریب ارزش‌وزن بدون شناوری آزاد</span><span><b${tip('نمادهایی از شاخص که در نمونه نیستند.')}>خارج از نمونه</b> ${P.bj[0].length - nmT} نماد با مجموع وزن ${f(100 * (1 - cov), 0)}٪</span>`;
   $('rb-plan').style.display = P.live ? '' : 'none';
-  $('rb-csv').onclick = () => download(`replica_${P.live ? R.asof : dj(R.sig[P.j]).replace(/\//g, '-')}.csv`, [['symbol', 'sector', 'w_replica_pct', 'w_index_pct'], ...P.rows.map(r => [r.nm.s, r.nm.sec, (100 * r.w).toFixed(3), (100 * r.b).toFixed(3)])]);
+  $('rbx-csv').onclick = () => download(`replica_${P.live ? R.asof : dj(R.sig[P.j]).replace(/\//g, '-')}.csv`, [['symbol', 'sector', 'w_replica_pct', 'w_index_pct'], ...P.rows.map(r => [r.nm.s, r.nm.sec, (100 * r.w).toFixed(3), (100 * r.b).toFixed(3)])]);
   $('rb-plan').onclick = () => {
     if (!root.SIM_ENSURE_LAB || !root.SIM_SEND_PLAN) { toast('Lab بارگذاری نشده'); return; }
     root.SIM_ENSURE_LAB(() => {
