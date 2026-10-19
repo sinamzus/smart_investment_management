@@ -127,7 +127,7 @@ function initLab() {
   $('lb-algo').innerHTML = L.algos.filter(a => E.JS_ALGOS.includes(a.name)).map(a => `<option value="${a.name}" data-tip="${esc(a.desc + (a.ref ? ' — ' + a.ref : ''))}">${a.fa}</option>`).join('');
   const fams = {}; L.signals.forEach(s => (fams[s.family] = fams[s.family] || []).push(s));
   $('lb-dl').innerHTML = L.signals.map(s => `<option value="${esc(s.fa)}">${esc(FAM[s.family] || s.family)} · ${s.name}</option>`).join('');
-  $('lb-comb').onchange = syncBuilder; $('lb-neu').addEventListener('change', renderEff); $('lb-topk').addEventListener('input', renderEff); $('lb-algo').onchange = () => { lab.spec.algo = $('lb-algo').value; lab.spec.params = {}; renderParams(); };
+  $('lb-comb').onchange = syncBuilder; $('lb-neu').addEventListener('change', renderEff); $('lb-m0').addEventListener('change', renderCount); $('lb-m1').addEventListener('change', renderCount); $('lb-topk').addEventListener('input', renderEff); $('lb-algo').onchange = () => { lab.spec.algo = $('lb-algo').value; lab.spec.params = {}; renderParams(); };
   $('lb-addbtn').onclick = addSignalFromBox; $('lb-q').onkeydown = e => { if (e.key === 'Enter') addSignalFromBox(); };
   $('lb-run').onclick = () => runLab(true); $('lb-save').onclick = saveRun; $('lb-reset').onclick = () => { setSpec(JSON.parse(JSON.stringify(DEFAULT))); runLab(true); };
   $$$('#lb-tabs button').forEach(b => b.onclick = () => { lab.tab = b.dataset.t; $$$('#lb-tabs button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderTab(); });
@@ -215,8 +215,27 @@ const PARAMS = { quantile: [['G', 'تعداد گروه', 5, 2, 20, 1], ['k', 'گ
 function renderParams() {
   const a = lab.spec.algo, ps = PARAMS[a] || [], meta = L.algos.find(x => x.name === a);
   $('lb-params').innerHTML = ps.map(([k, t, d, lo, hi, st]) => { const v = (lab.spec.params && lab.spec.params[k]) ?? d; return `<label class="lb-row" data-tip="${esc(PARAM_TIP[k] || '')}">${t} <input type="number" data-k="${k}" min="${lo}" max="${hi}" step="${st}" value="${v}"></label>`; }).join('');
-  $$$('#lb-params input').forEach(i => { i.oninput = () => { lab.spec.params = lab.spec.params || {}; lab.spec.params[i.dataset.k] = +i.value; }; });
+  $$$('#lb-params input').forEach(i => { i.oninput = () => { lab.spec.params = lab.spec.params || {}; lab.spec.params[i.dataset.k] = +i.value; renderCount(); }; });
   $('lb-algodesc').textContent = meta ? meta.desc + ' — ' + meta.ref : '';
+  renderCount();
+}
+/* تعداد تقریبی نماد سبد: الگوریتم‌های کسری (ورود ۰٫۲ یعنی ۲۰٪ برتر) تعداد را مستقیم نمی‌گویند؛ از واجدان امروز در بازارهای انتخاب‌شده حساب می‌شود
+   (پیش از فیلتر حداقل ارزش معاملات؛ تعداد واجدان ماه‌به‌ماه عوض می‌شود). */
+function eligibleToday() {
+  const rl = CTX.rows - 1, ok = E.okAt(CTX, rl), m0 = $('lb-m0').checked, m1 = $('lb-m1').checked || !m0; let n = 0;
+  for (let i = 0; i < CTX.k; i++) if (ok[i] && ((CTX.mkt[i] === 0 && (m0 || !m1)) || (CTX.mkt[i] === 1 && m1))) n++;
+  return n;
+}
+function renderCount() {
+  let el = $('lb-count'); if (!el) { el = document.createElement('div'); el.id = 'lb-count'; el.className = 'lb-hint'; $('lb-params').after(el); }
+  const a = lab.spec.algo, p = { ...((L.algos.find(x => x.name === a) || {}).params || {}), ...(lab.spec.params || {}) }; $$$('#lb-params input').forEach(i => { p[i.dataset.k] = +i.value; });
+  const n = eligibleToday(), num = x => `<b>${Math.round(x)}</b>`;
+  let t = '';
+  if (a === 'topfrac') t = `≈ ${num(n * p.entry)} نماد ورود (${Math.round(100 * p.entry)}٪ برتر) و با بافر تا ${num(n * Math.max(p.exit, p.entry))} نماد نگه‌داشته‌شده`;
+  else if (a === 'quantile') t = `هر گروه ≈ ${num(n / (p.G || 5))} نماد`;
+  else if (a === 'topn') t = `${num(p.N)} نماد ورود و با بافر تا ${num(p.N + (p.buffer || 0))} نماد`;
+  else t = 'همهٔ واجدان با وزن متفاوت (یا مجموعهٔ برتر الگوریتم)';
+  el.innerHTML = `${t} — از ${num(n)} سهم واجد امروز در بازارهای انتخاب‌شده (پیش از فیلتر نقدشوندگی؛ تعداد واجدان ماه‌به‌ماه عوض می‌شود). برای تعداد ثابت، الگوریتم «top-N» را انتخاب کنید.`;
 }
 function readSpec() {
   const s = lab.spec, mk = []; if ($('lb-m0').checked) mk.push('bourse'); if ($('lb-m1').checked) mk.push('farabourse');

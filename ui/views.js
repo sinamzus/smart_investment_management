@@ -63,7 +63,7 @@ function divRender() {
   document.querySelectorAll('#dv-str button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === dv.s));
   $('dv-title').textContent = (dv.k === 'K' ? 'شاخص كل' : 'كل (هم وزن)') + ' · همتای سرمایه‌پذیر با تأخیر پرداخت سود';
   $('dv-kpis').innerHTML = [['تفاوت ردیابی سالانه', sgn(c.gap, 2) + '%', cls(c.gap)], ['نسبت سطح نهایی NAV / TR', fmt(c.ratio, 3), c.ratio >= 1 ? 'up' : 'down'],
-    ['خطای ردیابی (TE سالانه)', fmt(c.te, 2) + '%', ''], ['سود نقدی ضمنی سالانه', fmt(S.y_ann_pct, 1) + '%', ''], ['بازه', S.from.slice(0, 4) + '→' + S.to.slice(0, 4), '']]
+    ['خطای ردیابی (TE سالانه)', fmt(c.te, 2) + '%', ''], ['سود نقدی ضمنی سالانه', fmt(S.y_ann_pct, 1) + '%', ''], ['بازه', jyr(S.from) + '→' + jyr(S.to), '']]
     .map(([k, v, cl]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${cl}">${v}</div></div>`).join('');
   $('dv-lineage').innerHTML = `<span><b>مدل</b> NAV = ارزش پرتفوی + مطالبات سود − وام؛ سود روز استحقاق = TR − PR رسمی، پرداخت L روز بعد</span><span><b>L = ۰</b> دقیقاً TR رسمی (تأییدکنندهٔ مدل)</span><span><b>فرض</b> ${dv.emp && S.empirical_mix ? 'هر سود نقدی با تأخیر یکی از رویدادهای واقعی (کدال و فارابی) پرداخت می‌شود؛ وزن هر رویداد = سهمش از جریان سود همین شاخص' : 'تأخیر یکسان L برای همهٔ شرکت‌ها'}؛ نرخ وام ثابت در کل دوره</span><span><b>روش‌شناسی</b> فصل ۰۳ §۳٫۵</span>`;
   // سناریوهای ثابت
@@ -80,7 +80,7 @@ function divPayPanel() {
   $('dv-pay-chip').textContent = has ? p.with_ex + ' رویداد با تاریخ پرداخت · ' + p.agm_rows + ' مجمع' : p.rows + ' زمان‌بندی · ' + p.agm_rows + ' مجمع';
   const hist = has ? `<table class="dt"><thead><tr><th>تأخیر از استحقاق (روز)</th>${p.hist.map(h => `<th class="n">${h[0]}</th>`).join('')}</tr></thead><tbody><tr><td>رویداد</td>${p.hist.map(h => `<td class="n">${h[1]}</td>`).join('')}</tr><tr><td>سهم از جریان سود «كل» ٪</td>${p.hist.map(h => `<td class="n">${fmt(h[2], 0)}</td>`).join('')}</tr></tbody></table>` : '';
   const yr = has ? `<table class="dt"><thead><tr><th>سال مجمع</th>${Object.keys(p.by_year).map(y => `<th class="n">${y}</th>`).join('')}</tr></thead><tbody><tr><td>میانهٔ تأخیر (روز)</td>${Object.values(p.by_year).map(o => `<td class="n">${o.median}</td>`).join('')}</tr><tr><td>رویداد</td>${Object.values(p.by_year).map(o => `<td class="n">${o.n}</td>`).join('')}</tr></tbody></table>` : '';
-  const cv = has && p.coverage.length ? `<table class="dt"><thead><tr><th>سال میلادی استحقاق</th>${p.coverage.filter(c => c.events).map(c => `<th class="n">${c.year}</th>`).join('')}</tr></thead><tbody><tr><td>پوشش جریان سود «كل» ٪</td>${p.coverage.filter(c => c.events).map(c => `<td class="n">${fmt(c.cov_K * 100, 0)}</td>`).join('')}</tr><tr><td>پوشش جریان سود هم‌وزن ٪</td>${p.coverage.filter(c => c.events).map(c => `<td class="n">${fmt(c.cov_EW * 100, 0)}</td>`).join('')}</tr></tbody></table>` : '';
+  const cv = has && p.coverage.length ? `<table class="dt"><thead><tr><th>سال شمسی استحقاق</th>${p.coverage.filter(c => c.events).map(c => `<th class="n">${c.year}</th>`).join('')}</tr></thead><tbody><tr><td>پوشش جریان سود «كل» ٪</td>${p.coverage.filter(c => c.events).map(c => `<td class="n">${fmt(c.cov_K * 100, 0)}</td>`).join('')}</tr><tr><td>پوشش جریان سود هم‌وزن ٪</td>${p.coverage.filter(c => c.events).map(c => `<td class="n">${fmt(c.cov_EW * 100, 0)}</td>`).join('')}</tr></tbody></table>` : '';
   $('dv-pay').innerHTML = `<div class="note">تاریخ مجمع و سود هر سهم از ${p.agm_rows} مصوبهٔ مجمع کدال خوانده شده و با تعدیل قیمت TSETMC تطبیق کامل دارد.
     ${has ? `تاریخ پرداخت سجامی از دو منبع آمده است: نامه‌های «زمان‌بندی پرداخت سود» کدال (ن-۱۳؛ فقط ${p.letters_text} از ${p.letters} پیوست متن‌دار است) و جدول‌های کارگزاری فارابی که همان نامه‌ها را برای همهٔ نمادها رونویسی می‌کند. ${p.events} رویداد (${p.symbols} نماد) داریم که ${p.with_ex} تای آن به روز استحقاق در پانل وصل شد.
     <b>تأخیر از استحقاق: میانهٔ همهٔ رویدادها ${p.median} روز (چارک‌ها ${p.q25}–${p.q75})؛ ولی وزن‌شده با جریان سود، میانگین «شاخص كل» ${p.k.mean} روز و هم‌وزن ${p.ew.mean} روز</b> — شرکت‌های بزرگ (بانک‌ها، فولاد، پالایشی‌ها) زودتر پرداخت می‌کنند؛ مدل از این توزیع وزنی استفاده می‌کند («توزیع واقعی تأخیر» را روشن کنید).` : 'تاریخ پرداخت هنوز در داده نیست؛ مدل تأخیر یکسان L را به کار می‌برد.'}
@@ -315,6 +315,7 @@ function initRisk() {
 const fn = { sym: null, ref: 'tr', i: null, r0: null, r1: null, per: 'year', drag: null };
 const FB = () => (window.SIM_FUNDS && window.SIM_FUNDS.bench_names) || {};
 const fnBench = k => FB()[k] || k;
+const jyr = iso => (window.SIM_JDATE ? SIM_JDATE.j(iso) : iso).slice(0, 4);   // سال شمسی یک تاریخ ISO (ui/jdate.js)
 const y2i = s => `20${s.slice(0, 2)}-${s.slice(2, 4)}-${s.slice(4, 6)}`;
 const i2y = iso => iso.slice(2, 4) + iso.slice(5, 7) + iso.slice(8, 10);
 const dayMs = s => Date.parse(y2i(s) + 'T00:00:00Z');
@@ -436,7 +437,7 @@ function fnRender() {
   if (!F.funds.length) { fnEmpty(); return; }
   document.querySelectorAll('#fn-ref button').forEach(b => b.setAttribute('aria-pressed', b.dataset.r === fn.ref));
   const [a, b] = fnBounds(), last = fnLast();
-  $('fn-from').value = fn.r0 ? y2i(fn.r0) : ''; $('fn-to').value = fn.r1 ? y2i(fn.r1) : '';
+  $('fn-from').value = fn.r0 ? SIM_JDATE.j(y2i(fn.r0)) : ''; $('fn-to').value = fn.r1 ? SIM_JDATE.j(y2i(fn.r1)) : '';   // ورودی‌ها شمسی‌اند (ui/jdate.js)
   const rows = fnRows();
   if (!rows.length) { $('fn-tab').innerHTML = ''; $('fn-lin-a').innerHTML = '<span>برای این بازه دادهٔ کافی نیست</span>'; return; }
   if (!rows.find(r => r.f.symbol === fn.sym)) fn.sym = rows[0].f.symbol;
@@ -474,7 +475,7 @@ function initFnd() {
   document.querySelectorAll('#fn-pre button').forEach(b => b.onclick = () => fnPreset(b.dataset.k));
   document.querySelectorAll('#fn-ref button').forEach(b => b.onclick = () => { fn.ref = b.dataset.r; fnRender(); });
   document.querySelectorAll('#fn-pergrp button').forEach(b => b.onclick = () => { fn.per = b.dataset.p; fnRender(); });
-  const dt = () => { const a = $('fn-from').value, b = $('fn-to').value; fnSetRange(a ? i2y(a) : null, b ? i2y(b) : null); };
+  const dt = () => { const a = SIM_JDATE.g($('fn-from').value), b = SIM_JDATE.g($('fn-to').value); fnSetRange(a ? i2y(a) : null, b ? i2y(b) : null); };
   $('fn-from').onchange = dt; $('fn-to').onchange = dt;
   $('fn-csv').onclick = () => {
     const F = window.SIM_FUNDS; if (!F.funds.length) return download('index_funds_candidates.csv', [['symbol', 'name', 'benchmark'], ...F.missing.map(m => [m.symbol, m.name, m.benchmark])]);

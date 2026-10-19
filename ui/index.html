@@ -223,7 +223,7 @@
       <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title">ردیابی صندوق‌های شاخصی در برابر شاخص مرجع</span><span class="chip" id="fn-chip"></span>
         <div class="panel-tools"><button class="tool" id="fn-csv">CSV</button></div></div>
       <div class="ctl" id="fn-ctl"><div class="seg" id="fn-pre"><button data-k="all">کل</button><button data-k="3y">۳ سال</button><button data-k="1y">۱ سال</button><button data-k="6m">۶ ماه</button><button data-k="3m">۳ ماه</button><button data-k="1m">۱ ماه</button></div>
-        <label>از <input type="date" id="fn-from"></label><label>تا <input type="date" id="fn-to"></label><span class="mute">یا روی نمودار بکشید تا زوم شود</span></div>
+        <label data-tip="آغاز بازهٔ نمودار و آمار، به تاریخ شمسی (مثلاً 1402/01/01). خالی = از ابتدا.">از <input type="text" id="fn-from" placeholder="1402/01/01" inputmode="numeric" style="width:96px;direction:ltr"></label><label data-tip="پایان بازه، به تاریخ شمسی. خالی = تا امروز.">تا <input type="text" id="fn-to" placeholder="1405/07/26" inputmode="numeric" style="width:96px;direction:ltr"></label><span class="mute">یا روی نمودار بکشید تا زوم شود</span></div>
       <div class="panel-body scroll"><table class="dt" id="fn-tab"></table></div>
       <div class="lineage" id="fn-lin-a"></div></section>
     <section class="panel" style="--lg:var(--lg-b)">
@@ -373,6 +373,7 @@ addEventListener('keydown', e => { const typing = ['INPUT', 'TEXTAREA'].includes
 
 render(); renderComp(); drawChart();
 </script>
+<script src="jdate.js"></script>
 <script src="labengine.js"></script>
 <script src="lab.js"></script>
 <script src="data/replica.js"></script>

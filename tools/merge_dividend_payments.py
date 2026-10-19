@@ -126,14 +126,18 @@ def main():
         cw = np.cumsum(ww.values[order]) / ww.sum()
         med = float(L.values[order][np.searchsorted(cw, 0.5)])
         print(f"  تأخیر وزنی با جریان سود {k}: میانگین={mean:.0f} میانه={med:.0f}")
-    # پوشش: سهم جریان سود هر شاخص در هر سال میلادی که رویدادش تاریخ پرداخت دارد (برای گزارش در Dividend Lab)
+    # پوشش: سهم جریان سود هر شاخص در هر سال شمسی (سال روز استحقاق) که رویدادش تاریخ پرداخت دارد (برای گزارش در Dividend Lab).
+    # سال شمسی (نه میلادی): رابط همه‌جا شمسی است و سال مجامع/سود در بورس ایران شمسی است (۲۰۲۶-۱۰-۱۹).
     R2 = R.copy()
     R2["y"] = R2.r_tr - R2.r_pr
     R2 = R2[R2.y > 1e-6]
+    jy = lambda s: s.map(lambda d: jalali.g2j(d.year, d.month, d.day)[0])   # noqa: E731
+    R2["jy"] = jy(R2.date)
+    mj = jy(pd.to_datetime(m.ex_date))
     cov = []
-    for y in sorted(set(R2.date.dt.year)):
-        x = R2[R2.date.dt.year == y]
-        e = m[pd.to_datetime(m.ex_date).dt.year == y]
+    for y in sorted(set(R2.jy)):
+        x = R2[R2.jy == y]
+        e = m[mj == y]
         if len(x) and (x.wt * x.y).sum() > 0:
             cov.append({"year": int(y), "events": int(len(e)), "cov_K": round(float(e.wK.sum() / (x.wt * x.y).sum()), 3), "cov_EW": round(float(e.wEW.sum() / x.y.sum()), 3)})
     pd.DataFrame(cov).to_csv(CA / "dividend_payment_coverage.csv", index=False)
