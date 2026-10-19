@@ -25,13 +25,6 @@ button,input { font: inherit; color: inherit; }
 .nav a[aria-current="page"] { color: var(--tx-1); background: var(--bg-select); font-weight: 600; }
 .nav kbd { margin-inline-start: 8px; border: 0; background: transparent; color: var(--tx-3); padding: 0; opacity: .7; }
 
-/* ── Command bar ─────────────────────────────────────────── */
-.cmd { flex: 1; max-width: 420px; display:flex; align-items:center; height: var(--ctl-h);
-  background: var(--bg-panel); border: var(--hair) solid var(--line); border-radius: var(--pill); padding: 0 var(--s-4); gap: var(--s-3); }
-.cmd:focus-within { border-color: var(--accent); }
-.cmd .prompt { font-family: var(--font-num); color: var(--accent); }
-.cmd input { flex:1; background:none; border:0; outline:0; font-size: var(--fs-sm); }
-.cmd input::placeholder { color: var(--tx-3); }
 kbd { font: 500 var(--fs-2xs)/1 var(--font-num); color: var(--tx-3); border: var(--hair) solid var(--line);
   border-radius: 6px; padding: 3px 6px; background: var(--bg-head); }
 
@@ -185,7 +178,6 @@ select { font: inherit; }
   .panel-body, .tbl-wrap, .heat-wrap { overflow-x: auto; }
   .topbar { flex-wrap: wrap; height: auto; padding-block: 4px; }
   .nav { overflow-x: auto; max-width: 100%; }
-  .cmd { order: 3; max-width: none; flex-basis: 100%; }
   .workspace, .workspace[class*="v-"] { grid-template-columns: 1fr !important; grid-template-rows: none !important; grid-auto-rows: minmax(380px, auto); overflow: visible; }
   .workspace .span-r, .workspace.v-risk > section:first-child { grid-row: auto; }
   .kpis { flex-wrap: wrap; } .kpi { min-width: 45%; }

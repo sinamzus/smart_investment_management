@@ -493,7 +493,7 @@ function initFnd() {
   redraws.fnd = null; fnRender();
 }
 
-/* ══════════ تراکم، حافظهٔ تنظیمات، تاریخچهٔ فرمان، کلیک روی نماد ══════════ */
+/* ══════════ تراکم، حافظهٔ تنظیمات، کلیک روی نماد ══════════ */
 const LS = { get: k => { try { return localStorage.getItem('sim.' + k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem('sim.' + k, v); } catch (e) { /* بی‌اهمیت */ } } };
 const DENS = ['calm', 'default', 'compact'], DENS_FA = { calm: 'آرام', default: 'استاندارد', compact: 'فشرده' };
 function setDensity(d) { if (d === 'calm') delete document.documentElement.dataset.density; else document.documentElement.dataset.density = d; LS.set('density2', d); }
@@ -502,16 +502,10 @@ if (LS.get('density2')) setDensity(LS.get('density2'));
 /* تم شب/روز: اگر انتخاب ذخیره نشده، از ترجیح سیستم‌عامل؛ دکمه آیکن وضعیت را نشان می‌دهد */
 const html = document.documentElement;
 html.dataset.theme = LS.get('theme') || (matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-const themeIcon = () => { const b = $('theme'); b.textContent = html.dataset.theme === 'dark' ? '☀' : '☾'; b.title = html.dataset.theme === 'dark' ? 'تم روز' : 'تم شب'; b.dataset.tip = html.dataset.theme === 'dark' ? 'تغییر به تم روز (THEME)' : 'تغییر به تم شب (THEME)'; };
+const themeIcon = () => { const b = $('theme'); b.textContent = html.dataset.theme === 'dark' ? '☀' : '☾'; b.title = html.dataset.theme === 'dark' ? 'تم روز' : 'تم شب'; b.dataset.tip = html.dataset.theme === 'dark' ? 'تغییر به تم روز' : 'تغییر به تم شب'; };
 new MutationObserver(() => { LS.set('theme', html.dataset.theme); themeIcon(); const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v) setTimeout(() => { if (v === 'index') drawChart(); else if (redraws[v]) redraws[v](); else if (NV[v] && NV[v].redraw) NV[v].redraw(); }, 30); }).observe(html, { attributes: true, attributeFilter: ['data-theme'] });
 themeIcon();
 document.addEventListener('click', e => { const a = e.target.closest('.symlink'); if (a) { e.preventDefault(); window.openSym(a.dataset.sym); } });
-const hist = JSON.parse(LS.get('hist') || '[]'); let hi = hist.length;
-$('cmd').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target.value.trim()) { hist.push(e.target.value.trim()); while (hist.length > 30) hist.shift(); LS.set('hist', JSON.stringify(hist)); hi = hist.length; }
-  if (e.key === 'ArrowUp' && hist.length) { hi = Math.max(0, hi - 1); e.target.value = hist[hi]; e.preventDefault(); }
-  if (e.key === 'ArrowDown' && hist.length) { hi = Math.min(hist.length, hi + 1); e.target.value = hist[hi] || ''; e.preventDefault(); }
-}, true);
 
 /* ══════════ Router ══════════ */
 const INIT = { div: initDiv, reb: initReb, qa: initQA, rep: initRep, sym: initSym, pf: initPf, risk: initRisk, fnd: initFnd };
@@ -551,17 +545,6 @@ addEventListener('keydown', e => {
   const n = '12345'.indexOf(e.key); if (n >= 0) { const sc = SECTIONS[n], last = LS.get('last.' + sc.id); show(last && SEC_OF[last] === sc.id ? last : sc.views[0][0]); }
   const lk = { l: 'lab', g: 'sig', a: 'plan' }[e.key.toLowerCase()]; if (lk && VIEWS[lk]) show(lk);
 });
-const _run = window.run;
-window.run = function (cmd) {
-  const [c, a] = cmd.trim().toLowerCase().split(/\s+/);
-  if (c === 'go' || c === 'view') { if (VIEWS[LEGACY[a] || a]) { show(a); toast('نما: ' + (LEGACY[a] || a)); } else toast('نما: ' + Object.keys(VIEWS).join(' · ')); return; }
-  if (c === 'help') { toast('GO LAB|SIG|INDEX|SAM|DIV|REB|RISK|PLAN|LIVE|PF|FND|QA|SYM|REP · SYM <نماد> · IDX K|EW · WIN 2014|2016 · THEME · DENSITY · ↑↓ تاریخچه · کلید ۱–۵ بخش‌ها'); return; }
-  if (c === 'sym' && a) { window.openSym(cmd.trim().split(/\s+/)[1]); return; }
-  if (c === 'density') { $('density').click(); return; }
-  if (c === 'idx' || c === 'win') show('index');
-  _run(cmd);
-  if (c === 'theme') { LS.set('theme', document.documentElement.dataset.theme); const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v && redraws[v]) redraws[v](); }
-};
 new ResizeObserver(() => { const v = Object.keys(VIEWS).find(k => !$(VIEWS[k]).hidden); if (v && redraws[v]) redraws[v](); }).observe(document.body);
 const want0 = (location.hash || '').slice(1) || LS.get('view') || 'index', want = LEGACY[want0] || want0;
 show(want in VIEWS ? want : 'index');

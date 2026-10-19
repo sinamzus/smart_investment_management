@@ -22,14 +22,9 @@
       <a href="#pf" data-sec="funds" data-tip="صندوق‌ها: سبد هدف صندوق شاخصی و ردیابی صندوق‌های شاخصی موجود در برابر مرجعشان.">صندوق‌ها<kbd>4</kbd></a>
       <a href="#qa" data-sec="data" data-tip="اعتماد: کیفیت داده، اطلاعات هر نماد و گزارش‌ها.">داده و گزارش<kbd>5</kbd></a>
     </nav>
-    <label class="cmd">
-      <span class="prompt">›</span>
-      <input id="cmd" data-tip="نوار فرمان (کلید / یا Ctrl+K). نمونه‌ها: GO LAB، GO SAM، SYM فولاد، IDX EW، WIN 2016، THEME، HELP. ↑/↓ فرمان‌های قبلی." placeholder="فرمان…   GO DIV   IDX EW   WIN 2016   THEME   HELP" aria-label="نوار فرمان" autocomplete="off" spellcheck="false">
-      <kbd>/</kbd>
-    </label>
     <span class="spacer"></span>
     <span class="chip info" id="asof-chip"></span>
-    <button class="tool" id="density" title="تراکم جدول‌ها (DENSITY)" aria-label="تراکم">☰</button>
+    <button class="tool" id="density" title="تراکم جدول‌ها" aria-label="تراکم">☰</button>
     <button class="tool" id="theme" title="تغییر تم" aria-label="تغییر تم">◐</button>
   </header>
   <div class="subnav" id="subnav" role="tablist" aria-label="زیربخش‌ها"></div>
@@ -277,8 +272,7 @@ $('asof-chip').textContent = 'داده تا ' + jd(D.meta.asof);
 $('status').innerHTML = `<span>داده تا <span class="num">${D.meta.asof}</span></span>
   <span>ساخته‌شده <span class="num">${D.meta.built}</span></span>
   <span>${fmt(D.meta.n_price_rows, 0)} ردیف قیمت · ${fmt(D.meta.n_adjust_events, 0)} تعدیل · ${fmt(D.meta.n_share_events, 0)} تغییر سرمایه</span>
-  <span>جهان: ${D.meta.universe} (<span class="num">${D.meta.n_universe_last}</span> نماد امروز)</span>
-  <span class="spacer"></span><span><span class="num">/</span> فرمان · <span class="num">HELP</span></span>`;
+  <span>جهان: ${D.meta.universe} (<span class="num">${D.meta.n_universe_last}</span> نماد امروز)</span>`;
 
 /* ── نمودار ────────────────────────────────────────────── */
 const cst = { i: null };                                   // وضعیت نمودار اصلی (هوور و زوم) — موتور: chartkit.js
@@ -354,22 +348,12 @@ $('csv-b').onclick = () => download('tracking_stats.csv', [['index', 'window', '
 $('csv-c').onclick = () => download(`dev_days_${state.k}.csv`, [['date', 'rebuilt_pct', 'official_pct', 'diff_bp', 'top_contributors'], ...D.devdays[state.k].map(d => [d.date, d.mine, d.off, d.diff_bp, d.top.map(t => t.sym + ':' + t.bp).join(' ')])]);
 $('csv-d').onclick = () => download('composition_top15.csv', [['symbol', 'name', 'sector', 'w_cw_pct', 'w_ew_pct'], ...D.comp.top.map(t => [t.sym, t.name, t.sector, t.w_cw, t.w_ew])]);
 
-/* ── کنترل‌ها و فرمان ─────────────────────────────────── */
+/* ── کنترل‌ها ─────────────────────────────────────────── */
 function setState(p) { Object.assign(state, p); cst.i = null; render(); drawChart(); }
 document.querySelectorAll('#idx-seg button').forEach(b => b.onclick = () => setState({ k: b.dataset.k }));
 document.querySelectorAll('#win-seg button').forEach(b => b.onclick = () => setState({ w: b.dataset.w }));
 let tt; function toast(t) { const e = $('toast'); e.textContent = t; e.hidden = false; clearTimeout(tt); tt = setTimeout(() => e.hidden = true, 3200); }
-function run(cmd) {
-  const [c, a] = cmd.trim().toUpperCase().split(/\s+/);
-  if (c === 'IDX' && (a === 'K' || a === 'EW')) { setState({ k: a }); toast('شاخص: ' + D.labels[a].title); }
-  else if (c === 'WIN' && (a === '2014' || a === '2016')) { setState({ w: a === '2014' ? 'all' : 'y2016' }); toast('بازه: از ' + a); }
-  else if (c === 'THEME') { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; drawChart(); }
-  else if (c === 'HELP') toast('IDX K · IDX EW · WIN 2014 · WIN 2016 · THEME');
-  else if (c) toast('فرمان ناشناخته: ' + cmd + ' (HELP)');
-}
-$('cmd').addEventListener('keydown', e => { if (e.key === 'Enter') { run(e.target.value); e.target.value = ''; e.target.blur(); } if (e.key === 'Escape') e.target.blur(); });
-$('theme').onclick = () => run('THEME');
-addEventListener('keydown', e => { const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName); if ((e.key === '/' && !typing) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) { e.preventDefault(); $('cmd').focus(); } });
+$('theme').onclick = () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; drawChart(); };   // ذخیره و بازرسم نمای فعال: views.js (MutationObserver روی data-theme)
 
 render(); renderComp(); drawChart();
 </script>
