@@ -78,6 +78,30 @@ def nanmean(Z, min_frac=0.6):
     return np.where(n >= min_frac * len(Z), m, np.nan)
 
 
+def load_sector_history(info, cols, Ra):
+    """[(اندیس نماد، تاریخ پایان، نام صنعت)]: پیش از «تاریخ پایان»، نماد در صنعت دیگری بوده (fit_sector_history.py، ردیف‌های mode=in).
+    بدون این، خنثی‌سازی صنعتی و مومنتوم صنعت با گروه‌بندی امروز (نگاه به آینده) انجام می‌شد (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، B4)."""
+    f = ROOT / "data/derived/sector_history_adjustments.csv"
+    if not f.exists():
+        return []
+    H = pd.read_csv(f, dtype=str)
+    H = H[H["mode"] == "in"]
+    if H.empty:
+        return []
+    names = info.drop_duplicates("sector_code").assign(sc=lambda d: d.sector_code.astype(str).str.lstrip("0")).set_index("sc").sector_name.astype(str).str.strip()
+    sym2i = {}
+    for i, s in enumerate(Ra.drop_duplicates("ins_code").set_index("ins_code").symbol.reindex(cols).values):
+        sym2i.setdefault(str(s), i)
+    out = []
+    for r in H.itertuples():
+        i = sym2i.get(str(r.symbol).strip())
+        nm = names.get(str(r.sector).lstrip("0"))
+        if i is None or nm is None:
+            continue
+        out.append((i, pd.Timestamp(r.to), nm))
+    return out
+
+
 class Market:
     """ماتریس‌های روزانهٔ تاریخ × نماد برای محاسبهٔ معیارها (بورس + فرابورس)."""
 
@@ -102,7 +126,8 @@ class Market:
         jm = np.array([ewr.g2j(d.year, d.month, d.day)[0] * 100 + ewr.g2j(d.year, d.month, d.day)[1] for d in self.dates])
         self.month_end = np.where(jm[1:] != jm[:-1])[0]
         sec = info.drop_duplicates("ins_code").set_index("ins_code").sector_name.astype(str).str.strip()
-        self.sector = sec.reindex(self.cols).fillna("؟").values
+        self.sector = sec.reindex(self.cols).fillna("؟").values.astype(object)
+        self.sector_hist = load_sector_history(info, self.cols, Ra)
         self.sym = Ra.drop_duplicates("ins_code").set_index("ins_code").symbol.reindex(self.cols).values
         self.market = Ra.drop_duplicates("ins_code").set_index("ins_code").market.reindex(self.cols).values
         z = np.zeros(k)
@@ -132,12 +157,62 @@ class Market:
             A[A <= 0] = np.nan
 
     # ── واجدیت قیمتی (همان قاعدهٔ موتور فاکتور) ──
-    def eligible(self, a: int):
+    def eligible(self, a: int, require_trade: bool = True):
+        """واجدیت قیمتی در روز a؛ require_trade=False فقط برای وزن هدف ماکت شاخص (ترکیب شاخص رسمی نماد متوقف را هم دارد)."""
         i1, i0 = a + 1, a + 1 - 252
         if i0 < 0:                                                   # پنجرهٔ ۲۵۲ روزه هنوز پر نشده (اندیس منفی در numpy از انتها می‌خواند)
             return np.zeros(self.k, bool)
         ok = ((self.have[i1] - self.have[i0]) >= 0.8 * 252) & ((self.nz[i1] - self.nz[i0]) >= 0.5 * 252) & ~np.isnan(self.X[a])
-        return ok
+        # ممیزی سوگیری ۲۰۲۶-۱۰-۱۹ (A2): نمادی که در روز سیگنال معامله نشده (توقف یا بی‌معامله) قیمت معتبر ندارد و خریدنی نیست
+        return ok & self.traded(self.last_open(a)) if require_trade else ok
+
+    def traded(self, a: int):
+        """آیا نماد در روز a معامله شده است (حجم > ۰)؟ ردیف بی‌معاملهٔ TSETMC و ردیف پرشدهٔ قاعدهٔ ۹ هر دو حجم صفر دارند."""
+        a = min(max(a, 0), self.n - 1)
+        return np.nan_to_num(self.vol[a]) > 0
+
+    def market_open(self, d: int) -> bool:
+        """بازار در روز d باز بوده؟ (دست‌کم ۲۰٪ نمادهای دارای ردیف معامله داشته‌اند.) روزهای تعطیلی سراسری (مثلاً خرداد ۱۴۰۴ و
+        اسفند ۱۴۰۴ تا اردیبهشت ۱۴۰۵) در پانل ردیف با حجم صفر دارند."""
+        if not hasattr(self, "_open"):
+            has = (~np.isnan(self.X)).sum(axis=1)
+            trd = (np.nan_to_num(self.vol) > 0).sum(axis=1)
+            self._open = trd >= 0.2 * np.maximum(has, 1)
+        return bool(self._open[min(max(d, 0), self.n - 1)])
+
+    def last_open(self, a: int) -> int:
+        """آخرین روز باز بازار تا a (اگر روز سیگنال در تعطیلی سراسری بود، معاملهٔ نماد در آخرین روز باز سنجیده می‌شود)."""
+        d, k = min(max(a, 0), self.n - 1), 0
+        while d > 0 and not self.market_open(d) and k < 90:
+            d -= 1
+            k += 1
+        return d
+
+    def exec_day(self, a: int, delay: int = 0) -> int:
+        """روز اجرا: a+1+delay، و اگر بازار آن روز بسته بود نخستین روز بازگشایی (حداکثر ۹۰ روز معاملاتی بعد)."""
+        d = min(a + 1 + delay, self.n - 1)
+        k = 0
+        while d < self.n - 1 and not self.market_open(d) and k < 90:
+            d += 1
+            k += 1
+        return d
+
+    def tradable(self, a: int, delay: int = 0):
+        """قابل‌معامله در روز اجرا (exec_day): معامله در همان روز. نماد نگه‌داشته‌شده‌ای که آن روز معامله ندارد فروختنی نیست و
+        با وزن رانش‌یافته می‌ماند؛ نماد جدیدِ بی‌معامله خریدنی نیست (فصل ۱۴ §۱۴٫۲٫۱، فصل ۰۲ §۲٫۶). در تعطیلی سراسری بازار، اجرا به
+        روز بازگشایی می‌رود (بازدهٔ روزهای تعطیل صفر است، پس مسیر بازده عوض نمی‌شود)."""
+        return self.traded(self.exec_day(a, delay))
+
+    def sector_at(self, a: int):
+        """صنعت هر نماد در روز a: عکس امروز به‌علاوهٔ تاریخچهٔ تغییر صنعت (data/derived/sector_history_adjustments.csv)."""
+        if not self.sector_hist:
+            return self.sector
+        t = self.dates[a]
+        out = self.sector.copy()
+        for i, to, name in self.sector_hist:
+            if t < to:
+                out[i] = name
+        return out
 
     def last_day_is_month_end(self) -> bool:
         """آیا آخرین روز داده، آخرین روز معاملاتی ماه جلالی است؟ (month_end فقط تا n−۲ را دارد؛ روز آخر از تقویم تشخیص داده می‌شود.)"""
@@ -234,7 +309,7 @@ def mom_industry(mk, a):
     m = _cum(mk, a, 231, 21)
     if m is None:
         return None
-    s = pd.Series(m).groupby(mk.sector).transform("mean").values
+    s = pd.Series(m).groupby(mk.sector_at(a)).transform("mean").values
     return s
 
 
@@ -582,6 +657,14 @@ FUND_KEYS = {
 }
 
 
+def clamp_announce(E: pd.DataFrame, date_col: str = "date", fy_col: str = "fy") -> pd.DataFrame:
+    """زمان دانستن یک اعلام هرگز پیش از فردای پایان دورهٔ مالی‌اش نیست (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، B5): در rahavard_eps.csv
+    ۳۴ از ۱٬۶۷۲ اعلام سالانه تاریخی هم‌زمان/پیش از پایان سال مالی داشتند (احتمالاً تاریخ ثبت در رهاورد، نه اعلام) ⇒ به fy+۱ روز جابه‌جا می‌شوند."""
+    E = E.copy()
+    E[date_col] = np.maximum(E[date_col].values.astype("datetime64[ns]"), (E[fy_col] + pd.Timedelta(days=1)).values.astype("datetime64[ns]"))
+    return E
+
+
 def load_fund(cols, dates):
     """{کلید: DataFrame[روز × نماد]} آخرین مقدار سالانهٔ شناخته‌شده و {کلید}_std (انحراف معیار ۵ سال اخیر)؛ و EPS آخرین ۱۲ماهه."""
     f1, f2 = ROOT / "data/fundamentals/rahavard_long.csv", ROOT / "data/fundamentals/rahavard_eps.csv"
@@ -594,7 +677,7 @@ def load_fund(cols, dates):
     E = pd.read_csv(f2, dtype={"ins_code": str})
     E["date"] = pd.to_datetime(E["date"])
     E["fy"] = pd.to_datetime(E["fy"])
-    E12 = E[E.period == 12]
+    E12 = clamp_announce(E[E.period == 12])
     first = E12.groupby(["ins_code", "fy"]).date.min()
     L["fy_end"] = L.fy.map({s: bq.safe_fy_date(s) for s in L.fy.unique()})
     out = {}
@@ -806,7 +889,8 @@ def zoo(mk: Market, idx, S, cost_bp=100.0):
                 continue
             ncov.append(int(m.sum()))
             ics.append(spearman_rows(v, fw[r]))
-            ics_n.append(spearman_rows(neutral(winsor_z(M[r], ok[r]), mk.sector), neutral(winsor_z(fw[r], ok[r]), mk.sector)))
+            sec_r = mk.sector_at(idx[r])
+            ics_n.append(spearman_rows(neutral(winsor_z(M[r], ok[r]), sec_r), neutral(winsor_z(fw[r], ok[r]), sec_r)))
             for h, lst in ((3, ic3), (6, ic6), (12, ic12)):
                 lst.append(spearman_rows(v, cum_h[h][r]))
             order = np.where(m)[0][np.argsort(v[m], kind="stable")]

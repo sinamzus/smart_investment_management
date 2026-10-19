@@ -31,6 +31,7 @@ if hasattr(sys.stdout, "reconfigure"):
 warnings.filterwarnings("ignore")
 import build_ui_extra as bx  # noqa: E402
 import investable_replica as ir  # noqa: E402
+import construction as cn  # noqa: E402
 import signals as sg  # noqa: E402
 
 NS = (10, 20, 30, 50, 80, 120)
@@ -99,7 +100,10 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode):
     X = np.nan_to_num(mk.X)
     for j, a in enumerate(me[:-1]):
         b_end = me[j + 1] if me[j + 1] is not None else n - 1
-        idx = np.where(mk.eligible(a) & ok_all & (np.nan_to_num(mk.mcap[a]) > 0))[0]
+        # وزن هدف و انتخاب از همهٔ واجدان (ترکیب شاخص رسمی نماد متوقف را هم دارد)؛ اجرا فقط در نمادهای معامله‌شدهٔ روز اجرا:
+        # نماد جدیدِ بی‌معامله خریده نمی‌شود و نماد نگه‌داشتهٔ بی‌معامله با وزن رانش‌یافته می‌ماند (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، A2)
+        idx = np.where(mk.eligible(a, require_trade=False) & ok_all & (np.nan_to_num(mk.mcap[a]) > 0))[0]
+        tr = mk.tradable(a)
         if len(idx) < N + 5:
             continue
         b = np.zeros(k)
@@ -121,6 +125,10 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode):
         else:
             sel = pick_top(b, idx, N)
             w = np.zeros(k); w[sel] = b[sel] / b[sel].sum()
+        w[~tr & (w_prev <= 0)] = 0.0                                    # نماد جدید بی‌معامله خریدنی نیست
+        if w.sum() > 0:
+            w = w / w.sum()
+        w = cn.freeze_untradable(w, w_prev, tr)
         L = 1.0
         if lev_mode == "beta":
             rs = X[a - 251: a + 1] @ w
@@ -178,14 +186,14 @@ def main():
     rows = []
     # ماکت کامل: وزن ارزش بازار روز قبل (ریبالانس روزانه) — تقریب کران پایین خطای وزن
     for t in range(1, mk.n):
-        idx = np.where(mk.eligible(t - 1) & ok & (mc[t - 1] > 0))[0]
+        idx = np.where(mk.eligible(t - 1, require_trade=False) & ok & (mc[t - 1] > 0))[0]
         if len(idx):
             w = mc[t - 1, idx] / mc[t - 1, idx].sum()
             Cfull.iloc[t] = float(w @ X[t, idx])
     base = evaluate(pd.Series((1 + Cfull[Cfull.index >= START]).cumprod()), K, Cfull)
     print(f"ماکت کامل (وزن بازار، ریبالانس روزانه) در برابر شاخص كل رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}\n")
     import json
-    json.dump({"rate": a.rate, "cost_bp": a.cost, "from": str(START.date()), "to": str(mk.dates[-1].date()), "n_eligible_last": int((mk.eligible(mk.n - 1) & ok).sum()),
+    json.dump({"rate": a.rate, "cost_bp": a.cost, "from": str(START.date()), "to": str(mk.dates[-1].date()), "n_eligible_last": int((mk.eligible(mk.n - 1, require_trade=False) & ok).sum()),
                "full_replica": {k: float(v) for k, v in base.items()}}, open(ROOT / "data" / "research" / "sampled_replica_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     for N in [int(x) for x in a.ns.split(",")]:
         for m in METHODS:

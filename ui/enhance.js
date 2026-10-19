@@ -14,7 +14,7 @@ const PART = 0.10;
 function loadX(X) {
   if (X._ctx) return X._ctx;
   X._ctx = { k: X.k, T: X.days, ret: b64(X.ret, Float32Array), K: b64(X.K, Float32Array), C: b64(X.C, Float32Array), dates: X.dates, names: X.names, sectors: X.sectors, nH: X.n_rebal,
-    months: X.months.map(m => ({ a: m.a, d: m.d, mcap: b64(m.mcap, Float32Array), adv: b64(m.adv, Float32Array), td: b64(m.td, Uint8Array) })), asof: X.asof };
+    months: X.months.map(m => ({ a: m.a, d: m.d, mcap: b64(m.mcap, Float32Array), adv: b64(m.adv, Float32Array), td: b64(m.td, Uint8Array), tr: m.tr ? b64(m.tr, Uint8Array) : null })), asof: X.asof };
   return X._ctx;
 }
 const eligIdx = (ctx, j) => { const m = ctx.months[j].mcap, o = []; for (let i = 0; i < ctx.k; i++) if (m[i] > 0) o.push(i); return Int32Array.from(o); };
@@ -138,15 +138,27 @@ async function runEnh(ctx, cfg, zFor, progress) {
   let wp = new Float64Array(k), tp = new Float64Array(k);
   for (let j = 0; j < nm; j++) {
     const a = ctx.months[j].a, end = j + 1 < nm ? ctx.months[j + 1].a : ctx.T - 1;
-    const bt = tilted(ctx, j, cfg.tilt, zFor ? zFor(j) : null), S = select(ctx, cfg.method, cfg.N, cfg.liq, bt, j, cfg.iters);
-    const wf = new Float64Array(k); S.sel.forEach((i, c) => { wf[i] = S.w[c]; });
+    const bt = tilted(ctx, j, cfg.tilt, zFor ? zFor(j) : null), S0 = select(ctx, cfg.method, cfg.N, cfg.liq, bt, j, cfg.iters);
+    let wf = new Float64Array(k); S0.sel.forEach((i, c) => { wf[i] = S0.w[c]; });
+    const capT = Math.min(...S0.sel.map((i, c) => PART * ctx.months[j].adv[i] / Math.max(S0.w[c], 1e-9)));   // ظرفیت ساخت هدف از نقد (پیش از انجماد)
+    const trm = ctx.months[j].tr;
+    if (trm) {                                                     // قاعدهٔ A2 (همان tools/build_replica_panel.py و construction.freeze_untradable)
+      let s = 0; for (let i = 0; i < k; i++) { if (!trm[i] && !(wp[i] > 0)) wf[i] = 0; s += wf[i]; }
+      if (s > 0) for (let i = 0; i < k; i++) wf[i] /= s;
+      let fz = 0, any = false; for (let i = 0; i < k; i++) if (wp[i] > 0 && !trm[i]) { any = true; fz += wp[i]; }
+      if (any) {
+        let s2 = 0; for (let i = 0; i < k; i++) { if (wp[i] > 0 && !trm[i]) wf[i] = 0; s2 += wf[i]; }
+        const sc = s2 > 0 ? Math.max(1 - fz, 0) / s2 : 0; for (let i = 0; i < k; i++) wf[i] = (wp[i] > 0 && !trm[i]) ? wp[i] : wf[i] * sc;
+      }
+    }
+    const S = { sel: [], w: [] }; for (let i = 0; i < k; i++) if (wf[i] > 0) { S.sel.push(i); S.w.push(wf[i]); }
     let tt = 0; for (let i = 0; i < k; i++) tt += Math.abs(wf[i] - wp[i]); to.push(0.5 * tt);
     let tt2 = 0; for (let i = 0; i < k; i++) tt2 += Math.abs(bt.b[i] - tp[i]); tto.push(0.5 * tt2);
     // بتای ۲۵۲ روزه روی شاخص رسمی
     const rs = new Float64Array(252), ri = new Float64Array(252); let ms = 0, mi = 0;
     for (let t = 0; t < 252; t++) { let s = 0; for (const i of S.sel) s += ctx.ret[(a - 251 + t) * k + i] * wf[i]; rs[t] = s; ri[t] = ctx.K[a - 251 + t]; ms += s; mi += ctx.K[a - 251 + t]; }
     ms /= 252; mi /= 252; let cv = 0, vi = 0; for (let t = 0; t < 252; t++) { cv += (rs[t] - ms) * (ri[t] - mi); vi += (ri[t] - mi) ** 2; } beta.push(cv / Math.max(vi, 1e-18));
-    cap.push(Math.min(...S.sel.map((i, c) => PART * ctx.months[j].adv[i] / Math.max(S.w[c], 1e-9))));
+    cap.push(capT);
     sel.push([S.sel.slice(), S.w.map(x => Math.round(x * 1e5))]);
     bsm.push([Array.from(bt.idx), Array.from(bt.idx, i => Math.round(bt.b[i] * 1e5)), Array.from(bt.idx, i => Math.round(bt.b0[i] * 1e5))]);
     const wv = Float64Array.from(wf), tv = Float64Array.from(bt.b);

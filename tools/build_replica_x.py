@@ -38,13 +38,13 @@ def main():
     td = (val.fillna(0) > 0).astype(float).rolling(63, min_periods=30).sum().values
     me = [int(x) for x in mk.month_end if mk.dates[x] >= sr.START and x >= 252 and x + 1 < n]
     ends = me + [n - 1]
-    elig = {a: np.where(mk.eligible(a) & ok_all & (mc[a] > 0))[0] for a in ends}
+    elig = {a: np.where(mk.eligible(a, require_trade=False) & ok_all & (mc[a] > 0))[0] for a in ends}   # هدف شاخص از همهٔ واجدان (همان build_replica_panel)
     used = sorted({int(i) for a in ends for i in elig[a]})
     pos = {i: p for p, i in enumerate(used)}
     d0 = me[0] - 251
     Cfull = np.zeros(n)
     for t in range(1, n):
-        i = np.where(mk.eligible(t - 1) & ok_all & (mc[t - 1] > 0))[0]
+        i = np.where(mk.eligible(t - 1, require_trade=False) & ok_all & (mc[t - 1] > 0))[0]
         if len(i):
             Cfull[t] = float((mc[t - 1, i] / mc[t - 1, i].sum()) @ X[t, i])
     sectors = sorted({str(mk.sector[i]) for i in used})
@@ -52,9 +52,10 @@ def main():
     months = []
     for a in ends:
         m = np.zeros(len(used), dtype=np.float32); ad = np.zeros(len(used), dtype=np.float32); tdv = np.zeros(len(used), dtype=np.uint8)
+        trv = mk.tradable(a)[used].astype(np.uint8)            # قابل‌معامله در روز اجرا (قاعدهٔ A2؛ ui/enhance.js آن را اعمال می‌کند)
         for i in elig[a]:
             m[pos[int(i)]] = mc[a, i]; ad[pos[int(i)]] = (adv[a, i] if np.isfinite(adv[a, i]) else 0) / 1e9; tdv[pos[int(i)]] = int(td[a, i]) if np.isfinite(td[a, i]) else 0
-        months.append({"a": a - d0, "d": int((mk.dates[a] - EPOCH).days), "mcap": f32(m), "adv": f32(ad), "td": b64encode(tdv.tobytes()).decode()})
+        months.append({"a": a - d0, "d": int((mk.dates[a] - EPOCH).days), "mcap": f32(m), "adv": f32(ad), "td": b64encode(tdv.tobytes()).decode(), "tr": b64encode(trv.tobytes()).decode()})
     ret = X[d0:][:, used]
     out = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "asof": str(mk.dates[-1].date()), "k": len(used), "days": n - d0,
            "dates": [int((d - EPOCH).days) for d in mk.dates[d0:]], "ret": f32(ret), "K": f32(K.values[d0:]), "C": f32(Cfull[d0:]),

@@ -44,12 +44,36 @@ class Panel:
         self.c1 = np.vstack([z, np.cumsum(x0, axis=0)])
         self.c2 = np.vstack([z, np.cumsum(x0 ** 2, axis=0)])
         self.have = np.vstack([z, np.cumsum(~np.isnan(X), axis=0)])
+        # حجم معامله: روز بی‌معامله (توقف/صف) قابل خرید و فروش نیست (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، A2)
+        self.vol = R.pivot_table(index="date", columns="ins_code", values="zTotTran", aggfunc="last").reindex(index=self.dates, columns=self.cols).values if "zTotTran" in R.columns else np.ones_like(X)
+
+    def traded_signal(self, a: int):
+        """معامله در آخرین روز باز بازار تا a (روز سیگنال)."""
+        self.traded(0)
+        d, k = min(max(a, 0), len(self.dates) - 1), 0
+        while d > 0 and not self._open[d] and k < 90:
+            d -= 1
+            k += 1
+        return np.nan_to_num(self.vol[d]) > 0
+
+    def traded(self, a: int):
+        """معامله در روز a؛ اگر بازار آن روز سراسری بسته بود (کمتر از ۲۰٪ نمادها معامله)، نخستین روز بازگشایی (همان signals.Market.exec_day)."""
+        n = len(self.dates)
+        a = min(max(a, 0), n - 1)
+        if not hasattr(self, "_open"):
+            has = (~np.isnan(self.X)).sum(axis=1)
+            self._open = (np.nan_to_num(self.vol) > 0).sum(axis=1) >= 0.2 * np.maximum(has, 1)
+        k = 0
+        while a < n - 1 and not self._open[a] and k < 90:
+            a += 1
+            k += 1
+        return np.nan_to_num(self.vol[a]) > 0
 
     def score(self, signal: str, a: int, qscore=None):
         """(امتیاز، واجد) در روز a. واجدیت قیمتی: ≥۸۰٪ روز داده و ≥۵۰٪ روز غیرصفر در پنجره، و بازدهٔ روز a موجود."""
         i1, i0 = (a + 1 - 21, a + 1 - 252) if signal in ("mom", "quality") else (a + 1, a + 1 - 252)
         w = i1 - i0
-        ok = ((self.have[i1] - self.have[i0]) >= 0.8 * w) & ((self.nz[i1] - self.nz[i0]) >= 0.5 * w) & ~np.isnan(self.X[a])
+        ok = ((self.have[i1] - self.have[i0]) >= 0.8 * w) & ((self.nz[i1] - self.nz[i0]) >= 0.5 * w) & ~np.isnan(self.X[a]) & self.traded_signal(a)
         if signal == "quality":
             d = self.dates[a]
             if qscore is None or d not in qscore.index:
@@ -88,7 +112,7 @@ def run(P: Panel, signal: str, ngroups: int = 10, tops: dict | None = None, dela
         if a < 252 + 21:
             continue
         s, ok = P.score(signal, a, qscore)
-        ok = ok & ~np.isnan(X[a + 1])                      # فقط روز اجرا؛ شرط «داده در پایان دوره» نگاه به آینده بود (فصل ۱۴ §۱۴٫۲٫۱)
+        ok = ok & ~np.isnan(X[a + 1]) & P.traded(a + 1 + delay)   # فقط روز اجرا و معامله‌شده در آن روز؛ شرط «داده در پایان دوره» نگاه به آینده بود (فصل ۱۴ §۱۴٫۲٫۱)
         idx = np.where(ok)[0]
         if len(idx) < min_names:
             continue
@@ -188,7 +212,7 @@ def boot_mean(x, reps=2000, block=3, seed=7):
     return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5)), float((means > 0).mean())
 
 
-def stats_of(res: dict, key: str, cost_bp: float = 100.0, bench: str = "ALL") -> dict:
+def stats_of(res: dict, key: str, cost_bp: float = 125.0, bench: str = "ALL") -> dict:
     """آمار یک سبد (G1..Gn یا TOP) نسبت به ALL: ناخالص/خالص، t، IR، برد، افت، گردش، پایداری، بوت‌استرپ."""
     r, a = res["ret"][key], res["ret"][bench]
     to, toa = res["to"][key], res["to"][bench]
@@ -220,7 +244,7 @@ def ic_stats(res: dict) -> dict:
     return {"ic_mean": float(ic.mean()), "ic_t": nw_t(ic), "icir": float(ic.mean() / ic.std(ddof=1) * np.sqrt(12)), "ic_hit": float((ic > 0).mean() * 100), "n": int(len(ic))}
 
 
-def monotonicity(res: dict, cost_bp: float = 100.0) -> dict:
+def monotonicity(res: dict, cost_bp: float = 125.0) -> dict:
     """یکنوایی دهک‌ها: Spearman رتبهٔ دهک با بازده سالانه، تعداد جفت‌های متوالی صعودی، و تفاوت G_n − G_1 (آماره t)."""
     g = res["ngroups"]
     annr = [ann(net(res["ret"][f"G{k}"], res["to"][f"G{k}"], cost_bp)) for k in range(1, g + 1)]

@@ -42,10 +42,11 @@ PARTICIPATION = 0.10
 
 
 def frozen_spec():
-    """c1 (کم‌نوسان ۲۵۲ + اندازه + بازده نقدی سود)، امتیاز رتبه‌ای، top-fraction بافر ۲۰/۳۰، ریبالانس جزئی ۵۰٪، بورس+فرابورس، هزینه ۱۰۰ bp."""
+    """c1 (کم‌نوسان ۲۵۲ + اندازه + بازده نقدی سود)، امتیاز رتبه‌ای، top-fraction بافر ۲۰/۳۰، ریبالانس جزئی ۵۰٪، بورس+فرابورس،
+    هزینهٔ رفت‌وبرگشت ۱۲۵ bp [تأیید لازم]، اجرا با تأخیر یک روز (سیگنال در بستهٔ روز a، خرید در بستهٔ روز a+1 — همان قاعدهٔ زنده؛ ممیزی سوگیری ۲۰۲۶-۱۰-۱۹ B2/B3)."""
     return {"signals": [["vol_252", 1.0], ["size", 1.0], ["div_yield", 1.0]], "combine": "rank", "neutral": True,
             "algo": "topfrac", "params": {"entry": 0.2, "exit": 0.3}, "partial": 0.5,
-            "universe": {"markets": ["bourse", "farabourse"], "min_adv": 0}, "cost_bp": 100, "delay": 0}
+            "universe": {"markets": ["bourse", "farabourse"], "min_adv": 0}, "cost_bp": 125, "delay": 1}
 
 
 def spec_hash(spec):
@@ -80,6 +81,9 @@ def cmd_freeze(a):
     ex = fe.net(res["ret"]["S"], res["to"]["S"], spec["cost_bp"]) - fe.net(res["ret"]["ALL"], res["to"]["ALL"], spec["cost_bp"])
     keep = {k: (float(st[k]) if isinstance(st[k], (int, float, np.floating)) else st[k]) for k in
             ("excess_net", "t_net", "ir", "te", "vol", "turn_ann", "ex_h1", "ex_h2", "boot_lo", "boot_hi", "hit", "mdd_active") if k in st}
+    keep["frozen_w_mean"] = float(np.nanmean(res["frozen"])) if len(res.get("frozen", [])) else 0.0   # سهم وزن نگه‌داشته‌شدهٔ غیرقابل‌فروش در روز اجرا
+    imp = res["impact"].get(1e11)
+    keep["impact_ann_at_1e11"] = float(np.nansum(imp) / max(len(ex), 1) * 12 * 100) if imp is not None else None   # اثر بازار سالانه (واحد درصد) در ۱۰۰ میلیارد ریال
     S = {"id": "c1-rank-partial50-v1", "frozen_at": pd.Timestamp.now(tz="UTC").isoformat(), "code_commit": git_rev(),
          "data_through": str(mk.dates[-1].date()), "spec": spec, "spec_hash": spec_hash(spec),
          "note": ("ترکیب c1 با امتیاز رتبه‌ای و ریبالانس جزئی ۵۰٪ — این ترکیب دقیق در شبکهٔ ۱۲۰ آزمایش فصل ۱۴ نبود (c1:rank با κ=۱ و c1:equal با κ=۰٫۵ بودند)؛ "
@@ -144,6 +148,9 @@ def cmd_orders(a):
     w[small] = prev[small]                           # معاملهٔ ناچیز انجام نمی‌شود
     w[(w < MIN_TRADE_W) & (prev == 0)] = 0           # ورود ناچیز انجام نمی‌شود
     w = w / w.sum()
+    # نماد نگه‌داشته‌شده‌ای که در روز سیگنال معامله نشده فروختنی فرض نمی‌شود (A2): وزن فعلی‌اش می‌ماند و بقیه بازنرمال می‌شود
+    traded = mk.traded(mk.last_open(n))
+    w = cn.freeze_untradable(w, prev, traded)
     aum = float(a.aum)
     v63 = sg.W(mk.val, n, 63)
     adv = np.nan_to_num(np.nanmean(v63, axis=0)) if v63 is not None else np.zeros(mk.k)
@@ -158,7 +165,7 @@ def cmd_orders(a):
                        "value_rial": float(val), "w_now_pct": float(100 * prev[i]), "w_target_pct": float(100 * w[i]),
                        "adv_participation": None if part != part else float(part),
                        "split_days": int(np.ceil(part / PARTICIPATION)) if part == part and part > 0 else 1,
-                       "market": str(mk.market[i])})
+                       "market": str(mk.market[i]), "traded_signal_day": bool(traded[i])})
     orders.sort(key=lambda o: (o["side"], -o["value_rial"]))
     plan_id = hashlib.sha256(f"{S['spec_hash']}|{asof.date()}|{aum}".encode()).hexdigest()[:12]
     body = {"schema": "sim.trade_plan/1", "plan_id": plan_id, "strategy": S["id"], "spec_hash": S["spec_hash"], "code_commit": git_rev(),
@@ -167,6 +174,7 @@ def cmd_orders(a):
             "execution": {"convention": "signal at last trading day close; execute next trading day", "participation_cap": PARTICIPATION,
                           "price_basis": "last_close_ref", "note": "قیمت مرجع آخرین بسته است؛ سامانه باید با قیمت زنده/محدودهٔ مجاز نوسان جایگزین کند"},
             "n_hold": int((w > 0).sum()), "turnover_oneway": float(np.maximum(w - prev, 0).sum()),
+            "frozen_w": float(prev[(prev > 0) & ~traded].sum()), "n_frozen": int(((prev > 0) & ~traded).sum()),
             "orders": [{"id": hashlib.sha256((plan_id + o["ins_code"] + o["side"]).encode()).hexdigest()[:10], "type": "rebalance", **o} for o in orders]}   # ins_code یکتاست؛ نماد ممکن است تکراری باشد
     LIVE.mkdir(parents=True, exist_ok=True)
     tag = ("" if official else "_interim")

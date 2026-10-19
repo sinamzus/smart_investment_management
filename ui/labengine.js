@@ -13,6 +13,8 @@ function load(L) {
   const ctx = { L, rows, k, Z: {}, sec: new Uint8Array(k), mkt: new Uint8Array(k), sym: L.codes.map(c => c.p || c.s), cache: { ic: {}, z: {} } };
   L.codes.forEach((c, i) => { ctx.sec[i] = c.sec; ctx.mkt[i] = c.m; });
   ctx.ok = b64(L.ok, Uint8Array);
+  ctx.tr = L.tr ? b64(L.tr, Uint8Array) : null;                       // قابل‌معامله در روز اجرا (A2)؛ نبود = همه
+  ctx.secHist = (L.sec_hist || []).map(h => ({ i: h.i, to: h.to, sec: h.sec }));   // تاریخچهٔ تغییر صنعت (B4)
   const fw = b64(L.fw, Float32Array); ctx.fw = fw;
   ctx.mcap = b64(L.mcap, Float32Array); ctx.vol = b64(L.vol, Float32Array); ctx.adv = b64(L.adv, Float32Array);
   L.signals.forEach(s => { ctx.Z[s.name] = { meta: s, z: b64(s.z, Int8Array) }; });
@@ -23,6 +25,15 @@ function load(L) {
 const zAt = (ctx, name, r) => { const a = ctx.Z[name].z, out = new Float64Array(ctx.k), o = r * ctx.k; for (let i = 0; i < ctx.k; i++) { const v = a[o + i]; out[i] = v === -128 ? NaNv : v / 40; } return out; };
 const fwAt = (ctx, r) => { const out = new Float64Array(ctx.k), o = r * ctx.k; for (let i = 0; i < ctx.k; i++) { const v = ctx.fw[o + i]; out[i] = v <= -5 ? NaNv : v; } return out; };
 const okAt = (ctx, r) => { const out = new Uint8Array(ctx.k), o = r * ctx.k; for (let i = 0; i < ctx.k; i++) out[i] = ctx.ok[o + i]; return out; };
+const trAt = (ctx, r) => { const out = new Uint8Array(ctx.k).fill(1); if (!ctx.tr) return out; const o = r * ctx.k; for (let i = 0; i < ctx.k; i++) out[i] = ctx.tr[o + i]; return out; };
+const secAt = (ctx, r) => { if (!ctx.secHist.length) return ctx.sec; const d = ctx.L.sig_dates[r], out = Uint8Array.from(ctx.sec); for (const h of ctx.secHist) if (d < h.to) out[h.i] = h.sec; return out; };
+function freezeUntradable(w, prev, tr, k) {         // نماد نگه‌داشته‌شدهٔ بی‌معامله در روز اجرا فروختنی نیست (tools/construction.freeze_untradable)
+  let fz = 0, any = false; for (let i = 0; i < k; i++) if (prev[i] > 0 && !tr[i]) { any = true; fz += prev[i]; }
+  if (!any) return w;
+  const out = new Float64Array(k); let s = 0; for (let i = 0; i < k; i++) { out[i] = (prev[i] > 0 && !tr[i]) ? 0 : w[i]; s += out[i]; }
+  const sc = s > 0 ? Math.max(1 - fz, 0) / s : 0; for (let i = 0; i < k; i++) out[i] = (prev[i] > 0 && !tr[i]) ? prev[i] : out[i] * sc;
+  return out;
+}
 
 function rankPct(v, mask) { // رتبهٔ درصدی (۰..۱) برای عناصر mask؛ پیوندها: میانگین
   const idx = []; for (let i = 0; i < v.length; i++) if (mask[i] && !isNaN(v[i])) idx.push(i);
@@ -87,7 +98,8 @@ function fmWeights(ctx, names, r, ridge) {
 function score(ctx, spec, r) {
   const k = ctx.k, sigs = spec.signals.filter(([n]) => ctx.Z[n]), method = spec.combine || 'equal', neutral = spec.neutral !== false;
   if (!sigs.length) return new Float64Array(k).fill(NaNv);
-  const Zs = sigs.map(([n]) => { let z = zAt(ctx, n, r); if (neutral) z = neutralize(z, ctx.sec, k); return z; });
+  const secr = neutral ? secAt(ctx, r) : null;
+  const Zs = sigs.map(([n]) => { let z = zAt(ctx, n, r); if (neutral) z = neutralize(z, secr, k); return z; });
   let ws = sigs.map(([, w]) => w);
   const names = sigs.map(([n]) => n);
   if (method === 'ic' || method === 'icir') {
@@ -150,8 +162,8 @@ function run(ctx, spec) {
   const out = { end: [], ret: [], all: [], cap: [], to: [], toAll: [], toCap: [], n: [], ic: [], rows: [], impact: AUMS.map(() => []) };
   let prevCap = null;
   for (const r of ctx.use) {
-    const okr = okAt(ctx, r), f = fwAt(ctx, r), ok = new Uint8Array(k);
-    for (let i = 0; i < k; i++) ok[i] = okr[i] && mk.has(ctx.mkt[i]) && (minAdv == null || ctx.adv[r * k + i] >= minAdv) ? 1 : 0;
+    const okr = okAt(ctx, r), f = fwAt(ctx, r), ok = new Uint8Array(k), tr = trAt(ctx, r);
+    for (let i = 0; i < k; i++) ok[i] = okr[i] && tr[i] && mk.has(ctx.mkt[i]) && (minAdv == null || ctx.adv[r * k + i] >= minAdv) ? 1 : 0;
     let nAll = 0; for (let i = 0; i < k; i++) nAll += ok[i];
     const allw = new Float64Array(k); for (let i = 0; i < k; i++) allw[i] = ok[i] ? 1 / Math.max(nAll, 1) : 0;
     const g = f.map(x => isNaN(x) ? 0 : x);
@@ -167,6 +179,7 @@ function run(ctx, spec) {
       else {
         if (mx) wn = capW(wn, mx);
         if (kappa < 1 && !first) { wn = wn.map((x, i) => Math.max(prev[i] + kappa * (x - prev[i]), 0)); const t = wn.reduce((a, b) => a + b, 0); wn = wn.map(x => x / t); }
+        wn = freezeUntradable(wn, prev, tr, k);
       }
       w = wn; held = w.map(x => x > 0 ? 1 : 0);
       if (!first) { to = 0; for (let i = 0; i < k; i++) to += Math.abs(w[i] - prev[i]); to *= 0.5; } else to = NaNv;
@@ -207,7 +220,7 @@ const mddOf = x => { let c = 1, pk = 1, m = 0; for (const v of x) { c *= 1 + v; 
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function bootMean(x, reps = 1000, block = 3, seed = 7) { const T = x.length, R = rng(seed), mu = new Float64Array(reps); for (let b = 0; b < reps; b++) { let i = Math.floor(R() * T), s = 0; for (let t = 0; t < T; t++) { s += x[i]; i = R() < 1 / block ? Math.floor(R() * T) : (i + 1) % T; } mu[b] = s / T; }
   const a = Array.from(mu).sort((p, q) => p - q); return { lo: a[Math.floor(reps * 0.025)] * 1200, hi: a[Math.floor(reps * 0.975)] * 1200, p: a.filter(v => v > 0).length / reps }; }
-function stats(res, costBp = 100, jy, bench) {
+function stats(res, costBp = 125, jy, bench) {
   const cap = bench === 'cap' && res.cap && res.cap.length, c = costBp / 1e4, n = res.ret.length, r = res.ret, a = cap ? res.cap : res.all, to = res.to.map(v => isNaN(v) ? 0 : v), toa = (cap ? res.toCap : res.toAll).map(v => isNaN(v) ? 0 : v);
   const rn = r.map((v, i) => v - to[i] * c), an = a.map((v, i) => v - toa[i] * c), exn = rn.map((v, i) => v - an[i]), exg = r.map((v, i) => v - a[i]), h = Math.floor(n / 2);
   const m = mean(exn), s = sd(exn), bt = bootMean(exn), ic = res.ic.filter(v => v === v);
@@ -243,7 +256,7 @@ function verdict(st, spearmanDec) {
   return { v: 'بدون برتری معنادار', why: 't خالص < ۲ یا ناپایدار بین دو نیمه', cls: 'bad' };
 }
 /* دهک‌ها برای یک spec (G=10) */
-function deciles(ctx, spec, costBp = 100) {
+function deciles(ctx, spec, costBp = 125) {
   const res = [], ann = [], G = 10; let spread = null;
   for (let kk = 1; kk <= G; kk++) { const r = run(ctx, { ...spec, algo: 'quantile', params: { G, k: kk }, max_w: null, partial: 1, rebalance_every: 1 }); res.push(r); const c = costBp / 1e4; ann.push(annOf(r.ret.map((v, i) => v - (isNaN(r.to[i]) ? 0 : r.to[i]) * c))); }
   const c = costBp / 1e4, top = res[G - 1], bot = res[0], sp = top.ret.map((v, i) => v - (isNaN(top.to[i]) ? 0 : top.to[i]) * c - (bot.ret[i] - (isNaN(bot.to[i]) ? 0 : bot.to[i]) * c));

@@ -39,8 +39,8 @@ const sigMeta = n => L.signals.find(s => s.name === n);
 const isJS = spec => E.JS_ALGOS.includes(spec.algo) && !['fm_lib'].includes(spec.combine);
 
 /* ════════════════════════════════ LAB ════════════════════════════════ */
-const lab = { bench: 'eq', spec: null, res: null, st: null, tab: 'perf', saved: [], overlay: new Set(), trials: 0, view: null, dec: null, srLib: null, cost: 100 };
-const DEFAULT = { signals: [['vol_252', 1], ['size', 1], ['div_yield', 1]], combine: 'equal', neutral: true, algo: 'topfrac', params: { entry: 0.2, exit: 0.3 }, universe: { markets: ['bourse', 'farabourse'], min_adv: 0 }, rebalance_every: 1, partial: 1, max_w: null, cost_bp: 100 };
+const lab = { bench: 'eq', spec: null, res: null, st: null, tab: 'perf', saved: [], overlay: new Set(), trials: 0, view: null, dec: null, srLib: null, cost: 125 };
+const DEFAULT = { signals: [['vol_252', 1], ['size', 1], ['div_yield', 1]], combine: 'equal', neutral: true, algo: 'topfrac', params: { entry: 0.2, exit: 0.3 }, universe: { markets: ['bourse', 'farabourse'], min_adv: 0 }, rebalance_every: 1, partial: 1, max_w: null, cost_bp: 125 };
 const PRESETS = {
   'کم‌نوسان': { signals: [['vol_252', 1]], combine: 'equal' },
   'مومنتوم ۱۲−۱': { signals: [['mom_12_1', 1]], combine: 'equal' },
@@ -76,7 +76,7 @@ function initLab() {
         <label class="lb-row">الگوریتم <select id="lb-algo"></select></label><div id="lb-params"></div><div class="lb-hint" id="lb-algodesc"></div>
         <div class="lb-hint">الگوریتم‌های ریسکی (min-var، ERC، HRP، max-div، MVO) به کوواریانس نیاز دارند و در تب «کتابخانه» از پیش محاسبه شده‌اند.</div></div></details>
       <details open><summary>۵ · اصطکاک</summary><div class="lb-sec">
-        <label class="lb-row">هزینهٔ رفت‌وبرگشت <input type="number" id="lb-cost" min="0" max="500" step="10" value="100"> bp</label>
+        <label class="lb-row">هزینهٔ رفت‌وبرگشت <input type="number" id="lb-cost" min="0" max="500" step="5" value="125"> bp</label>
         <label class="lb-row">ریبالانس جزئی <input type="number" id="lb-part" min="10" max="100" step="10" value="100"> ٪</label>
         <label class="lb-row">سقف وزن هر نماد <input type="number" id="lb-maxw" min="0" max="100" step="1" value="0"> ٪ (۰ = بدون)</label></div></details>
       <div class="lb-run"><button class="btn" id="lb-run">اجرا</button><button class="tool" id="lb-save">ذخیرهٔ این اجرا</button><span class="lb-cnt" id="lb-cnt"></span></div>
@@ -139,7 +139,7 @@ function setSpec(s) {
   $('lb-adv').value = String((s.universe && s.universe.min_adv) || 0).replace('000000000', 'e9').replace('00000000', 'e8');
   [...$('lb-adv').options].forEach(o => { if (+o.value === ((s.universe && s.universe.min_adv) || 0)) $('lb-adv').value = o.value; });
   $('lb-every').value = String(s.rebalance_every || 1); $('lb-comb').value = s.combine || 'equal'; $('lb-topk').value = s.topk || 5; $('lb-neu').checked = s.neutral !== false;
-  $('lb-algo').value = E.JS_ALGOS.includes(s.algo) ? s.algo : 'topfrac'; $('lb-cost').value = s.cost_bp ?? 100; $('lb-part').value = Math.round((s.partial ?? 1) * 100); $('lb-maxw').value = Math.round((s.max_w || 0) * 100);
+  $('lb-algo').value = E.JS_ALGOS.includes(s.algo) ? s.algo : 'topfrac'; $('lb-cost').value = s.cost_bp ?? 125; $('lb-part').value = Math.round((s.partial ?? 1) * 100); $('lb-maxw').value = Math.round((s.max_w || 0) * 100);
   renderSigs(); renderParams(); syncBuilder();
 }
 function syncBuilder() { $('lb-topk-row').hidden = $('lb-comb').value !== 'topk_icir'; }
@@ -457,7 +457,7 @@ function renderCorr() {
 }
 
 /* ════════════════════════════════ PLAN ════════════════════════════════ */
-const plan = { src: 'lab', aum: 100, lot: 1, min_trade: 0.001, hold: [], cost: 100 };
+const plan = { src: 'lab', aum: 100, lot: 1, min_trade: 0.001, hold: [], cost: 125 };
 /* ارسال وزن هدف از هر نما به «دستور اجرا»: گزینهٔ «ارسال‌شده» را می‌سازد، انتخاب می‌کند و نما را باز می‌کند (چه نما قبلاً ساخته شده باشد چه نه) */
 function sendToPlan(name, w) {
   window.SIM_PLAN_SRC = { name, w };
@@ -479,7 +479,7 @@ function initPlan() {
     <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title">برنامهٔ اقدام · سفارش‌ها برای رسیدن به پرتفوی هدف</span><span class="chip" id="pl-chip"></span>
       <div class="panel-tools"><button class="tool" id="pl-csv">CSV</button><button class="tool" id="pl-json">JSON برای سامانهٔ الگوریتمی</button></div></div>
     <div class="ctl" id="pl-ctl"><label>هدف <select id="pl-src"></select></label><label>سرمایه (میلیارد ریال) <input type="number" id="pl-aum" value="100" min="1" step="10"></label>
-      <label>حداقل معامله (٪ سرمایه) <input type="number" id="pl-min" value="0.1" min="0" step="0.05"></label><label>هزینهٔ رفت‌وبرگشت (bp) <input type="number" id="pl-cost" value="100" min="0" step="10"></label></div>
+      <label>حداقل معامله (٪ سرمایه) <input type="number" id="pl-min" value="0.1" min="0" step="0.05"></label><label>هزینهٔ رفت‌وبرگشت (bp) <input type="number" id="pl-cost" value="125" min="0" step="5"></label></div>
     <div class="ctl"><label>پرتفوی فعلی (نماد،تعداد — هر خط یک نماد؛ خالی = شروع از نقد) <textarea id="pl-hold" rows="2" placeholder="فولاد,120000&#10;فملی,50000" style="width:360px"></textarea></label><button class="tool" id="pl-apply">محاسبه</button><span class="mute" id="pl-note"></span></div>
     <div class="kpis" id="pl-kpis"></div>
     <div class="panel-body scroll"><table class="dt" id="pl-tab"></table></div>

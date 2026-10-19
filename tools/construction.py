@@ -9,7 +9,7 @@
       "neutral": true,                                         # خنثی‌سازی صنعتی Z
       "algo": "topfrac", "params": {"entry": .2, "exit": .3},  # الگوریتم انتخاب
       "universe": {"markets": ["bourse", "farabourse"], "min_adv": 0},
-      "rebalance_every": 1, "partial": 1.0, "max_w": 0.05, "cost_bp": 100, "delay": 0
+      "rebalance_every": 1, "partial": 1.0, "max_w": 0.05, "cost_bp": 125, "delay": 0
     }
 نتیجه: سری ماهانهٔ بازده، گردش، تعداد نماد، وزن‌های زنده. قیاس‌پذیر با tools/factor_engine.py (همان واجدیت و همان قرارداد گردش).
 """
@@ -91,7 +91,7 @@ class Lab:
             ok = self.ok[r] if r in self.ok else self.live_ok
             z = quant(sg.winsor_z(self.S[name][r], ok)) if live or r not in self.ok else self.z(name, r)
             if neutral:
-                z = sg.neutral(z, self.sector)
+                z = sg.neutral(z, self.mk.sector_at(self.idx[r]))
             Zs.append(z)
             ws.append(w)
         if not Zs:
@@ -466,14 +466,14 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
     every = int(spec.get("rebalance_every", 1))
     kappa = float(spec.get("partial", 1.0))
     max_w = spec.get("max_w")
-    cost = float(spec.get("cost_bp", 100)) / 1e4
+    cost = float(spec.get("cost_bp", 125)) / 1e4
     delay = int(spec.get("delay", 0))
     k = mk.k
     mk_ok = np.isin(mk.market, list(markets))
     adv_all = None
     prev_w = np.zeros(k)               # وزن رانش‌یافتهٔ دورهٔ قبل
     held = np.zeros(k, bool)
-    out = {"end": [], "sig_date": [], "S": [], "ALL": [], "CAP": [], "to": [], "n": [], "ic": [], "w": [], "impact": {a_: [] for a_ in AUMS}}
+    out = {"end": [], "sig_date": [], "S": [], "ALL": [], "CAP": [], "to": [], "n": [], "ic": [], "w": [], "frozen": [], "impact": {a_: [] for a_ in AUMS}}
     prev_all = None
     prev_cap = None
     to_all, to_cap = [], []
@@ -503,12 +503,14 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
             prev_cap = cw * (1 + g); prev_cap = prev_cap / prev_cap.sum() if prev_cap.sum() > 0 else prev_cap
             for a_ in AUMS:
                 out["impact"][a_].append(0.0)
+            out["frozen"].append(0.0)
             prev_w = prev_w * (1 + g)
             prev_w = prev_w / prev_w.sum() if prev_w.sum() > 0 else prev_w
             cnt += 1
             continue
         cnt += 1
-        ok = lab.ok[r] & mk_ok
+        tr = mk.tradable(a, delay)                  # معامله در روز اجرا (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، A2)
+        ok = lab.ok[r] & mk_ok & tr
         if min_adv > 0:
             v = sg.W(mk.val, a, 63)
             adv = np.nanmean(v, axis=0) if v is not None else np.full(k, np.nan)
@@ -518,7 +520,7 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
         sc = lab.score(spec, r)
         f = mk.fwd(a, b, delay)
         ctx = {"score": sc, "ok": ok, "held": held, "mk": mk, "a": a, "prev": prev_w, "mcap": np.nan_to_num(mk.mcap[a]),
-               "vol": (lambda Z: nanstd_safe(Z))(sg.W(mk.X, a, 126)), "adv": adv, "sector": mk.sector}
+               "vol": (lambda Z: nanstd_safe(Z))(sg.W(mk.X, a, 126)), "adv": adv, "sector": mk.sector_at(a)}
         w = algo_["fn"](ctx, **params)
         if w.sum() <= 0:
             if first:
@@ -536,7 +538,9 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
                 w = prev_w + kappa * (w - prev_w)
                 w = np.maximum(w, 0)
                 w /= w.sum()
+            w = freeze_untradable(w, prev_w, tr)
         held = w > 0
+        out["frozen"].append(float(prev_w[(prev_w > 0) & ~tr].sum()))
         to = np.nan if first else 0.5 * np.abs(w - prev_w).sum()
         g = np.where(np.isnan(f), 0, f)
         ret = float((w * g).sum())
@@ -576,13 +580,27 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
            "to": {"S": np.array(out["to"], float), "ALL": None, "CAP": np.array(to_cap, float)},
            "impact": {a_: np.array(v, float) for a_, v in out["impact"].items()},
            "n": {"S": float(np.mean(out["n"])) if out["n"] else 0, "ALL": 0.0},
-           "ic": np.array(out["ic"], float), "ngroups": 0, "tops": {}, "spec": spec}
+           "ic": np.array(out["ic"], float), "frozen": np.array(out["frozen"], float), "ngroups": 0, "tops": {}, "spec": spec}
     res["to"]["ALL"] = np.array(to_all, float)          # ALL = هم‌وزن واجدان با ریبالانس ماهانه؛ گردش واقعی
     if keep_weights:
         res["weights"] = out["w"]
     if live:
         res["live"] = live_target(lab, spec, algo_, params, prev_w, held, ok_univ=(mk_ok, min_adv))
     return res
+
+
+def freeze_untradable(w, prev_w, tr):
+    """نماد نگه‌داشته‌شده‌ای که در روز اجرا معامله ندارد فروختنی نیست: وزن رانش‌یافته‌اش می‌ماند و بقیهٔ سبد در فضای باقی‌مانده بازنرمال می‌شود
+    (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، A2؛ فصل ۱۴ §۱۴٫۲٫۱). نماد بی‌معاملهٔ جدید پیش‌تر از ok حذف شده و وزنی ندارد."""
+    frozen = (prev_w > 0) & ~tr
+    if not frozen.any():
+        return w
+    w = np.where(frozen, 0.0, w)
+    s, fz = w.sum(), prev_w[frozen].sum()
+    if s > 0:
+        w = w / s * max(1.0 - fz, 0.0)
+    w[frozen] = prev_w[frozen]
+    return w
 
 
 def nanstd_safe(Z):
@@ -608,7 +626,7 @@ def live_target(lab, spec, algo_, params, prev_w, held, ok_univ):
         ok = ok & (np.nan_to_num(np.nanmean(v, axis=0)) >= ok_univ[1])
     sc = lab.score(spec, r, live=True)
     ctx = {"score": sc, "ok": ok, "held": held, "mk": mk, "a": a, "prev": drift, "mcap": np.nan_to_num(mk.mcap[a]),
-           "vol": nanstd_safe(sg.W(mk.X, a, 126)), "adv": None, "sector": mk.sector}
+           "vol": nanstd_safe(sg.W(mk.X, a, 126)), "adv": None, "sector": mk.sector_at(a)}
     w = algo_["fn"](ctx, **params)
     if spec.get("max_w") and w.sum() > 0:
         w = _cap(w, spec["max_w"])

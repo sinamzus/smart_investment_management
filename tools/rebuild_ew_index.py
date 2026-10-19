@@ -27,18 +27,60 @@ ROOT = Path(__file__).resolve().parent.parent
 OFFICIAL = {"TR": "67130298613737946", "PR": "8384385859414435"}  # كل (هم وزن) / قيمت (هم وزن)
 
 
+# پیشوند ISIN سهم = بازار پذیرش [تأیید لازم؛ از جدول flow × ISIN و نام‌ها استنباط شد، ۲۰۲۶-۱۰-۱۹]:
+# IRO1 سهام بورس، IROT کد قدیمی سهام بورس (مثل نبروج، کاصفا)، IRO3 و IRO5 سهام فرابورس، IRO7 بازار پایه.
+# هر پیشوند دیگر (IRB اوراق، IRK گواهی کالا، IRT صندوق، IRO6 تسهیلات مسکن، IRO4/IRO8/IRE9 انرژی و سایر) سهم عملیاتی نیست ⇒ «other».
+ISIN_MARKET = {"IRO1": "bourse", "IROT": "bourse", "IRO3": "farabourse", "IRO5": "farabourse", "IRO7": "paye"}
+
+
+def apply_isin_market(inst: pd.DataFrame) -> pd.DataFrame:
+    """بازار هر سهم از پیشوند ISIN (بازار پذیرش)، نه flow امروز: نماد حذف‌شده امروز flow ۴ («سایر») دارد ولی تا روز حذف
+    در بورس/فرابورس معامله می‌شد و باید در جهان آن دوره باشد (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، A1/B4). ISIN ناشناخته ⇒ بازار فهرست."""
+    info_p = ROOT / "data/corporate_actions/instrument_info.csv"
+    if not info_p.exists():
+        return inst
+    info = pd.read_csv(info_p, dtype={"ins_code": str}).drop_duplicates("ins_code").set_index("ins_code")
+    pre = info.cIsin.where(info.cIsin.notna() & (info.cIsin.astype(str).str.len() >= 4)).astype(str).str[:4]
+    pre = pre[pre != "nan"]
+    m = inst.ins_code.map(pre.map(lambda x: ISIN_MARKET.get(x, "other")))   # ISIN معلوم و ناشناخته ⇒ غیرسهم
+    cons_p = ROOT / "data/index_constituents.csv"
+    kmem = set()
+    if cons_p.exists():                                  # اعضای رسمی «شاخص كل» دست نمی‌خورند (load_panel آن‌ها را بورس/سهم می‌کند)
+        cons = pd.read_csv(cons_p, dtype={"ins_code": str, "index_code": str})
+        kmem = set(cons[cons.index_code == "32097828799138957"].ins_code)
+    inst = inst.copy()
+    use = m.notna() & (inst.type == "stock") & ~inst.ins_code.isin(kmem)
+    inst.loc[use, "market"] = m[use]
+    return inst
+
+
+def trim_thin_tail(P: pd.DataFrame, frac: float = 0.5, look: int = 20) -> pd.DataFrame:
+    """روزهای پایانی که کمتر از frac × میانهٔ شمار نماد ۲۰ روز قبل ردیف دارند حذف می‌شوند (دریافت ناقص: بخشی از فایل‌ها به‌روزتر از بقیه‌اند).
+    بدون این، آخرین روز پانل فقط چند نماد داشت و واجدان روز زنده تهی می‌شد (۲۰۲۶-۱۰-۱۹)."""
+    cnt = P.groupby("date").size().sort_index()
+    if len(cnt) <= look:
+        return P
+    cut = None
+    for d in cnt.index[::-1]:
+        ref = cnt[cnt.index < d].tail(look).median()
+        if cnt[d] >= frac * ref:
+            break
+        cut = d
+    if cut is not None:
+        dropped = cnt[cnt.index >= cut]
+        print(f"هشدار: {len(dropped)} روز پایانی کم‌پوشش حذف شد (از {cut.date()}؛ ردیف‌ها {dropped.tolist()}، میانهٔ قبل {int(cnt[cnt.index < cut].tail(look).median())})")
+        P = P[P.date < cut]
+    return P
+
+
 def load_panel() -> pd.DataFrame:
     inst = pd.read_csv(ROOT / "data/instruments.csv", dtype={"ins_code": str})
     extra_p = ROOT / "data/instruments_extra.csv"
     if extra_p.exists():  # سهام خارج از MarketWatch (fetch_stock_daily.py --search)
         ex = pd.read_csv(extra_p, dtype={"ins_code": str})
         ex = ex[~ex.ins_code.isin(inst.ins_code) & ~ex.name.fillna("").str.startswith("آتی")].assign(market="bourse", type="stock", base_volume=0)
-        info_p = ROOT / "data/corporate_actions/instrument_info.csv"
-        if info_p.exists():  # بازار واقعی از flow (۱ = بورس، ۲ = فرابورس)
-            fl = pd.read_csv(info_p, dtype={"ins_code": str}).set_index("ins_code").flow
-            # flow: ۱ بورس، ۲ فرابورس، ۴/۵ پایهٔ فرابورس، ۶ انرژی، ۷ کالا (مثل «نخود…(پ)») — فقط ۱ بورس است؛ بدون info = بورس
-            ex["market"] = ex.ins_code.map(fl).map(lambda v: "bourse" if v == 1 else "other").where(ex.ins_code.isin(fl.dropna().index), "bourse")
         inst = pd.concat([inst, ex[["ins_code", "symbol", "name", "market", "type", "base_volume"]]], ignore_index=True)
+    inst = apply_isin_market(inst)
     cols = ["dEven", "pClosing", "priceYesterday", "zTotTran"]
     frames = []
     for f in glob.glob(str(ROOT / "data/prices/*.csv.gz")):
@@ -47,6 +89,7 @@ def load_panel() -> pd.DataFrame:
         frames.append(d)
     P = pd.concat(frames, ignore_index=True)
     P["date"] = pd.to_datetime(P["dEven"].astype(int).astype(str), format="%Y%m%d")
+    P = trim_thin_tail(P)
     P = P.merge(inst[["ins_code", "symbol", "market", "type", "name"]], on="ins_code", how="left")
     # تصحیح طبقه‌بندی با فهرست رسمی اعضای «شاخص كل» (data/index_constituents.csv):
     # شرکت‌هایی مثل «وصندوق» (سرمایه‌گذاری صندوق بازنشستگی) و «بورس» به‌خطا صندوق/اوراق شمرده می‌شدند.

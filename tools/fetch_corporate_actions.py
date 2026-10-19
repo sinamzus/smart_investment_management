@@ -133,6 +133,9 @@ def arabic_l18(sym: str) -> str:
     return sym.replace("ی", "ي").replace("ک", "ك")
 
 
+EXTRA_CODES: list[str] = []      # --codes-file: نمادهای خارج از فیلتر بازار (مثلاً حذف‌شده‌ها با flow ۴) که اطلاعات/رویدادشان لازم است
+
+
 def load_stocks():
     if not INSTR.exists():
         raise SystemExit("ابتدا tools/fetch_stock_daily.py --discover را اجرا کنید.")
@@ -150,7 +153,14 @@ def load_stocks():
     for r in rows:
         if r["ins_code"] in kmem:
             r["type"], r["market"] = "stock", "bourse"
-    return [r for r in rows if r["type"] == "stock" and r["market"] in ("bourse", "farabourse")]
+    out = [r for r in rows if r["type"] == "stock" and r["market"] in ("bourse", "farabourse")]
+    have = {r["ins_code"] for r in out}
+    by_code = {r["ins_code"]: r for r in rows}
+    for c in EXTRA_CODES:
+        if c not in have:
+            r = by_code.get(c, {"ins_code": c, "symbol": "?", "name": "?", "market": "other", "type": "stock"})
+            out.append(r); have.add(c)
+    return out
 
 
 def save_raw(name: str, content: bytes | str):
@@ -409,6 +419,7 @@ def main() -> int:
     ap.add_argument("--limit", type=int)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--codes-file", help="فایل متنی ins_code اضافه (نمادهای خارج از بورس/فرابورس امروز، مثل حذف‌شده‌ها)")
     a = ap.parse_args()
     if not (a.probe or a.flow or a.collect_adjust or a.collect_dps or a.collect_shares or a.collect_info):
         ap.print_help()
@@ -416,6 +427,8 @@ def main() -> int:
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, "reconfigure"):
             s.reconfigure(encoding="utf-8")
+    if a.codes_file:
+        EXTRA_CODES.extend(c.strip() for c in Path(a.codes_file).read_text(encoding="utf-8").split() if c.strip())
     if a.probe:
         probe(a.probe)
     if a.flow:

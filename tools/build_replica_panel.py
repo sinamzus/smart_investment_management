@@ -25,6 +25,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+import construction as cn  # noqa: E402
 import sampled_replica as sr  # noqa: E402
 
 NS = (10, 20, 30, 50, 80, 120)
@@ -34,6 +35,7 @@ PART = 0.10                                                               # سق
 EPOCH = pd.Timestamp("1970-01-01")
 
 
+# ماکت‌ساز: وزن هدف از همهٔ واجدان (ترکیب شاخص رسمی نماد متوقف را هم دارد)؛ اجرا با قاعدهٔ A2 (نخریدن/نفروختن نماد بی‌معامله در روز اجرا).
 def f32(a):
     return b64encode(np.asarray(a, dtype="<f4").tobytes()).decode()
 
@@ -107,7 +109,7 @@ def main():
     # ماکت کامل (وزن بازار، ریبالانس روزانه) — برای جدا کردن خطای نمونه‌گیری
     Cfull = np.zeros(n)
     for t in range(1, n):
-        i = np.where(mk.eligible(t - 1) & ok_all & (mc[t - 1] > 0))[0]
+        i = np.where(mk.eligible(t - 1, require_trade=False) & ok_all & (mc[t - 1] > 0))[0]
         if len(i):
             Cfull[t] = float((mc[t - 1, i] / mc[t - 1, i].sum()) @ X[t, i])
     keys = [(m, N, q) for q in LIQ for N in ns for m in METHODS]
@@ -116,7 +118,7 @@ def main():
     B_month, nelig, sigdate = [], [], []
 
     def month(aidx, store, record):
-        idx = np.where(mk.eligible(aidx) & ok_all & (mc[aidx] > 0))[0]
+        idx = np.where(mk.eligible(aidx, require_trade=False) & ok_all & (mc[aidx] > 0))[0]
         b = np.zeros(k)
         b[idx] = mc[aidx, idx] / mc[aidx, idx].sum()
         Sig = g = None
@@ -160,12 +162,22 @@ def main():
         w_prev = np.zeros(k)
         for j, aidx in enumerate(me):
             sel, w, ad = W[key][j]
+            cap_t = float(np.min(PART * np.nan_to_num(ad) / np.maximum(w, 1e-9))) if len(sel) else 0.0   # ظرفیت ساخت هدف از نقد (پیش از انجماد)
             wf = np.zeros(k); wf[sel] = w
+            # قاعدهٔ A2 (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹؛ همان tools/sampled_replica.py): نماد جدیدِ بی‌معامله در روز اجرا خریده نمی‌شود و
+            # نماد نگه‌داشتهٔ بی‌معامله با وزن رانش‌یافته می‌ماند. وزن نسبی سهام مستقل از اهرم/نقد است، پس مرورگر همین وزن را بازپخش می‌کند.
+            tr = mk.tradable(aidx)
+            wf[~tr & (w_prev <= 0)] = 0.0
+            if wf.sum() > 0:
+                wf = wf / wf.sum()
+            wf = cn.freeze_untradable(wf, w_prev, tr)
+            sel = np.where(wf > 0)[0]; w = wf[sel]; ad = adv[aidx, sel]
+            W[key][j] = (sel, w, ad)
             to.append(0.5 * float(np.abs(wf - w_prev).sum()))
             rs = X[aidx - 251: aidx + 1] @ wf
             ri = np.nan_to_num(K.values[aidx - 251: aidx + 1])
             beta.append(float(np.cov(rs, ri)[0, 1] / max(np.var(ri, ddof=1), 1e-12)))
-            cap.append(float(np.min(PART * np.nan_to_num(ad) / np.maximum(w, 1e-9))) if len(sel) else 0.0)
+            cap.append(cap_t)
             wv = wf.copy()
             for t in range(aidx + 1, ends[j] + 1):
                 v0 = wv.sum()
@@ -175,7 +187,7 @@ def main():
         cfg["|".join(map(str, key))] = {"r": f32(r), "to": [round(x, 4) for x in to], "beta": [round(x, 3) for x in beta], "cap": [round(x / 1e9, 2) for x in cap],
                                        "sel": [[[int(i) for i in s], [int(round(x * 1e5)) for x in w]] for s, w, _ in W[key]],
                                        "live": [[int(i) for i in LIVE[key][0]], [int(round(x * 1e5)) for x in LIVE[key][1]], round(float(np.min(PART * np.nan_to_num(LIVE[key][2]) / np.maximum(LIVE[key][1], 1e-9))) / 1e9, 2)]}
-    idx_live = np.where(mk.eligible(live_a) & ok_all & (mc[live_a] > 0))[0]
+    idx_live = np.where(mk.eligible(live_a, require_trade=False) & ok_all & (mc[live_a] > 0))[0]
     used = sorted({int(i) for i in idx_live} | {int(i) for key in keys for s, _, _ in W[key] for i in s} | {int(i) for key in keys for i in LIVE[key][0]} | {int(i) for idx, _ in B_month for i in idx})
     pos = {i: p for p, i in enumerate(used)}
     names = [{"c": str(mk.cols[i]), "s": str(mk.sym[i]), "sec": str(mk.sector[i])} for i in used]

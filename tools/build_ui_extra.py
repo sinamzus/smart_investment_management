@@ -236,6 +236,20 @@ def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
     c1 = np.vstack([np.zeros(X.shape[1]), np.cumsum(x0, axis=0)])
     c2 = np.vstack([np.zeros(X.shape[1]), np.cumsum(x0 ** 2, axis=0)])
     have = np.vstack([np.zeros(X.shape[1]), np.cumsum(~np.isnan(X), axis=0)])
+    V = np.nan_to_num(R.pivot_table(index="date", columns="ins_code", values="zTotTran", aggfunc="last").reindex(index=dates, columns=M.columns).values)
+    mopen = (V > 0).sum(axis=1) >= 0.2 * np.maximum((~np.isnan(X)).sum(axis=1), 1)   # بازار باز (همان signals.Market.market_open)
+
+    def last_open(a_):
+        d_ = a_
+        while d_ > 0 and not mopen[d_] and a_ - d_ < 90:
+            d_ -= 1
+        return d_
+
+    def exec_day(a_):
+        e_ = a_ + 1
+        while e_ < len(dates) - 1 and not mopen[e_] and e_ - a_ < 90:
+            e_ += 1
+        return e_
     # سیگنال از ۲۰۱۵-۰۳ (پیش از آن ردیف‌های ۲۰۱۲–۲۰۱۴ هنوز تعدیل‌نشده‌های پراکنده دارند) ← ارزیابی از ۲۰۱۶-۰۳-۲۱
     start = int(np.searchsorted(dates, pd.Timestamp("2016-03-20")))
     port = {q: np.full(len(dates), np.nan) for q in ("Q1", "Q2", "Q3", "Q4", "Q5", "ALL")}
@@ -248,7 +262,7 @@ def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
             continue
         i1, i0 = (a + 1 - 21, a + 1 - 252) if signal in ("mom", "quality") else (a + 1, a + 1 - 252)   # mom: [t−252, t−21)؛ lowvol: [t−252, t)؛ quality: همان پنجرهٔ قیمتی برای واجدیت
         ok = ((have[i1] - have[i0]) >= 0.8 * (i1 - i0)) & ((nz[i1] - nz[i0]) >= 0.5 * (i1 - i0)) & ~np.isnan(X[a + 1])   # بدون شرط پایان دوره (فصل ۱۴ §۱۴٫۲٫۱)
-        ok &= ~np.isnan(X[a])
+        ok &= ~np.isnan(X[a]) & (V[last_open(a)] > 0) & (V[exec_day(a)] > 0)   # معامله در روز سیگنال و روز اجرا؛ تعطیلی سراسری ⇒ روز بازگشایی (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، A2)
         if signal == "quality":
             if dates[a] not in qscore.index:
                 continue

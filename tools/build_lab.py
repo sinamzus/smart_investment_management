@@ -30,7 +30,7 @@ import signals as sg  # noqa: E402
 CACHE = ROOT / "data" / "derived" / "cache"
 OUT_JS = ROOT / "ui" / "data" / "lab.js"
 OUT_JSON = ROOT / "data" / "research" / "lab_results.json"
-COST = 100.0
+COST = 125.0                                     # رفت‌وبرگشت؛ کارمزد خرید + فروش + مالیات فروش ≈ ۱٫۲۵٪ [تأیید لازم] (فصل ۶ §۶٫۱)
 REP = {"momentum": "mom_12_1", "risk": "vol_252", "liquidity": "size", "yield": "div_yield", "quality": "q_roe", "value": "ep"}
 
 
@@ -193,7 +193,8 @@ def finalize(lab, S, R):
         r["stats"] = fe.stats_of(res, "S", c)
         sc = fe.stats_of(res, "S", c, bench="CAP")                         # مرجع دوم: ارزش‌وزن واجدان
         r["stats"].update({"excess_net_cap": sc["excess_net"], "t_net_cap": sc["t_net"], "ir_cap": sc["ir"], "ann_cap_net": sc["ann_all_net"],
-                           "t_h1_cap": sc["t_h1"], "t_h2_cap": sc["t_h2"], "ex_h1_cap": sc["ex_h1"], "ex_h2_cap": sc["ex_h2"]})
+                           "t_h1_cap": sc["t_h1"], "t_h2_cap": sc["t_h2"], "ex_h1_cap": sc["ex_h1"], "ex_h2_cap": sc["ex_h2"],
+                           "frozen_w": float(np.nanmean(res["frozen"])) if len(res.get("frozen", [])) else 0.0})   # سهم وزن غیرقابل‌فروش در روز اجرا (A2)
         rn = fe.net(res["ret"]["S"], res["to"]["S"], c)
         an = fe.net(res["ret"]["ALL"], res["to"]["ALL"], c)
         r["capacity"] = {str(int(a_)): fe.ann(rn - np.nan_to_num(imp)) - fe.ann(an) for a_, imp in res["impact"].items()}   # برتری خالص پس از اثر بازار
@@ -241,6 +242,8 @@ def top_holdings(lab, res, n=400):
     if not L:
         return None
     w = L["target"]
+    if not (w > 0).any():                    # سبد زندهٔ تهی (مثلاً معیار بنیادی بدون پوشش در روز آخر)
+        return None
     i = np.argsort(-w)[:n]
     i = i[w[i] > 0]
     mk = lab.mk
@@ -266,7 +269,7 @@ def main(export_only=False):
             pickle.dump(R, open(pk, "wb"))
     else:
         R = run_all(lab, S)
-        zoo, (use, ok, fw) = sg.zoo(mk, lab.idx, S)
+        zoo, (use, ok, fw) = sg.zoo(mk, lab.idx, S, cost_bp=COST)
         R["zoo"] = zoo
         R["fm"] = fm_table(lab, S)
         names, C = sg.corr_matrix(mk, lab.idx, S, use, ok)
@@ -306,6 +309,9 @@ def export(mk, lab, R):
         if r in lab.ok:
             ok[r] = lab.ok[r]
     ok[rows - 1] = lab.live_ok
+    tr = np.ones((rows, k), np.uint8)              # قابل‌معامله در روز اجرا (A2)؛ ردیف زنده: ناشناخته ⇒ همه
+    for r in range(rows - 1):
+        tr[r] = mk.tradable(lab.idx[r])
     fw = np.full((rows, k), np.nan, np.float32)
     for r, f in lab.fw.items():
         fw[r] = f
@@ -325,8 +331,9 @@ def export(mk, lab, R):
         v = sg.W(mk.val, a, 63)
         advs.append(np.log(np.nanmean(v, axis=0) + 1) if v is not None else np.full(k, np.nan))
     adv = np.stack(advs).astype(np.float32)
-    sectors = sorted(set(map(str, mk.sector)))
+    sectors = sorted(set(map(str, mk.sector)) | {nm for _, _, nm in mk.sector_hist})
     secidx = np.array([sectors.index(str(s)) for s in mk.sector], np.uint8)
+    sec_hist = [{"i": int(i), "to": str(to.date()), "sec": sectors.index(str(nm))} for i, to, nm in mk.sector_hist]
     nm = {}
     for f in ("instruments.csv", "instruments_extra.csv"):
         d = pd.read_csv(ROOT / "data" / f, dtype={"ins_code": str})
@@ -355,7 +362,7 @@ def export(mk, lab, R):
                     "stats": {a: (None if (isinstance(b, float) and b != b) else b) for a, b in st.items()}, "ic": r["ic"], "dsr": r.get("dsr"), "verdict": r["verdict"], "dec": r.get("dec"),
                     "bhy": r.get("bhy"), "live": (top_holdings(lab, res) if r["group"] != "sig" else None), "ic_series": [None if x != x else round(float(x), 4) for x in res["ic"]]})
     data = {"use": [int(r) for r in lab.use], "built": time.strftime("%Y-%m-%d %H:%M"), "asof": str(mk.dates[-1].date()), "rows": rows, "k": k, "months_end": ends, "sig_dates": [str(mk.dates[a].date()) for a in lab.idx],
-            "codes": codes, "divs": divs, "px": [0 if x != x else float(x) for x in mk.close[-1]], "sectors": sectors, "ok": b64(ok), "fw": b64(np.nan_to_num(fw, nan=-9).astype(np.float32)), "mcap": b64(np.nan_to_num(mcap, nan=-99)),
+            "codes": codes, "divs": divs, "px": [0 if x != x else float(x) for x in mk.close[-1]], "sectors": sectors, "sec_hist": sec_hist, "ok": b64(ok), "tr": b64(tr), "fw": b64(np.nan_to_num(fw, nan=-9).astype(np.float32)), "mcap": b64(np.nan_to_num(mcap, nan=-99)),
             "vol": b64(np.nan_to_num(vol, nan=-1)), "adv": b64(np.nan_to_num(adv, nan=-1)), "signals": sig,
             "zoo": R["zoo"], "fm": R["fm"], "corr": R["corr"], "dec": R["dec"], "library": lib, "multi": R["multi"], "cost_bp": COST,
             "aums": [int(a_) for a_ in cn.AUMS], "y_impact": cn.Y_IMPACT, "algos": [{c: v for c, v in a.items() if c != "fn"} for a in cn.ALGOS.values()]}
