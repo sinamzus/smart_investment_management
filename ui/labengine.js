@@ -177,7 +177,7 @@ function run(ctx, spec) {
   const every = spec.rebalance_every || 1, kappa = spec.partial ?? 1, mx = spec.max_w, minAdv = univ.min_adv ? Math.log(univ.min_adv) : null;
   let prev = new Float64Array(k), held = new Uint8Array(k), prevAll = null, first = true, cnt = 0;
   const AUMS = ctx.L.aums || [], Y = ctx.L.y_impact || 1;
-  const out = { end: [], ret: [], all: [], cap: [], to: [], toAll: [], toCap: [], n: [], ic: [], rows: [], impact: AUMS.map(() => []) };
+  const out = { end: [], ret: [], all: [], cap: [], to: [], toAll: [], toCap: [], n: [], ic: [], rows: [], impact: AUMS.map(() => []), W: spec._keepW ? [] : null };   // _keepW: وزن هدف هر ریبالانس (بخش «پرتفو»: هدف استراتژی در هر تاریخ)
   let prevCap = null;
   for (const r of ctx.use) {
     const okr = okAt(ctx, r), f = fwAt(ctx, r), ok = new Uint8Array(k), tr = trAt(ctx, r);
@@ -214,7 +214,7 @@ function run(ctx, spec) {
       let c = 0; for (let i = 0; i < k; i++) { const dw = Math.abs(w[i] - prev[i]); if (dw <= 0) continue; const av = ctx.adv[r * k + i], adv = av < 0 ? 0 : Math.exp(av) - 1, sg = ctx.vol[r * k + i] > 0 ? ctx.vol[r * k + i] : 0; const part = adv > 0 ? Math.min(dw * aum / adv, 1) : 0; c += dw * Y * sg * Math.sqrt(part); }
       out.impact[j].push(c);
     });
-    out.end.push(ctx.L.months_end[r]); out.ret.push(ret); out.all.push(ra); out.to.push(reb ? to : 0); out.toAll.push(toA); out.n.push(w.reduce((a, b) => a + (b > 0 ? 1 : 0), 0)); out.rows.push(r);
+    out.end.push(ctx.L.months_end[r]); out.ret.push(ret); out.all.push(ra); out.to.push(reb ? to : 0); out.toAll.push(toA); out.n.push(w.reduce((a, b) => a + (b > 0 ? 1 : 0), 0)); out.rows.push(r); if (out.W) out.W.push(reb ? Float64Array.from(w) : null);
     if (reb && sc) { const m = new Float64Array(k).fill(NaNv); for (let i = 0; i < k; i++) if (ok[i] && !isNaN(sc[i]) && !isNaN(f[i])) m[i] = f[i]; out.ic.push(spearman(sc, m)); } else out.ic.push(NaNv);
     let nw = new Float64Array(k), tot = 0; for (let i = 0; i < k; i++) { nw[i] = w[i] * (1 + g[i]); tot += nw[i]; } prev = tot > 0 ? nw.map(x => x / tot) : nw;
     let na = new Float64Array(k), ta = 0; for (let i = 0; i < k; i++) { na[i] = allw[i] * (1 + g[i]); ta += na[i]; } prevAll = ta > 0 ? na.map(x => x / ta) : na;

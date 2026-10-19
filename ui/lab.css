@@ -96,9 +96,9 @@ th.sortable.asc::after { content: ' ▲'; } th.sortable.desc::after { content: '
 .lb-step small { color: var(--tx-3); font-size: var(--fs-2xs); line-height: 1.6; overflow-wrap: anywhere; }
 .lb-body details.flash > summary { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* نماهای «بازسازی شاخص» و «دفتر زنده»: پنل‌های عمودی با اسکرول */
-.workspace.v-sam, .workspace.v-live { background: var(--bg-app); display: flex; flex-direction: column; gap: var(--s-4); overflow: auto; padding: var(--s-2) var(--s-5) var(--s-5); align-content: flex-start; }
-.workspace.v-sam > .panel, .workspace.v-live > .panel { flex: 0 0 auto; }
+/* نماهای «بازسازی شاخص»، «دفتر زنده» و بخش «پرتفو»: پنل‌های عمودی با اسکرول */
+.workspace.v-sam, .workspace.v-live, .workspace.v-port, .workspace.v-bsk { background: var(--bg-app); display: flex; flex-direction: column; gap: var(--s-4); overflow: auto; padding: var(--s-2) var(--s-5) var(--s-5); align-content: flex-start; }
+.workspace.v-sam > .panel, .workspace.v-live > .panel, .workspace.v-port > .panel, .workspace.v-bsk > .panel { flex: 0 0 auto; }
 .v-sam .lb-flow { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .v-sam .lb-step.static, .v-live .lb-step.static { cursor: help; }
 
@@ -110,7 +110,7 @@ th.sortable.asc::after { content: ' ▲'; } th.sortable.desc::after { content: '
 .lb-flowbox[open] .lb-mini { display: none; }
 .lb-main .kpi { padding: var(--s-2) var(--s-3); }
 .lb-main .kpi .v { font-size: var(--fs-lg); }
-.workspace.v-sam[hidden], .workspace.v-live[hidden] { display: none; }
+.workspace.v-sam[hidden], .workspace.v-live[hidden], .workspace.v-port[hidden], .workspace.v-bsk[hidden] { display: none; }
 
 /* «بازسازی شاخص» (۲۰۲۶-۱۰-۱۹): پاسخ اول، سازندهٔ دوستونه مثل Lab، جزئیات زبانه‌ای، پیشرفته و روش‌شناسی تاشو */
 .rb-grid { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); align-items: stretch; }
@@ -138,3 +138,9 @@ details.panel.sam-fold { display: block; }
 /* نمودار بتاهای غلتان تب «فاکتورها»: ظرف خودش تا راهنما و ابزار بزرگ‌نمایی روی یادداشت‌های بالای تب نیفتند */
 .lb-attr-ch { position: relative; flex: none; }
 .lb-main .lb-attr-leg { position: static; }
+
+/* بخش «پرتفو» (ui/portfolio.js) */
+.v-port .panel-head select { max-width: 260px; }
+.v-port .ctl textarea { font: var(--fs-xs) var(--font-num); direction: rtl; }
+.v-port .ctl label input[type=checkbox] { vertical-align: middle; }
+.v-port .ctl[hidden] { display: none; }

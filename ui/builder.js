@@ -264,7 +264,7 @@ function renderPort() {
     const LAB = root.SIM_LAB, map = new Map(LAB.codes.map((c, i) => [String(c.c), i])), w = new Float64Array(LAB.k); let miss = 0;
     const L = last && last.sim ? last.sim.Ls[R.mstart.length - 1] : 1, ex = Math.min(1, L > 0 ? L : 1);
     P.rows.forEach(r => { const i = map.get(r.nm.c); if (i == null) miss++; else w[i] = r.w * ex; });
-    root.SIM_SEND_PLAN(`همتاساز · ${METHODS[S.method]} ${S.N} سهم · نقدشوندگی ${LIQN[S.liq][0]}`, w);
+    root.SIM_SEND_PLAN(`همتاساز · ${METHODS[S.method]} ${S.N} سهم · نقدشوندگی ${LIQN[S.liq][0]}`, w, R === R0 ? { kind: 'replica', key: curKey() } : { kind: 'enh' });
     if (miss) toast(`${miss} نماد در Lab نبود و کنار ماند`);
     });
   };

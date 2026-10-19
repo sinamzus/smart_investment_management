@@ -33,7 +33,8 @@ function ensureData(cb) {
   s.onerror = () => { pending = null; ['v-lab', 'v-sig', 'v-plan'].forEach(id => { const m = $(id); if (m && !m.dataset.ready) m.innerHTML = '<p style="padding:24px">ui/data/lab.js پیدا نشد. اجرا کنید: <code>python tools/build_lab.py</code></p>'; }); };
   document.head.appendChild(s);
 }
-window.SIM_ENSURE_LAB = ensureData;                                     // برای نماهای دیگر که به شبکهٔ نمادهای Lab نیاز دارند (همتاساز)
+window.SIM_ENSURE_LAB = ensureData;
+window.SIM_LAB_CTX = () => CTX;                                         // بخش «پرتفو»: ساخت دوبارهٔ هدف سبد در هر تاریخ (ui/portfolio.js)                                     // برای نماهای دیگر که به شبکهٔ نمادهای Lab نیاز دارند (همتاساز)
 const toRes = r => ({ cap: r.cap || [], toCap: (r.to_cap || []).map(v => v == null ? NaN : v), impact: (L.aums || []).map(a => ((r.impact || {})[String(a)] || []).map(v => v == null ? NaN : v)), end: r.end, ret: r.ret, all: r.all, to: r.to.map(v => v == null ? NaN : v), toAll: (r.to_all || r.all.map(() => 0)).map(v => v == null ? NaN : v), n: r.ret.map(() => r.stats.names), ic: (r.ic_series || r.ret.map(() => NaN)).map(v => v == null ? NaN : v) });
 const sigName = n => (L.signals.find(s => s.name === n) || {}).fa || n;
 const sigMeta = n => L.signals.find(s => s.name === n);
@@ -498,7 +499,7 @@ function tabLive(host) {
     }).join('')}</tbody></table></div><div><table class="dt">${th([['صنعت'], ['وزن %', 'n']])}<tbody>${Object.entries(sec).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([s, v]) => `<tr><td>${esc(s)}</td><td class="n">${f1(v, 1)}</td></tr>`).join('')}</tbody></table></div></div>`;
   $('lv-aum').onchange = e => { lab.aum = +e.target.value; tabLive(host); };
   $('lv-csv').onclick = () => download('live_target.csv', [['symbol', 'market', 'sector', 'weight_pct', 'score_z'], ...idx.map(i => [L.codes[i].p || L.codes[i].s, L.codes[i].m ? 'farabourse' : 'bourse', L.sectors[L.codes[i].sec], (w[i] / tot * 100).toFixed(4), score ? score[i].toFixed(3) : ''])]);
-  $('lv-plan').onclick = () => sendToPlan(lab.name || specText(lab.spec), Float64Array.from(w).map(x => x / tot));
+  $('lv-plan').onclick = () => sendToPlan(lab.name || specText(lab.spec), Float64Array.from(w).map(x => x / tot), lab.lib ? { kind: 'lib', libId: lab.lib.id, spec: lab.lib.spec } : { kind: 'lab', spec: lab.runSpec || JSON.parse(JSON.stringify(lab.spec)) });
 }
 function exportRunCSV() {
   const r = lab.res, st = lab.st; if (!r) return;
@@ -600,8 +601,10 @@ function renderCorr() {
 /* ════════════════════════════════ PLAN ════════════════════════════════ */
 const plan = { src: 'lab', aum: 100, lot: 1, min_trade: 0.001, hold: [], cost: 125 };
 /* ارسال وزن هدف از هر نما به «دستور اجرا»: گزینهٔ «ارسال‌شده» را می‌سازد، انتخاب می‌کند و نما را باز می‌کند (چه نما قبلاً ساخته شده باشد چه نه) */
-function sendToPlan(name, w) {
-  window.SIM_PLAN_SRC = { name, w };
+/* هر ارسال، یک «سبد» با نام و منبعش در بخش «پرتفو» هم ذخیره می‌کند (ui/portfolio.js؛ فصل ۵ §۵٫۹) */
+function sendToPlan(name, w, src) {
+  window.SIM_PLAN_SRC = { name, w, src };
+  if (window.SIM_PF) { const b = window.SIM_PF.saveBasket(name, w, src || { kind: 'manual' }); if (b) toast('سبد ذخیره شد: ' + b.name); }
   window.SIM_SHOW('plan');
   if ($('pl-src')) { fillPlanSrc(); $('pl-src').value = 'sent'; renderPlan(); }
   toast('وزن هدف به «دستور اجرا» فرستاده شد: ' + name);
@@ -619,7 +622,7 @@ function initPlan() {
   m.innerHTML = `
   <section class="panel" style="--lg:var(--lg-a)">
     <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title">برنامهٔ اقدام · سفارش‌ها برای رسیدن به پرتفوی هدف</span><span class="chip" id="pl-chip"></span>
-      <div class="panel-tools"><button class="tool" id="pl-csv">CSV</button><button class="tool" id="pl-json">JSON برای سامانهٔ الگوریتمی</button></div></div>
+      <div class="panel-tools"><button class="tool" id="pl-bsk" data-tip="هدف فعلی را با نام دلخواه در «پرتفو ← سبدها» ذخیره می‌کند تا بعداً پرتفو از آن بسازید یا با آن ریبالانس کنید. منبع (شاخص، Lab، کتابخانه، ارسالی) هم ذخیره می‌شود تا در تاریخ دیگر دوباره ساخته شود." data-doc="5:5.9">ذخیره به‌عنوان سبد</button><button class="tool" id="pl-csv">CSV</button><button class="tool" id="pl-json">JSON برای سامانهٔ الگوریتمی</button></div></div>
     <div class="ctl" id="pl-ctl"><label>هدف <select id="pl-src"></select></label><label>سرمایه (میلیارد ریال) <input type="number" id="pl-aum" value="100" min="1" step="10"></label>
       <label>حداقل معامله (٪ سرمایه) <input type="number" id="pl-min" value="0.1" min="0" step="0.05"></label><label>هزینهٔ رفت‌وبرگشت (bp) <input type="number" id="pl-cost" value="125" min="0" step="5"></label></div>
     <div class="ctl"><label>پرتفوی فعلی (نماد،تعداد — هر خط یک نماد؛ خالی = شروع از نقد) <textarea id="pl-hold" rows="2" placeholder="فولاد,120000&#10;فملی,50000" style="width:360px"></textarea></label><button class="tool" id="pl-apply">محاسبه</button><span class="mute" id="pl-note"></span></div>
@@ -634,6 +637,12 @@ function initPlan() {
   if (window.SIM_PLAN_SRC) $('pl-src').value = 'sent';
   ['pl-src', 'pl-aum', 'pl-min', 'pl-cost'].forEach(i => { $(i).onchange = renderPlan; }); $('pl-apply').onclick = renderPlan;
   plan.hold = store.get('hold') || ''; $('pl-hold').value = plan.hold;
+  $('pl-bsk').onclick = () => {
+    if (!window.SIM_PF) { toast('بخش پرتفو بارگذاری نشده'); return; }
+    const v = $('pl-src').value, t = targetFor(v), n = prompt('نام سبد', t.name); if (!n || !n.trim()) return;
+    const sent = window.SIM_PLAN_SRC, src = v === 'K' || v === 'EW' ? { kind: 'index', idx: v } : v === 'lab' ? { kind: 'lab', spec: lab.runSpec || JSON.parse(JSON.stringify(lab.spec || {})) } : v === 'sent' ? (sent && sent.src) || { kind: 'manual' } : (() => { const r = L.library.find(x => 'lib:' + x.id === v); return { kind: 'lib', libId: r && r.id, spec: r && r.spec }; })();
+    const b = window.SIM_PF.saveBasket(n.trim(), t.w, src, { name: n.trim(), force: true }); if (b) toast('سبد ذخیره شد: ' + b.name);
+  };
   $('pl-csv').onclick = () => exportPlan('csv'); $('pl-json').onclick = () => exportPlan('json');
   renderPlan();
 }
