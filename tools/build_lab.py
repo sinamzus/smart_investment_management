@@ -21,6 +21,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+import attribution as at  # noqa: E402
 import build_ui_extra as bx  # noqa: E402
 import construction as cn  # noqa: E402
 import factor_engine as fe  # noqa: E402
@@ -350,6 +351,9 @@ def export(mk, lab, R):
         if pay >= str((mk.dates[-1] - pd.Timedelta(days=14)).date()):
             divs.append({"sym": nrm(r.symbol), "dps": float(r.dps_rial) if r.dps_rial == r.dps_rial else None, "pay": pay, "agm_j": r.agm_j, "kind": "announced"})
     ends = [str(mk.dates[min(lab.me[r + 1], mk.n - 1)].date()) for r in range(rows - 2)] + [None]
+    # تفکیک فاکتوری هر استراتژی (فصل ۱۴ §۱۴٫۷٫۸): فاکتورها همان ردیف‌های تک‌معیار کتابخانه‌اند
+    runs = R["runs"]
+    fac = at.factor_series(lambda s: (runs[f"sig:{s}"]["res"]["ret"]["S"], runs[f"sig:{s}"]["res"]["ret"]["ALL"])) if all(f"sig:{s}" in runs for _, _, s in at.FACTORS if s) else None
     lib = []
     for rid, r in R["runs"].items():
         res, st = r["res"], r["stats"]
@@ -360,6 +364,7 @@ def export(mk, lab, R):
                     "impact": {str(int(a_)): [None if x != x else round(float(x), 5) for x in v] for a_, v in res["impact"].items()}, "capacity": r.get("capacity"),
                     "to": [None if x != x else round(float(x), 4) for x in res["to"]["S"]], "to_all": [None if x != x else round(float(x), 4) for x in res["to"]["ALL"]],
                     "stats": {a: (None if (isinstance(b, float) and b != b) else b) for a, b in st.items()}, "ic": r["ic"], "dsr": r.get("dsr"), "verdict": r["verdict"], "dec": r.get("dec"),
+                    "attr": (at.attribute(res["ret"]["S"], res["ret"]["ALL"], res["to"]["S"], res["to"]["ALL"], (r["spec"].get("cost_bp") or COST), fac) if fac else None),
                     "bhy": r.get("bhy"), "live": (top_holdings(lab, res) if r["group"] != "sig" else None), "ic_series": [None if x != x else round(float(x), 4) for x in res["ic"]]})
     data = {"use": [int(r) for r in lab.use], "built": time.strftime("%Y-%m-%d %H:%M"), "asof": str(mk.dates[-1].date()), "rows": rows, "k": k, "months_end": ends, "sig_dates": [str(mk.dates[a].date()) for a in lab.idx],
             "codes": codes, "divs": divs, "px": [0 if x != x else float(x) for x in mk.close[-1]], "sectors": sectors, "sec_hist": sec_hist, "ok": b64(ok), "tr": b64(tr), "fw": b64(np.nan_to_num(fw, nan=-9).astype(np.float32)), "mcap": b64(np.nan_to_num(mcap, nan=-99)),

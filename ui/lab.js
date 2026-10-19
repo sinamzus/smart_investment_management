@@ -103,7 +103,7 @@ function initLab() {
   </section>
   <section class="panel lb-main" style="--lg:var(--lg-b)">
     <div class="panel-head"><span class="lg-badge">R</span><span class="panel-title" id="lb-title">نتیجه</span><span class="chip" id="lb-chip"></span>
-      <div class="seg" id="lb-tabs"><button data-t="perf" aria-pressed="true">عملکرد</button><button data-t="dec" aria-pressed="false">دهک‌ها</button><button data-t="ic" aria-pressed="false">IC و پریمیوم</button><button data-t="stab" aria-pressed="false">پایداری</button><button data-t="hard" aria-pressed="false">آمار سخت</button><button data-t="cap" aria-pressed="false">ظرفیت</button><button data-t="live" aria-pressed="false">پرتفوی زنده</button></div>
+      <div class="seg" id="lb-tabs"><button data-t="perf" aria-pressed="true">عملکرد</button><button data-t="dec" aria-pressed="false">دهک‌ها</button><button data-t="ic" aria-pressed="false">IC و پریمیوم</button><button data-t="stab" aria-pressed="false">پایداری</button><button data-t="hard" aria-pressed="false">آمار سخت</button><button data-t="attr" aria-pressed="false" data-tip="تفکیک فاکتوری: برتری استراتژی چقدر از اندازهٔ کوچک، کم‌نوسان، سود نقدی، مومنتوم و بازار می‌آید و چقدر آلفای واقعی (توضیح‌داده‌نشده) است؛ با بتاهای غلتان ۳۶ ماهه.">فاکتورها</button><button data-t="cap" aria-pressed="false">ظرفیت</button><button data-t="live" aria-pressed="false">پرتفوی زنده</button></div>
       <div class="panel-tools"><button class="tool" id="lb-csv">CSV</button></div></div>
     <div class="ctl"><label data-tip="مرجع سنجش برتری: هم‌وزن واجدان پریمیوم اندازه/نقدناپذیری را در خود دارد؛ ارزش‌وزن واجدان مرجع مدیرِ ارزش‌وزن است.">مرجع <span class="seg" id="lb-bench"><button data-b="eq" aria-pressed="true">هم‌وزن واجدان</button><button data-b="cap" aria-pressed="false">ارزش‌وزن واجدان</button></span></label>
       <span class="mute" data-tip="با تغییر مرجع، همهٔ ستون‌های برتری، آمار t، نسبت اطلاعاتی (IR)، نیمه‌ها و حکم دوباره نسبت به همان مرجع حساب می‌شوند؛ خود بازده استراتژی عوض نمی‌شود.">برتری، t، IR، پایداری و حکم همه نسبت به این مرجع‌اند</span></div>
@@ -296,6 +296,7 @@ function renderTab() {
   if (t === 'stab') return tabStab(host);
   if (t === 'hard') return tabHard(host);
   if (t === 'cap') return tabCap(host);
+  if (t === 'attr') return tabAttr(host);
   if (t === 'live') return tabLive(host);
 }
 const cst = { i: null };
@@ -369,6 +370,44 @@ function buildDays(w, aum) {
   const k = L.k, rl = L.rows - 1; let tw = 0, wd = 0, n = 0, g1 = 0, mx = 0;
   for (let i = 0; i < k; i++) if (w[i] > 0) { const av = CTX.adv[rl * k + i], adv = av < 0 ? 0 : Math.exp(av) - 1, d = adv > 0 ? Math.ceil(w[i] * aum / adv / 0.1) : 99; tw += w[i]; wd += w[i] * d; n++; if (d > 1) g1++; mx = Math.max(mx, d); }
   return { wdays: wd / (tw || 1), pct_gt1: n ? g1 / n * 100 : NaN, max_days: mx };
+}
+/* ── تفکیک فاکتوری (LabEngine.attribution؛ همان tools/attribution.py؛ فصل ۱۴ §۱۴٫۷٫۸) ── */
+const FCOL = { MKT: 'var(--tx-3)', SIZE: 'var(--warn)', LOWVOL: 'var(--ch-3)', DIV: 'var(--up)', MOM: 'var(--ch-2)' };
+const FTIP = {
+  MKT: 'بازدهٔ هم‌وزن واجدان. β مثبت یعنی استراتژی در ماه‌های صعودی بازار بیش از مرجع بالا می‌رود (اهرم ضمنی)، منفی یعنی دفاعی‌تر.',
+  SIZE: 'سبد ۲۰٪ کوچک‌ترین‌ها (top-fraction معیار اندازه) منهای هم‌وزن واجدان. β = شباهت استراتژی به شرط روی کوچک‌ها/نقدناپذیری.',
+  LOWVOL: 'سبد ۲۰٪ کم‌نوسان‌ترین‌ها منهای هم‌وزن واجدان.',
+  DIV: 'سبد ۲۰٪ با بیشترین بازده نقدی سود منهای هم‌وزن واجدان.',
+  MOM: 'سبد ۲۰٪ با بیشترین مومنتوم ۱۲−۱ منهای هم‌وزن واجدان.',
+};
+function tabAttr(host) {
+  const a = E.attribution(L, lab.res, lab.cost);
+  if (!a) { host.innerHTML = '<div class="lb-note">تفکیک فاکتوری برای این اجرا ممکن نیست (کمتر از ۲۴ ماه یا ردیف‌های فاکتور در کتابخانه نیست).</div>'; return; }
+  const pp = x => x == null || x !== x ? '—' : `<span dir="ltr" style="unicode-bidi:isolate">${sg1(x, 1)}</span>`;
+  const sh = x => a.gross_excess_ann ? `<span dir="ltr" style="unicode-bidi:isolate">${f1(100 * x / a.gross_excess_ann, 0)}٪</span>` : '—';
+  const expl = a.factors.reduce((s, f) => s + f.contrib_ann, 0);
+  const K = [['آلفای سالانه', pp(a.alpha_ann), a.alpha_t != null ? 't = ' + f1(a.alpha_t, 2) : '', 'بخشی از برتری ناخالص که هیچ‌کدام از پنج فاکتور توضیحش نمی‌دهد (عرض از مبدأ رگرسیون، ×۱۲). t نیوی‌وست ۳ وقفه؛ |t| ≥ ۲ یعنی آلفا از صفر جداست.'],
+    ['R²', f1(a.r2, 2), '', 'سهم نوسان برتری ماهانه که فاکتورها توضیح می‌دهند. بالا یعنی استراتژی عمدتاً ترکیبی از همین فاکتورهاست.'],
+    ['سهم فاکتورها', sh(expl), '', 'جمع سهم پنج فاکتور از میانگین برتری ناخالص.'],
+    ['ماه‌ها', f1(a.months, 0), '', 'تعداد ماه‌های مشترک استراتژی و فاکتورها (از انتها هم‌تراز).']];
+  const row = (name, tipT, b, t, fr, c, cls) => `<tr class="${cls || ''}"><td${tipT ? ` data-tip="${esc(tipT)}"` : ''}>${name}</td><td class="n">${b == null ? '' : f1(b, 2)}</td><td class="n ${tcls(t)}">${t == null ? '' : f1(t, 2)}</td><td class="n">${fr == null ? '' : pp(fr)}</td><td class="n">${pp(c)}</td><td class="n">${c == null ? '' : sh(c)}</td></tr>`;
+  host.innerHTML = `<div class="lb-note">برتری ناخالص ماهانه نسبت به هم‌وزن واجدان روی پنج فاکتور رگرس شده است. <b>واحد سهم‌ها «میانگین برتری ماهانه × ۱۲» (واحد درصد، حسابی) است</b> تا جمع‌پذیر باشند؛ این با «برتری خالص» بالای صفحه که اختلاف بازده‌های مرکب سالانه است فرق دارد (در بازده اسمی ۶۰٪ تا ۷۵٪ دومی بزرگ‌تر است). ${a.self_factor ? '<b>این استراتژی خودش یکی از فاکتورهاست</b>؛ ضریب‌ها بدیهی‌اند و t معنا ندارد.' : ''}</div>
+    <div class="kpis">${K.map(([k, v, s, t]) => `<div class="kpi" data-tip="${esc(t)}"><div class="k">${k}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('')}</div>
+    <table class="dt"><thead><tr><th data-tip="جزء برتری.">جزء</th><th class="n" data-tip="ضریب رگرسیون (بار فاکتور): برتری استراتژی به‌ازای ۱ واحد بازدهٔ فاکتور.">β</th><th class="n" data-tip="آمار t نیوی‌وست ۳ وقفه.">t</th><th class="n" data-tip="میانگین بازدهٔ ماهانهٔ فاکتور × ۱۲ (واحد درصد).">بازده فاکتور</th><th class="n" data-tip="β × بازده فاکتور: سهم این فاکتور از برتری (میانگین ماهانه × ۱۲، واحد درصد).">سهم</th><th class="n" data-tip="سهم این جزء از برتری ناخالص.">از کل</th></tr></thead><tbody>
+      ${row('آلفا (توضیح‌داده‌نشده)', 'عرض از مبدأ: برتری‌ای که با داشتن همین پنج سبد فاکتوری به دست نمی‌آمد.', null, a.alpha_t, null, a.alpha_ann)}
+      ${a.factors.map(f => row(`<span class="fam" style="background:${FCOL[f.code]}"></span>${f.fa}`, FTIP[f.code], f.beta, f.t, f.factor_ann, f.contrib_ann)).join('')}
+      ${row('<b>برتری ناخالص</b>', 'جمع آلفا و سهم فاکتورها = میانگین برتری ماهانهٔ ناخالص × ۱۲.', null, null, null, a.gross_excess_ann, 'tot')}
+      ${row('هزینهٔ معامله (نسبت به مرجع)', 'تفاوت هزینهٔ گردش استراتژی و مرجع هم‌وزن (مرجع هم هر ماه ریبالانس و هزینه دارد).', null, null, null, a.cost_ann)}
+      ${row('<b>برتری خالص</b>', 'برتری ناخالص + اثر هزینه (میانگین ماهانه × ۱۲).', null, null, null, a.net_excess_ann, 'tot')}
+    </tbody></table>
+    <div class="legend" id="lb-attr-leg"></div><svg class="chart" id="lb-attr-chart" dir="ltr" style="height:260px;flex:none"></svg>
+    <div class="lb-note">بتاهای غلتان ${f1(a.rolling.win, 0)} ماهه: تغییر شرط استراتژی در زمان. اگر بار اندازه بالا رفته باشد، استراتژی امروز بیشتر از گذشته به پریمیوم کوچک‌ها وابسته است.</div>`;
+  if (!a.rolling.beta.length) return;
+  const dates = a.rolling.end.map(d => d || ''), cs = { i: null }, codes = E.FACTORS.map(x => x[0]).filter(c => c !== 'MKT');
+  const ser = codes.map(c => { const k = E.FACTORS.findIndex(x => x[0] === c); return { v: a.rolling.beta.map(b => b[k]), color: FCOL[c], w: 1.4, name: E.FACTORS[k][1], fmt: x => f1(x, 2) }; });
+  $('lb-attr-leg').innerHTML = ser.map(s => `<span><i style="color:${s.color}"></i>${s.name}</span>`).join('');
+  const draw = () => ChartKit.paneChart($('lb-attr-chart'), dates, [{ frac: 1, zero: true, series: ser, fmt: x => fmt(x, 2) }], cs);
+  ChartKit.attach($('lb-attr-chart'), cs, draw); draw();
 }
 function tabCap(host) {
   const res = lab.res, st = lab.st, aums = L.aums || [];

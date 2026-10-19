@@ -284,5 +284,56 @@ function deciles(ctx, spec, costBp = 125) {
   return { ann, spread_t: nwT(sp), spread_ann: mean(sp) * 1200, spearman: cv / Math.sqrt(va * vb), up: ann.slice(1).filter((v, i) => v > ann[i]).length };
 }
 
-root.LabEngine = { load, run, stats, deciles, verdict, dsr, nwT, annOf, JS_ALGOS, zAt, fwAt, okAt, score, effWeights, spearman, Phi, PhiInv };
+/* ── تفکیک فاکتوری (همان tools/attribution.py؛ فصل ۱۴ §۱۴٫۷٫۸) ──
+   برتری ناخالص ماهانه (S − ALL) روی MKT (هم‌وزن واجدان) و چهار فاکتور تک‌معیار کتابخانه (top-fraction منهای ALL) رگرس می‌شود؛
+   خطای معیار نیوی‌وست ۳ وقفه؛ سهم‌ها α·۱۲ + Σβ·mean(F)·۱۲ = میانگین برتری ×۱۲ (حسابی). */
+const FACTORS = [['MKT', 'بازار (هم‌وزن واجدان)', null], ['SIZE', 'اندازهٔ کوچک', 'size'], ['LOWVOL', 'کم‌نوسان', 'vol_252'], ['DIV', 'بازده نقدی سود', 'div_yield'], ['MOM', 'مومنتوم ۱۲−۱', 'mom_12_1']];
+function invMat(A) {
+  const n = A.length, M = A.map((r, i) => [...r, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-14) return null;
+    [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c]; for (let j = 0; j < 2 * n; j++) M[c][j] /= d;
+    for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c]; if (f) for (let j = 0; j < 2 * n; j++) M[r][j] -= f * M[c][j]; }
+  }
+  return M.map(r => r.slice(n));
+}
+function olsHac(y, F, L = 3) {
+  const T = y.length, p = F[0].length + 1, X = F.map(r => [1, ...r]);
+  const XtX = Array.from({ length: p }, () => new Array(p).fill(0)), Xty = new Array(p).fill(0);
+  for (let t = 0; t < T; t++) for (let i = 0; i < p; i++) { Xty[i] += X[t][i] * y[t]; for (let j = 0; j < p; j++) XtX[i][j] += X[t][i] * X[t][j]; }
+  const Q = invMat(XtX); if (!Q) return null;
+  const b = Q.map(r => r.reduce((s, q, j) => s + q * Xty[j], 0)), e = y.map((v, t) => v - X[t].reduce((s, x, i) => s + x * b[i], 0));
+  const u = X.map((r, t) => r.map(x => x * e[t])), S = Array.from({ length: p }, () => new Array(p).fill(0));
+  for (let t = 0; t < T; t++) for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) S[i][j] += u[t][i] * u[t][j];
+  for (let l = 1; l <= L; l++) { const w = 1 - l / (L + 1); for (let t = l; t < T; t++) for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) S[i][j] += w * (u[t][i] * u[t - l][j] + u[t - l][i] * u[t][j]); }
+  const V = Q.map(r => S[0].map((_, j) => r.reduce((s, q, k) => s + q * S[k][j], 0))).map(r => Q[0].map((_, j) => r.reduce((s, v, k) => s + v * Q[k][j], 0)));
+  const se = V.map((r, i) => Math.sqrt(Math.max(r[i], 0))), my = y.reduce((a, v) => a + v, 0) / T, sst = y.reduce((a, v) => a + (v - my) ** 2, 0), sse = e.reduce((a, v) => a + v * v, 0);
+  return { b, se, r2: sst > 0 ? 1 - sse / sst : NaNv };
+}
+function factorSeries(L) {
+  const lib = id => L.library.find(x => x.id === id), fac = {};
+  for (const [code, , sig] of FACTORS) { if (!sig) continue; const r = lib('sig:' + sig); if (!r) return null; fac[code] = r.ret.map((v, i) => v - r.all[i]); if (!fac.MKT) fac.MKT = r.all.slice(); }
+  return fac;
+}
+/** res: {ret, all, to, toAll} یک اجرا؛ خروجی هم‌شکل attribution.attribute پایتون + بتاهای غلتان ۳۶ ماهه. */
+function attribution(L, res, costBp, roll = 36) {
+  const fac = factorSeries(L); if (!fac) return null;
+  const codes = FACTORS.map(f => f[0]), n = Math.min(res.ret.length, ...codes.map(c => fac[c].length)), tail = a => a.slice(a.length - n);
+  const rs = tail(res.ret), ra = tail(res.all), ts = tail(res.to), ta = tail(res.toAll || res.all.map(() => 0)), Fc = codes.map(c => tail(fac[c])), c = costBp / 1e4;
+  const y = [], F = [], drag = [], idx = [];
+  for (let i = 0; i < n; i++) { const yy = rs[i] - ra[i], ff = Fc.map(a => a[i]); if (isNaN(yy) || ff.some(isNaN)) continue; y.push(yy); F.push(ff); drag.push(((isNaN(ts[i]) ? 0 : ts[i]) - (isNaN(ta[i]) ? 0 : ta[i])) * c); idx.push(i); }
+  if (y.length < 24) return null;
+  const o = olsHac(y, F); if (!o) return null;
+  const self = o.r2 > 0.9999, T = y.length, mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+  const tt = i => (self || !(o.se[i] > 1e-12)) ? null : o.b[i] / o.se[i];
+  const mF = codes.map((_, k) => mean(F.map(r => r[k])));
+  const rolling = []; if (T >= roll + 6) for (let e = roll; e <= T; e++) { const q = olsHac(y.slice(e - roll, e), F.slice(e - roll, e), 3); rolling.push(q ? q.b.slice(1) : codes.map(() => NaNv)); }
+  return { months: T, alpha_ann: 1200 * o.b[0], alpha_t: tt(0), r2: o.r2, self_factor: self,
+    factors: FACTORS.map(([code, fa], k) => ({ code, fa, beta: o.b[k + 1], t: tt(k + 1), factor_ann: 1200 * mF[k], contrib_ann: 1200 * o.b[k + 1] * mF[k] })),
+    gross_excess_ann: 1200 * mean(y), cost_ann: -1200 * mean(drag), net_excess_ann: 1200 * (mean(y) - mean(drag)),
+    rolling: { win: roll, end: idx.slice(roll - 1).map(i => (res.end || [])[res.end ? res.end.length - n + i : 0]), beta: rolling } };
+}
+
+root.LabEngine = { load, run, stats, deciles, verdict, dsr, nwT, annOf, JS_ALGOS, zAt, fwAt, okAt, score, effWeights, attribution, FACTORS, spearman, Phi, PhiInv };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -29,6 +29,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+import attribution as at  # noqa: E402
 import build_lab as bl  # noqa: E402
 import construction as cn  # noqa: E402
 import factor_engine as fe  # noqa: E402
@@ -82,6 +83,10 @@ def cmd_freeze(a):
     keep = {k: (float(st[k]) if isinstance(st[k], (int, float, np.floating)) else st[k]) for k in
             ("excess_net", "t_net", "ir", "te", "vol", "turn_ann", "ex_h1", "ex_h2", "boot_lo", "boot_hi", "hit", "mdd_active") if k in st}
     keep["frozen_w_mean"] = float(np.nanmean(res["frozen"])) if len(res.get("frozen", [])) else 0.0   # سهم وزن نگه‌داشته‌شدهٔ غیرقابل‌فروش در روز اجرا
+    # تفکیک فاکتوری درون‌نمونه (فصل ۱۴ §۱۴٫۷٫۸): فاکتورها همان ردیف‌های تک‌معیار کتابخانه (top-fraction ۲۰/۳۰، بدون تأخیر)
+    fruns = {sig: cn.backtest(lab, bl.spec_sig(sig), live=False) for _, _, sig in at.FACTORS if sig}
+    fac = at.factor_series(lambda s: (fruns[s]["ret"]["S"], fruns[s]["ret"]["ALL"]))
+    keep["attribution"] = at.attribute(res["ret"]["S"], res["ret"]["ALL"], res["to"]["S"], res["to"]["ALL"], spec["cost_bp"], fac)
     imp = res["impact"].get(1e11)
     keep["impact_ann_at_1e11"] = float(np.nansum(imp) / max(len(ex), 1) * 12 * 100) if imp is not None else None   # اثر بازار سالانه (واحد درصد) در ۱۰۰ میلیارد ریال
     S = {"id": "c1-rank-partial50-v1", "frozen_at": pd.Timestamp.now(tz="UTC").isoformat(), "code_commit": git_rev(),

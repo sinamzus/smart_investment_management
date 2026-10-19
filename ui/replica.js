@@ -90,6 +90,24 @@ function renderSam() {
 }
 
 /* ═══════════════ دفتر زنده ═══════════════ */
+/* تفکیک فاکتوری درون‌نمونهٔ استراتژی قفل‌شده (tools/attribution.py در freeze؛ فصل ۱۴ §۱۴٫۷٫۸) */
+function attrPanel(A) {
+  if (!A) return '';
+  const p = x => x == null || x !== x ? '—' : `<span dir="ltr" style="unicode-bidi:isolate">${sg(x, 1)}</span>`;
+  const sh = x => A.gross_excess_ann ? `<span dir="ltr" style="unicode-bidi:isolate">${f(100 * x / A.gross_excess_ann, 0)}٪</span>` : '—';
+  const r = (n, tp, b, t, c, cls) => `<tr class="${cls || ''}"><td${tp ? tip(tp) : ''}>${n}</td><td class="n">${b == null ? '' : f(b, 2)}</td><td class="n">${t == null ? '' : f(t, 2)}</td><td class="n">${p(c)}</td><td class="n">${c == null ? '' : sh(c)}</td></tr>`;
+  return `<section class="panel" style="--lg:var(--lg-c)">
+    <div class="panel-head"><span class="lg-badge">F</span><span class="panel-title"${tip('برتری درون‌نمونهٔ استراتژی قفل‌شده چقدر از کدام فاکتور می‌آید. همین رگرسیون پس از دست‌کم ۱۲ ریبالانس رسمی روی ماه‌های بیرون‌نمونه هم اجرا می‌شود تا معلوم شود برتری واقعی از کجا آمده.')}>تفکیک فاکتوری (درون‌نمونه، ${f(A.months, 0)} ماه)</span></div>
+    <div class="lb-note" style="padding:8px 14px">واحد سهم‌ها میانگین برتری ماهانه × ۱۲ (حسابی، جمع‌پذیر) است؛ R² = ${f(A.r2, 2)}.</div>
+    <div class="panel-body"><table class="dt"><thead><tr><th>جزء</th><th class="n"${tip('بار فاکتور (ضریب رگرسیون).')}>β</th><th class="n"${tip('آمار t نیوی‌وست.')}>t</th><th class="n"${tip('سهم از برتری، میانگین ماهانه × ۱۲ (واحد درصد).')}>سهم</th><th class="n"${tip('سهم از برتری ناخالص.')}>از کل</th></tr></thead><tbody>
+      ${r('آلفا (توضیح‌داده‌نشده)', 'برتری‌ای که با داشتن همین پنج سبد فاکتوری به دست نمی‌آمد.', null, A.alpha_t, A.alpha_ann)}
+      ${A.factors.map(x => r(esc(x.fa), '', x.beta, x.t, x.contrib_ann)).join('')}
+      ${r('<b>برتری ناخالص</b>', '', null, null, A.gross_excess_ann, 'tot')}
+      ${r('هزینهٔ معامله (نسبت به مرجع)', '', null, null, A.cost_ann)}
+      ${r('<b>برتری خالص</b>', '', null, null, A.net_excess_ann, 'tot')}
+    </tbody></table></div>
+  </section>`;
+}
 function initLive() {
   const m = $('v-live'); m.dataset.ready = 1;
   const S = D.strategy, O = D.orders;
@@ -105,6 +123,7 @@ function initLive() {
       .map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v num">${v}</div></div>`).join('')}</div>
     <div class="lineage"><span><b data-tip="ترکیب معیارها، روش ترکیب، الگوریتم انتخاب و پارامترهای قفل‌شده.">مشخصات</b> ${esc(specTxt)}</span><span><b data-tip="قاعدهٔ زمانی و ریبالانس استراتژی: سیگنال، اجرا، شروع سرد و ریبالانس جزئی.">قاعده</b> سیگنال: آخرین روز معاملاتی ماه جلالی · اجرا: روز بعد · شروع سرد κ=۱ سپس ${sp.partial}</span><span><b data-tip="چه زمانی و چگونه می‌شود استراتژی را بازبینی کرد: پس از ۶ ریبالانس رسمی.">بازنگری</b> ${esc(S.rules.review)}</span></div>
   </section>
+  ${attrPanel(B.attribution)}
   <section class="panel" style="--lg:var(--lg-b)">
     <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('آخرین دستور اجرای ساخته‌شده؛ پیش‌نویس میان‌ماه ثبت رسمی نمی‌شود و فقط برای دیدن است.')}>آخرین دستور اجرا</span>${O ? `<span class="chip ${O.official_month_end ? 'ok' : 'warn'}"${tip(O.official_month_end ? 'ریبالانس رسمی پایان ماه؛ قابل ثبت در دفتر.' : 'پیش‌نویس میان‌ماه: ثبت رسمی ندارد.')}>${O.official_month_end ? 'رسمی' : 'پیش‌نویس میان‌ماه'}</span>` : ''}
       <div class="panel-tools"><button class="tool" id="lv-csv"${tip('دستورهای خرید و فروش به‌صورت CSV.')}>CSV</button><button class="tool" id="lv-json"${tip('فایل sim.trade_plan/1 برای سامانهٔ الگوریتمی (فصل ۹ §۹٫۲٫۱).')}>JSON برای سامانهٔ الگوریتمی</button></div></div>

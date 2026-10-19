@@ -137,3 +137,31 @@ class MarketClosure(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FactorAttribution(unittest.TestCase):
+    """تفکیک فاکتوری (فصل ۱۴ §۱۴٫۷٫۸): ضریب‌ها بازیابی شوند و سهم‌ها دقیقاً به برتری برسند."""
+
+    def test_recovers_betas_and_contributions_sum(self):
+        import attribution as at
+        rng = np.random.default_rng(1)
+        T = 120
+        all_ = rng.normal(0.03, 0.08, T)
+        fac = {"MKT": all_}
+        for c in ("SIZE", "LOWVOL", "DIV", "MOM"):
+            fac[c] = rng.normal(0.005, 0.03, T)
+        y = 0.002 + 0.1 * all_ + 0.6 * fac["SIZE"] + 0.3 * fac["DIV"] + rng.normal(0, 0.002, T)
+        r = at.attribute(all_ + y, all_, np.full(T, 0.1), np.full(T, 0.05), 100, fac)
+        b = {x["code"]: x["beta"] for x in r["factors"]}
+        self.assertAlmostEqual(b["SIZE"], 0.6, delta=0.03)
+        self.assertAlmostEqual(b["DIV"], 0.3, delta=0.03)
+        self.assertAlmostEqual(b["LOWVOL"], 0.0, delta=0.03)
+        total = r["alpha_ann"] + sum(x["contrib_ann"] for x in r["factors"])
+        self.assertAlmostEqual(total, r["gross_excess_ann"], places=8)
+        self.assertAlmostEqual(r["gross_excess_ann"] + r["cost_ann"], r["net_excess_ann"], places=8)
+        self.assertAlmostEqual(r["cost_ann"], -12 * 100 * 0.05 * 0.01, places=8)   # (۰٫۱ − ۰٫۰۵) × ۱٪ × ۱۲
+
+    def test_tail_alignment_for_late_start(self):
+        import attribution as at
+        a, b = at.tail_align(np.arange(10), np.arange(4))
+        np.testing.assert_array_equal(a, [6, 7, 8, 9])
