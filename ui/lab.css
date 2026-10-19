@@ -135,3 +135,6 @@ details.panel.sam-fold { display: block; }
 #rb-ptools[hidden], #rb-d-years[hidden], #rb-d-port[hidden] { display: none; }
 @media (max-width: 960px) { .rb-grid { grid-template-columns: 1fr; } .rb-ctl { border-inline-end: 0; border-bottom: var(--hair) solid var(--line); } }
 .dt tr.weak td { color: var(--tx-3); }   /* ردیف تفکیک فاکتوری با |t| < ۲: از صفر جدا نیست */
+/* نمودار بتاهای غلتان تب «فاکتورها»: ظرف خودش تا راهنما و ابزار بزرگ‌نمایی روی یادداشت‌های بالای تب نیفتند */
+.lb-attr-ch { position: relative; flex: none; }
+.lb-main .lb-attr-leg { position: static; }

@@ -449,7 +449,7 @@ function tabAttr(host) {
       ${row('هزینهٔ معامله (نسبت به مرجع)', 'تفاوت هزینهٔ گردش استراتژی و مرجع هم‌وزن (مرجع هم هر ماه ریبالانس و هزینه دارد).', null, null, null, a.cost_ann)}
       ${row('<b>برتری خالص</b>', 'برتری ناخالص + اثر هزینه (میانگین ماهانه × ۱۲).', null, null, null, a.net_excess_ann, 'tot')}
     </tbody></table>
-    <div class="legend" id="lb-attr-leg"></div><svg class="chart" id="lb-attr-chart" dir="ltr" style="height:260px;flex:none"></svg>
+    <div class="legend lb-attr-leg" id="lb-attr-leg"></div><div class="lb-attr-ch"><svg class="chart" id="lb-attr-chart" dir="ltr" style="height:260px;flex:none"></svg></div>
     <div class="lb-note">بتاهای غلتان ${f1(a.rolling.win, 0)} ماهه: تغییر شرط استراتژی در زمان. اگر بار اندازه بالا رفته باشد، استراتژی امروز بیشتر از گذشته به پریمیوم کوچک‌ها وابسته است.</div>`;
   if (!a.rolling.beta.length) return;
   const dates = a.rolling.end.map(d => d || ''), cs = { i: null }, codes = E.FACTORS.map(x => x[0]).filter(c => c !== 'MKT');
