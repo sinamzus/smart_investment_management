@@ -64,12 +64,13 @@ kbd { font: 500 var(--fs-2xs)/1 var(--font-num); color: var(--tx-3); border: var
 
 /* ── Data table ──────────────────────────────────────────── */
 table.dt { border-collapse: separate; border-spacing:0; width:100%; font-size: var(--fs-sm); }
-.dt th { position: sticky; top:0; z-index:1; background: var(--bg-panel); color: var(--tx-3); font-weight:600; text-align:start;
+.dt th { position: sticky; top:0; z-index:1; background: var(--bg-panel); color: var(--tx-3); font-weight:600; text-align:center;
   height: 36px; padding: 0 var(--s-4); border-bottom: var(--hair) solid var(--line-strong); white-space:nowrap; font-size: var(--fs-xs); }
-.dt td { height: var(--row-h); padding: 0 var(--s-4); border-bottom: var(--hair) solid var(--line); white-space:nowrap; }
+.dt td { height: var(--row-h); padding: 0 var(--s-4); text-align:center; border-bottom: var(--hair) solid var(--line); white-space:nowrap; }
 .dt tr:hover td { background: var(--bg-hover); }
 .dt tr[aria-selected="true"] td { background: var(--bg-select); }
-.dt td.n, .dt th.n { text-align: end; }
+.dt td.n, .dt th.n { text-align: center; }   /* همهٔ سلول‌ها وسط‌چین (فصل ۱۲) */
+.dt td[style*="white-space:normal"] { text-align: start; }   /* متن چندخطی (شرح تغییرات، پیام خالی) خواناتر از سمت شروع */
 .dt td.n { font-family: var(--font-num); font-variant-numeric: tabular-nums; direction:ltr; }
 .dt .rank { color: var(--tx-3); width: 28px; }
 .delta::before { content: "▲ "; font-size: .8em; } .delta.down::before { content: "▼ "; }
