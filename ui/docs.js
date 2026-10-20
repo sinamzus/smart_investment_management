@@ -38,6 +38,7 @@ function labelOf(ref) {
 /* ── بارگذاری دادهٔ سند ── */
 let pend = null;
 function ensure(cb) {
+  loadKatex();
   if (window.SIM_DOCS) return cb();
   if (pend) return pend.push(cb);
   pend = [cb];
@@ -46,18 +47,46 @@ function ensure(cb) {
   s.onerror = () => { pend = null; toastSafe('سند پیدا نشد: python tools/build_ui_docs.py'); };
   document.head.appendChild(s);
 }
+// KaTeX (ui/vendor/katex، بدون اینترنت) فقط با نخستین باز شدن سند بار می‌شود؛ تا آماده شود فرمول به‌صورت متن TeX دیده می‌شود
+let katexState = 0;
+function loadKatex() {
+  if (katexState) return; katexState = 1;
+  const c = document.createElement('link'); c.rel = 'stylesheet'; c.href = 'vendor/katex/katex.min.css'; document.head.appendChild(c);
+  const s = document.createElement('script'); s.src = 'vendor/katex/katex.min.js';
+  s.onload = () => { katexState = 2; if (box) typeset(box.querySelector('#dv-body')); };
+  s.onerror = () => { katexState = 3; };
+  document.head.appendChild(s);
+}
+function typeset(root) {
+  if (!root || !window.katex) return;
+  const warn = console.warn; console.warn = (...a) => { if (!/No character metrics/.test(String(a[0]))) warn(...a); };   // حروف فارسی درون \text{}
+  root.querySelectorAll('[data-tex]:not([data-done])').forEach(el => {
+    const tex = el.dataset.tex, disp = el.classList.contains('dv-math');
+    try { window.katex.render(tex, el, { displayMode: disp, throwOnError: false, strict: 'ignore', output: 'htmlAndMathml' }); }
+    catch (e) { el.textContent = tex; el.classList.add('bad'); }
+    el.dataset.done = '1'; el.title = 'TeX: ' + tex;
+  });
+  console.warn = warn;
+}
 const toastSafe = m => (window.toast ? window.toast(m) : console.warn(m));
 
 /* ── مارک‌داون کمینه: سرتیتر، پاراگراف، فهرست، جدول، کد، نقل‌قول، خط، پررنگ/مورب/کد/پیوند درون‌خطی ── */
 const slug = t => t.toLowerCase().replace(/[`*_~«»"'()\[\]{}:;،؛,.!?؟/\\|<>=+٫]/g, '').trim().replace(/\s+/g, '-');
+// فرمول: $…$ درون‌خطی و $$…$$ نمایشی (LaTeX؛ با KaTeX در ui/vendor/katex رندر می‌شود، فصل ۱۳)
+const mathEl = (tex, disp) => `<${disp ? 'div' : 'span'} class="${disp ? 'dv-math' : 'dv-m'}" data-tex="${esc(tex)}" dir="ltr">${esc(tex)}</${disp ? 'div' : 'span'}>`;
+// برچسب‌های قرارداد سند ([تأیید لازم]، [راستی‌آزمایی نشده]، [برآورد]، …) نشان رنگی می‌شوند
+const RE_FLAG = /\[([^\]]*(?:تأیید لازم|راستی‌آزمایی نشده|برآورد|اندازه‌گیری نشده|بررسی نشده)[^\]]*)\](?!\()/g;
 function inline(s) {
-  const codes = [];
-  s = s.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return `\u0000${codes.length - 1}\u0000`; });
+  const keep = [];
+  const hold = h => { keep.push(h); return `\u0000${keep.length - 1}\u0000`; };
+  s = s.replace(/`([^`]+)`/g, (_, c) => hold(`<code dir="ltr">${esc(c)}</code>`))
+    .replace(/\$([^$\n]+?)\$/g, (_, t) => hold(mathEl(t.trim(), false)));
   s = esc(s)
     .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
     .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, '$1<i>$2</i>')
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, h) => `<a class="dlink" data-href="${esc(h)}">${t}</a>`);
-  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${esc(codes[+i])}</code>`);
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, h) => `<a class="dlink" data-href="${esc(h)}">${t}</a>`)
+    .replace(RE_FLAG, (_, t) => `<span class="dv-flag${/تأیید لازم/.test(t) ? ' req' : ''}">${t}</span>`);
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => keep[+i]);
 }
 function md2html(md) {
   const L = md.replace(/\r/g, '').split('\n'), out = [], heads = [];
@@ -67,6 +96,11 @@ function md2html(md) {
   while (i < L.length) {
     const l = L[i];
     if (/^```/.test(l)) { const buf = []; i++; while (i < L.length && !/^```/.test(L[i])) buf.push(L[i++]); i++; out.push(`<pre dir="ltr"><code>${esc(buf.join('\n'))}</code></pre>`); continue; }
+    if (/^\s*\$\$/.test(l)) {                         // فرمول نمایشی: از $$ تا $$ (یک یا چند خط)
+      let t = l.trim().slice(2); i++;
+      while (!/\$\$\s*$/.test(t) && i < L.length) t += '\n' + L[i++];
+      out.push(mathEl(t.replace(/\$\$\s*$/, '').trim(), true)); continue;
+    }
     const h = /^(#{1,6})\s+(.*)$/.exec(l);
     if (h) { const lv = h[1].length, txt = h[2].trim(), id = 'd-' + heads.length; heads.push({ id, lv, txt, norm: toEn(txt).replace(/[٫]/g, '.'), slug: slug(txt) }); out.push(`<h${lv} id="${id}">${inline(txt)}</h${lv}>`); i++; continue; }
     if (/^\s*(-{3,}|\*{3,})\s*$/.test(l)) { out.push('<hr>'); i++; continue; }
@@ -89,7 +123,7 @@ function md2html(md) {
     }
     if (!l.trim()) { i++; continue; }
     const buf = [];
-    while (i < L.length && L[i].trim() && !/^(#{1,6}\s|```|\s*>|\s*([-*+]|\d+[.)])\s+|\s*(-{3,}|\*{3,})\s*$)/.test(L[i]) && !(/^\s*\|/.test(L[i]) && i + 1 < L.length && isTableSep(L[i + 1]))) buf.push(L[i++]);
+    while (i < L.length && L[i].trim() && !/^(#{1,6}\s|```|\s*\$\$|\s*>|\s*([-*+]|\d+[.)])\s+|\s*(-{3,}|\*{3,})\s*$)/.test(L[i]) && !(/^\s*\|/.test(L[i]) && i + 1 < L.length && isTableSep(L[i + 1]))) buf.push(L[i++]);
     out.push(`<p>${inline(buf.join(' '))}</p>`);
   }
   return { html: out.join('\n'), heads };
@@ -114,16 +148,39 @@ function target(heads, root, r) {
 
 /* ── کشوی سند ── */
 let box = null, cache = new Map(), curCh = null, hist = [];
+// ترجیح‌های خواندن (فقط همین مرورگر؛ بدون آن هم کار می‌کند)
+const pref = { get: (k, d) => { try { const v = localStorage.getItem('sim.docv.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set: (k, v) => { try { localStorage.setItem('sim.docv.' + k, JSON.stringify(v)); } catch (e) { /* بدون ذخیره */ } } };
 function build() {
   box = document.createElement('aside'); box.id = 'docv'; box.hidden = true; box.setAttribute('aria-label', 'سند پروژه');
   box.innerHTML = `<div class="dv-head"><button class="tool" id="dv-back" title="بازگشت به جای قبلی" aria-label="بازگشت">→</button>
-    <select id="dv-ch" aria-label="فصل"></select><select id="dv-toc" aria-label="بخش"></select><span class="spacer"></span>
-    <span class="dv-src mute" id="dv-src"></span><button class="tool" id="dv-x" aria-label="بستن">×</button></div><div class="dv-body" id="dv-body"></div>`;
+    <select id="dv-ch" aria-label="فصل"></select><select id="dv-toc" aria-label="بخش"></select>
+    <span class="dv-find"><input id="dv-q" type="search" placeholder="جست‌وجو در فصل" aria-label="جست‌وجو در فصل"><span class="mute" id="dv-qn"></span></span>
+    <span class="spacer"></span>
+    <button class="tool" id="dv-fsm" title="متن کوچک‌تر" aria-label="متن کوچک‌تر">−</button><button class="tool" id="dv-fsp" title="متن بزرگ‌تر" aria-label="متن بزرگ‌تر">+</button>
+    <button class="tool" id="dv-wide" title="حالت خواندن: تمام‌صفحه با فهرست بخش‌ها" aria-label="حالت خواندن">⤢</button>
+    <span class="dv-src mute" id="dv-src"></span><button class="tool" id="dv-x" aria-label="بستن">×</button></div>
+    <div class="dv-main"><nav class="dv-nav" id="dv-nav" aria-label="فهرست بخش‌ها"></nav><div class="dv-body" id="dv-body"></div></div>`;
   document.body.appendChild(box);
+  const body = box.querySelector('#dv-body');
+  const applyPref = () => { box.classList.toggle('wide', !!pref.get('wide', false)); body.style.fontSize = (pref.get('fs', 1) * 100).toFixed(0) + '%'; };
+  applyPref();
   box.querySelector('#dv-x').onclick = close;
   box.querySelector('#dv-back').onclick = () => { const h = hist.pop(); if (h) show(h, true); };
   box.querySelector('#dv-ch').onchange = e => go({ ch: isNaN(+e.target.value) ? e.target.value : +e.target.value });
   box.querySelector('#dv-toc').onchange = e => { const el = box.querySelector('#' + e.target.value); if (el) flash(el); };
+  box.querySelector('#dv-wide').onclick = () => { pref.set('wide', !pref.get('wide', false)); applyPref(); };
+  box.querySelector('#dv-fsm').onclick = () => { pref.set('fs', Math.max(0.8, +(pref.get('fs', 1) - 0.1).toFixed(1))); applyPref(); };
+  box.querySelector('#dv-fsp').onclick = () => { pref.set('fs', Math.min(1.6, +(pref.get('fs', 1) + 0.1).toFixed(1))); applyPref(); };
+  box.querySelector('#dv-nav').addEventListener('click', e => { const a = e.target.closest('a[data-id]'); if (!a) return; e.preventDefault(); const el = box.querySelector('#' + a.dataset.id); if (el) flash(el); });
+  // بخش جاری در فهرست و انتخاب‌گر (هنگام پیمایش)
+  let raf = 0;
+  body.addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; spy(); }); });
+  // جست‌وجو: Enter = مورد بعد، Shift+Enter = قبلی
+  const q = box.querySelector('#dv-q');
+  q.addEventListener('input', () => find(q.value, 0));
+  q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); find(q.value, e.shiftKey ? -1 : 1); } });
+  body.addEventListener('click', e => { const m = e.target.closest('.dv-math'); if (m && m.dataset.tex && e.altKey) { navigator.clipboard && navigator.clipboard.writeText(m.dataset.tex); toastSafe('TeX کپی شد'); } });
   box.querySelector('#dv-body').addEventListener('click', e => {
     const a = e.target.closest('a.dlink'); if (!a) return;
     const h = a.dataset.href, m = /^(?:\.\/)?(?:docs\/)?(\d\d)-[^#]*\.md(?:#(.*))?$/.exec(h) || /^#(.*)$/.exec(h);
@@ -135,10 +192,42 @@ function build() {
   });
 }
 function close() { if (box) box.hidden = true; document.body.classList.remove('docv-open'); }
+function spy() {
+  const body = box.querySelector('#dv-body'), d = cache.get(curCh); if (!d) return;
+  const top = body.getBoundingClientRect().top + 24; let cur = null;
+  for (const h of d.heads) { if (h.lv < 2 || h.lv > 4) continue; const el = body.querySelector('#' + h.id); if (!el) continue; if (el.getBoundingClientRect().top <= top) cur = h; else break; }
+  box.querySelectorAll('#dv-nav a.on').forEach(a => a.classList.remove('on'));
+  if (!cur) return;
+  const a = box.querySelector(`#dv-nav a[data-id="${cur.id}"]`);
+  if (a) { a.classList.add('on'); const nav = box.querySelector('#dv-nav'), r = a.getBoundingClientRect(), n = nav.getBoundingClientRect(); if (r.top < n.top || r.bottom > n.bottom) a.scrollIntoView({ block: 'nearest' }); }
+  const toc = box.querySelector('#dv-toc'); if (toc.querySelector(`option[value="${cur.id}"]`)) toc.value = cur.id;
+}
+let hits = [], hitAt = -1;
+function find(q, step) {
+  const body = box.querySelector('#dv-body'), qn = box.querySelector('#dv-qn');
+  if (!step) {
+    body.querySelectorAll('mark.dv-q').forEach(m => m.replaceWith(document.createTextNode(m.textContent)));
+    body.normalize(); hits = []; hitAt = -1;
+    q = (q || '').trim(); if (q.length < 2) { qn.textContent = ''; return; }
+    const w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('.katex, .dv-m, .dv-math') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const nodes = []; let n; while ((n = w.nextNode())) nodes.push(n);
+    for (const t of nodes) {
+      let s = t.data, at = s.indexOf(q), node = t;
+      while (at >= 0) { const rest = node.splitText(at); node = rest.splitText(q.length); const m = document.createElement('mark'); m.className = 'dv-q'; rest.replaceWith(m); m.textContent = q; hits.push(m); s = node.data; at = s.indexOf(q); }
+    }
+    step = 1;
+  }
+  if (!hits.length) { qn.textContent = (q || '').trim().length >= 2 ? '۰' : ''; return; }
+  hits.forEach(m => m.classList.remove('on'));
+  hitAt = (hitAt + step + hits.length) % hits.length;
+  hits[hitAt].classList.add('on'); hits[hitAt].scrollIntoView({ block: 'center' });
+  qn.textContent = toFa(`${hitAt + 1}/${hits.length}`);
+}
 function flash(el) {
   el.scrollIntoView({ block: 'start' });
   box.querySelectorAll('.dv-hit').forEach(x => x.classList.remove('dv-hit'));
   el.classList.add('dv-hit');
+  box.querySelectorAll('.dv-tgt').forEach(x => x.classList.remove('dv-tgt')); el.classList.add('dv-tgt');
   // سرتیتر هدف تا سرتیتر هم‌سطح بعدی برجسته می‌شود تا روشن باشد کدام بند مربوط است
   if (/^H[1-6]$/.test(el.tagName)) { const lv = +el.tagName[1]; let n = el.nextElementSibling; while (n && !(/^H[1-6]$/.test(n.tagName) && +n.tagName[1] <= lv)) { n.classList.add('dv-hit'); n = n.nextElementSibling; } }
   const toc = box.querySelector('#dv-toc'); if (el.id && toc.querySelector(`option[value="${el.id}"]`)) toc.value = el.id;
@@ -150,7 +239,12 @@ function show(r, back) {
   const d = cache.get(doc.n), body = box.querySelector('#dv-body');
   if (curCh !== doc.n) {
     body.innerHTML = d.html; curCh = doc.n;
-    box.querySelector('#dv-toc').innerHTML = d.heads.filter(h => h.lv >= 2 && h.lv <= 4).map(h => `<option value="${h.id}">${'  '.repeat(h.lv - 2)}${esc(h.txt.replace(/`/g, '').slice(0, 90))}</option>`).join('');
+    const hs = d.heads.filter(h => h.lv >= 2 && h.lv <= 4), plain = t => t.replace(/`|\*\*|\$/g, '');
+    box.querySelector('#dv-toc').innerHTML = hs.map(h => `<option value="${h.id}">${'  '.repeat(h.lv - 2)}${esc(plain(h.txt).slice(0, 90))}</option>`).join('');
+    const h1 = d.heads.find(h => h.lv === 1);
+    box.querySelector('#dv-nav').innerHTML = (h1 ? `<div class="dv-nav-t">${esc(plain(h1.txt))}</div>` : '') + hs.map(h => `<a href="#" data-id="${h.id}" class="l${h.lv}">${esc(plain(h.txt))}</a>`).join('');
+    const q = box.querySelector('#dv-q'); q.value = ''; box.querySelector('#dv-qn').textContent = ''; hits = []; hitAt = -1;
+    typeset(body);
   }
   box.querySelector('#dv-ch').value = String(doc.n);
   box.querySelector('#dv-src').textContent = 'docs/' + doc.file;

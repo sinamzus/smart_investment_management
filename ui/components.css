@@ -223,27 +223,65 @@ svg.chart.zoomable:focus-visible { outline: 1px dashed var(--accent); outline-of
 a.doclink { color: var(--accent-tx, var(--accent)); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 .doc-btn { margin-inline-start: auto; white-space: nowrap; }
 .panel-tools .doc-btn { margin-inline-start: 0; }
-#docv { position: fixed; inset-block: 0; inset-inline-end: 0; width: min(760px, 100vw); z-index: 900; display: flex; flex-direction: column;
+#docv { position: fixed; inset-block: 0; inset-inline-end: 0; width: min(820px, 100vw); z-index: 900; display: flex; flex-direction: column;
   background: var(--bg-panel); border-inline-start: var(--hair) solid var(--line-strong); box-shadow: 0 0 40px rgba(0,0,0,.28); }
+#docv.wide { width: 100vw; }
 #docv[hidden] { display: none; }
 #docv .dv-head { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: var(--hair) solid var(--line); background: var(--bg-head); flex-wrap: wrap; }
 #docv .dv-head select { max-width: 260px; min-width: 0; flex: 1 1 140px; }
+#docv.wide #dv-toc { display: none; }
 #docv .dv-head .spacer { flex: 1 1 0; }
+#docv .dv-find { display: inline-flex; align-items: center; gap: 4px; }
+#docv .dv-find input { width: 150px; }
 #docv .dv-src { font: var(--fs-2xs) var(--font-num); direction: ltr; }
-#docv .dv-body { flex: 1; overflow: auto; padding: 16px 22px 60px; font-size: var(--fs-sm); line-height: 1.85; color: var(--tx-1); }
-#docv .dv-body h1 { font-size: 1.35em; } #docv .dv-body h2 { font-size: 1.2em; margin-top: 1.6em; } #docv .dv-body h3 { font-size: 1.08em; margin-top: 1.3em; } #docv .dv-body h4 { font-size: 1em; }
-#docv .dv-body h1, #docv .dv-body h2, #docv .dv-body h3, #docv .dv-body h4 { scroll-margin-top: 8px; line-height: 1.5; }
-#docv .dv-body code { font: .92em var(--font-num); background: var(--bg-app); padding: 0 4px; border-radius: 4px; }
-#docv .dv-body pre { background: var(--bg-app); padding: 10px; overflow: auto; border-radius: 8px; text-align: left; }
-#docv .dv-body pre code { background: none; padding: 0; }
-#docv .dv-body blockquote { margin: 8px 0; padding: 4px 12px; border-inline-start: 3px solid var(--line-strong); color: var(--tx-2); }
+#docv .dv-main { flex: 1; display: flex; min-height: 0; }
+/* فهرست بخش‌ها: فقط در حالت خواندن (⤢) */
+#docv .dv-nav { display: none; width: 290px; flex: none; overflow: auto; padding: 14px 10px 40px; border-inline-end: var(--hair) solid var(--line); background: var(--bg-head); font-size: var(--fs-xs); line-height: 1.6; }
+#docv.wide .dv-nav { display: block; }
+#docv .dv-nav-t { font-weight: 700; margin: 0 6px 10px; color: var(--tx-1); }
+#docv .dv-nav a { display: block; padding: 3px 8px; border-radius: 6px; color: var(--tx-2); text-decoration: none; }
+#docv .dv-nav a.l2 { font-weight: 600; color: var(--tx-1); margin-top: 6px; }
+#docv .dv-nav a.l3 { padding-inline-start: 18px; }
+#docv .dv-nav a.l4 { padding-inline-start: 30px; font-size: .95em; }
+#docv .dv-nav a:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+#docv .dv-nav a.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-tx, var(--accent)); }
+#docv .dv-body { flex: 1; min-width: 0; overflow: auto; padding: 18px 26px 80px; font-size: var(--fs-sm); line-height: 2; color: var(--tx-1); }
+#docv.wide .dv-body > * { max-width: 920px; margin-inline: auto; }
+#docv.wide .dv-body > .dtbl { max-width: 1200px; }
+#docv .dv-body p { margin: .7em 0; }
+#docv .dv-body li { margin: .3em 0; }
+#docv .dv-body h1 { font-size: 1.45em; padding-bottom: .4em; border-bottom: 2px solid var(--line-strong); }
+#docv .dv-body h2 { font-size: 1.25em; margin-top: 2.2em; padding-bottom: .3em; border-bottom: var(--hair) solid var(--line-strong); color: var(--accent-tx, var(--accent)); }
+#docv .dv-body h3 { font-size: 1.1em; margin-top: 1.7em; padding-inline-start: 10px; border-inline-start: 3px solid var(--accent); }
+#docv .dv-body h4 { font-size: 1em; margin-top: 1.3em; color: var(--tx-2); }
+#docv .dv-body h1, #docv .dv-body h2, #docv .dv-body h3, #docv .dv-body h4 { scroll-margin-top: 10px; line-height: 1.6; }
+/* کد و شناسه‌ها چپ‌به‌راست و جدا از متن فارسی تا ترتیب کلمات به هم نریزد */
+#docv .dv-body code { font: .88em var(--font-num); background: var(--bg-app); padding: 1px 5px; border-radius: 4px; border: var(--hair) solid var(--line); unicode-bidi: isolate; overflow-wrap: anywhere; }
+#docv .dv-body pre { background: var(--bg-app); padding: 12px 14px; overflow: auto; border-radius: 8px; text-align: left; line-height: 1.6; border: var(--hair) solid var(--line); }
+#docv .dv-body pre code { background: none; padding: 0; border: 0; }
+/* فرمول‌ها (KaTeX) */
+#docv .dv-m { unicode-bidi: isolate; white-space: nowrap; }
+#docv .dv-m:not([data-done]), #docv .dv-math:not([data-done]) { font: .88em var(--font-num); color: var(--tx-2); }
+#docv .dv-math { display: block; overflow-x: auto; overflow-y: hidden; margin: 1em 0; padding: .7em 1em; text-align: center; border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent); border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); }
+#docv .katex { font-size: 1.06em; }
+#docv .dv-math .katex-display { margin: 0; }
+#docv [data-tex].bad { color: var(--down); font-family: var(--font-num); }
+#docv .dv-flag { display: inline-block; font-size: .78em; line-height: 1.6; padding: 0 7px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); white-space: nowrap; }
+#docv .dv-flag.req { background: color-mix(in srgb, var(--down) 13%, transparent); color: var(--down); }
+#docv .dv-body blockquote { margin: 10px 0; padding: 6px 14px; border-inline-start: 3px solid var(--line-strong); color: var(--tx-2); background: var(--bg-app); border-radius: 0 6px 6px 0; }
 #docv .dv-body li.sub { margin-inline-start: 1.4em; }
-#docv .dtbl { overflow: auto; margin: 8px 0; }
-#docv .dtbl table { border-collapse: collapse; font-size: var(--fs-xs); }
-#docv .dtbl th, #docv .dtbl td { border: var(--hair) solid var(--line); padding: 4px 8px; text-align: center; vertical-align: top; }
-#docv .dtbl th { background: var(--bg-head); }
-#docv .dv-hit { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-#docv h1.dv-hit, #docv h2.dv-hit, #docv h3.dv-hit, #docv h4.dv-hit { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+#docv .dtbl { overflow: auto; margin: 12px 0; max-height: 75vh; border: var(--hair) solid var(--line); border-radius: 8px; }
+#docv .dtbl table { border-collapse: collapse; font-size: var(--fs-xs); width: 100%; line-height: 1.7; }
+#docv .dtbl th, #docv .dtbl td { border: var(--hair) solid var(--line); padding: 5px 9px; text-align: center; vertical-align: top; }
+#docv .dtbl th { background: var(--bg-head); position: sticky; top: 0; z-index: 1; }
+#docv .dtbl tbody tr:nth-child(even) { background: color-mix(in srgb, var(--bg-app) 70%, transparent); }
+#docv mark.dv-q { background: color-mix(in srgb, var(--warn) 35%, transparent); color: inherit; border-radius: 3px; }
+#docv mark.dv-q.on { outline: 2px solid var(--warn); }
+#docv .dv-hit { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+#docv .dv-tgt:is(h1, h2, h3, h4) { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+#docv .dv-hit { transition: background .6s; }
+@media (max-width: 900px) { #docv.wide .dv-nav { display: none; } #docv.wide #dv-toc { display: inline-block; } }
 @media print { #docv, .doc-btn { display: none !important; } }
 
 /* ── پنل «داده و محاسبات» (ui/update.js؛ فصل ۰۹ §۹٫۶) ── */
