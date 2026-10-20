@@ -142,13 +142,45 @@ def fill_gaps(P: pd.DataFrame, start: str = "2014-03-19") -> pd.DataFrame:
         return P
     F = pd.DataFrame(miss, columns=["ins_code", "date"]).sort_values("date")
     base = P.sort_values("date")
-    F = pd.merge_asof(F, base, on="date", by="ins_code", direction="backward")
+    F = pd.merge_asof(F, base.assign(prev_date=base.date), on="date", by="ins_code", direction="backward")
     F["priceYesterday"] = F.pClosing
     F["zTotTran"] = 0.0
     F["dEven"] = F.date.dt.strftime("%Y%m%d").astype(float)
+    n_move = recover_gap_moves(F, base)
     out = pd.concat([P, F[P.columns]], ignore_index=True)
-    print(f"قاعدهٔ ۹: {len(F)} ردیف روز-بدون-ردیف (نماد زنده) با بازده صفر پر شد")
+    print(f"قاعدهٔ ۹: {len(F)} ردیف روز-بدون-ردیف (نماد زنده) پر شد؛ {n_move} با حرکت بازیافته از مبنای روز بعد، بقیه با بازده صفر")
     return out
+
+
+def recover_gap_moves(F: pd.DataFrame, base: pd.DataFrame, max_missing: int = 3, max_abs: float = 0.25) -> int:
+    """قاعدهٔ ۹ب: حرکتِ روزِ بی‌ردیف از مبنای ردیف بعد.
+
+    خوراک TSETMC گاهی ردیف روزی را که نماد در آن معامله شده ندارد (مثلاً ۲۰۲۳-۰۳-۲۷: ۷۲۶ نماد؛ ۲۰۲۴-۰۸-۰۷).
+    ردیف بعدی مبنای خود (priceYesterday) را از پایانی همان روز گم‌شده دارد، پس با بازده صفر، حرکت آن روز برای
+    همیشه از سطح شاخص می‌افتد. اگر فاصله حداکثر `max_missing` روز باشد، در بازه (ردیف قبل، ردیف بعد] رویداد تعدیل
+    (price_adjust.csv) نباشد و |حرکت| ≤ `max_abs`، پایانی آخرین روزِ گم‌شده = مبنای ردیف بعد؛ روزهای گم‌شدهٔ قبلی
+    صفر می‌مانند. F در جا تغییر می‌کند؛ تعداد ردیف‌های اصلاح‌شده برمی‌گردد.
+    """
+    nxt = pd.merge_asof(F[["ins_code", "date"]].reset_index(), base[["ins_code", "date", "priceYesterday"]].rename(columns={"date": "next_date", "priceYesterday": "next_py"}),
+                        left_on="date", right_on="next_date", by="ins_code", direction="forward", allow_exact_matches=False).set_index("index")
+    F["next_date"], F["next_py"] = nxt.next_date, nxt.next_py
+    pa_p = ROOT / "data/corporate_actions/price_adjust.csv"
+    ev = {}
+    if pa_p.exists():
+        pa = pd.read_csv(pa_p, usecols=["ins_code", "dEven"], dtype={"ins_code": str})
+        for c, d in zip(pa.ins_code, pd.to_datetime(pa.dEven.astype(int).astype(str), format="%Y%m%d")):
+            ev.setdefault(c, []).append(d)
+    g = F.groupby(["ins_code", "next_date"])
+    last = g.date.transform("max") == F.date
+    n_miss = g.date.transform("count")
+    move = F.next_py / F.pClosing - 1
+    ok = last & F.next_date.notna() & (n_miss <= max_missing) & (move.abs() > 1e-4) & (move.abs() <= max_abs)
+
+    def clean(r):
+        return not any(r.prev_date < d <= r.next_date for d in ev.get(r.ins_code, ()))
+    idx = [i for i in F.index[ok] if clean(F.loc[i])]
+    F.loc[idx, "pClosing"] = F.loc[idx, "next_py"]
+    return len(idx)
 
 
 def fix_unapplied_adjustments(P: pd.DataFrame, window_days: int = 7, max_abs: float = 0.25) -> pd.DataFrame:
