@@ -133,7 +133,8 @@ def arabic_l18(sym: str) -> str:
     return sym.replace("ی", "ي").replace("ک", "ك")
 
 
-EXTRA_CODES: list[str] = []      # --codes-file: نمادهای خارج از فیلتر بازار (مثلاً حذف‌شده‌ها با flow ۴) که اطلاعات/رویدادشان لازم است
+EXTRA_CODES: list[str] = []
+REFRESH: set[str] = set()          # --refresh-file: فقط این کدها دوباره دریافت می‌شوند، بقیه از حافظهٔ raw (به‌روزرسانی روزانه، tools/update_pipeline.py)      # --codes-file: نمادهای خارج از فیلتر بازار (مثلاً حذف‌شده‌ها با flow ۴) که اطلاعات/رویدادشان لازم است
 
 
 def load_stocks():
@@ -187,7 +188,7 @@ def collect_adjust(limit, force, workers):
         code = r["ins_code"]
         cache = RAW / f"adjust_{code}.json"
         try:
-            if cache.exists() and not force:
+            if cache.exists() and not force and code not in REFRESH:
                 items = json.loads(cache.read_text(encoding="utf-8")).get("priceAdjust") or []
             else:
                 items = fetch_adjust(code)
@@ -224,7 +225,7 @@ def collect_shares(limit, force, workers):
         code = r["ins_code"]
         cache = RAW / f"shares_{code}.json"
         try:
-            if cache.exists() and not force:
+            if cache.exists() and not force and code not in REFRESH:
                 items = json.loads(cache.read_text(encoding="utf-8")).get("instrumentShareChange") or []
             else:
                 items = fetch_shares(code)
@@ -256,7 +257,7 @@ def collect_info(limit, force, workers):
         code = r["ins_code"]
         cache = RAW / f"info_{code}.json"
         try:
-            if cache.exists() and not force:
+            if cache.exists() and not force and code not in REFRESH:
                 j = json.loads(cache.read_text(encoding="utf-8"))
             else:
                 raw = get(f"{API}Instrument/GetInstrumentInfo/{code}")
@@ -326,7 +327,7 @@ def collect_dps(limit, force, workers):
         code = r["ins_code"]
         cache = RAW / f"dps_{code}.txt"
         try:
-            if cache.exists() and not force:
+            if cache.exists() and not force and code not in REFRESH:
                 items = parse_dps(cache.read_text(encoding="utf-8", errors="replace"))
             else:
                 items = fetch_dps(r["symbol"], code)
@@ -419,6 +420,7 @@ def main() -> int:
     ap.add_argument("--limit", type=int)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--refresh-file", help="فایل متنی ins_code که با وجود حافظهٔ raw دوباره دریافت شوند (به‌روزرسانی سبک)")
     ap.add_argument("--codes-file", help="فایل متنی ins_code اضافه (نمادهای خارج از بورس/فرابورس امروز، مثل حذف‌شده‌ها)")
     a = ap.parse_args()
     if not (a.probe or a.flow or a.collect_adjust or a.collect_dps or a.collect_shares or a.collect_info):
@@ -427,6 +429,8 @@ def main() -> int:
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, "reconfigure"):
             s.reconfigure(encoding="utf-8")
+    if a.refresh_file:
+        REFRESH.update(c.strip() for c in Path(a.refresh_file).read_text(encoding="utf-8").split() if c.strip())
     if a.codes_file:
         EXTRA_CODES.extend(c.strip() for c in Path(a.codes_file).read_text(encoding="utf-8").split() if c.strip())
     if a.probe:

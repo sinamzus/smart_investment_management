@@ -6,3 +6,6 @@ data/derived/cache/
 /*.txt
 !/requirements.txt
 /logs/
+# وضعیت اجرای دریافت/بازسازی (tools/update_pipeline.py) و فهرست نمادهای تغییرکرده: حالت همین ماشین، نه سند
+ui/data/update_status.js
+data/derived/refresh_codes.txt

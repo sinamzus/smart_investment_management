@@ -122,7 +122,7 @@ function mount(el) {
         <div class="lineage rb-lead" id="rbx-read"></div>
         <div class="kpis" id="rb-kpi"></div>
         <details class="sam-fold sm"><summary${tip('عددهای تکمیلی: TE فقط از نمونه‌گیری (در برابر خرید همهٔ واجدان)، بتا و همبستگی با شاخص، میانگین L، گردش ماهانه و پوشش وزن شاخص.', DOC.build)}>شاخص‌های بیشتر</summary><div class="kpis" id="rb-kpi2"></div></details>
-    <div class="panel-body" style="padding:var(--s-3)"><div class="mute" style="font-size:var(--fs-xs)" id="rb-ch1-t"></div><div id="rb-ch1"></div><div class="mute" style="font-size:var(--fs-xs);margin-top:8px" id="rb-ch2-t"></div><div id="rb-ch2"></div><div class="mute" id="rb-hov" style="font-size:var(--fs-2xs);min-height:1.4em"></div></div>
+    <div class="panel-body" style="padding:var(--s-3)"><div class="mute" style="font-size:var(--fs-xs)" id="rb-ch1-t"></div><div id="rb-ch1"></div><div class="mute" style="font-size:var(--fs-xs);margin-top:8px" id="rb-ch2-t"></div><div id="rb-ch2"></div><div class="mute" style="font-size:var(--fs-xs);margin-top:8px" id="rb-ch3-t" data-tip="هر ستون یک دورهٔ نگهداری (ریبالانس تا ریبالانس بعد): سبز یعنی همتا جلوتر از «شاخص كل» رسمی، قرمز یعنی عقب‌تر. با نگه‌داشتن نشانگر روی هر ستون، اختلاف به چهار جزء (انتخاب سهام، اعضا و داده، نقد/وام، هزینه) تقسیم و محتمل‌ترین علت با نمادهای مؤثر نشان داده می‌شود." data-doc="3:3.5/همتاساز">اختلاف هر دوره بین همتا و شاخص (واحد درصد؛ سبز جلوتر، قرمز عقب‌تر) — نشانگر را روی هر ستون نگه دارید تا علت تحلیل شود</div><div id="rb-ch3"></div><div class="mute" id="rb-hov" style="font-size:var(--fs-2xs);min-height:1.4em"></div></div>
       </div>
     </div>
   </section>
@@ -219,6 +219,105 @@ function drawCharts(cv, m) {
   chart($('rb-ch1'), [{ v: cv.k, c: 'var(--warn)', t: 'شاخص' }, { v: cv.a, c: 'var(--ch-1)', t: 'همتا', w: 1.8 }], { dates: dts, h: 210, d: 0, log: true });
   $('rb-ch2-t').textContent = 'رشد نسبی همتا به شاخص (٪، خط پُر) و TE غلتان تا ۲۵۲ روز (از ۱۲۶ روز به بعد؛ خط‌چین قرمز)';
   chart($('rb-ch2'), [{ v: cv.td, c: 'var(--ch-1)', t: 'تفاوت تجمعی' }, { v: cv.te, c: 'var(--down)', t: 'TE غلتان', dash: true, w: 1.2 }], { dates: dts, h: 150, d: 1, zero: true });
+  drawDiffBars();
+}
+
+/* ── اختلاف ماهانهٔ همتا با شاخص و تحلیل علت (۲۰۲۶-۱۰-۲۰؛ فصل ۳ §۳٫۵) ──
+   هر ستون یک دورهٔ نگهداری (از ریبالانس تا ریبالانس بعد). اختلاف روزانه d = بازده همتا − بازده «شاخص كل» رسمی به چهار جزء جمع‌پذیر تقسیم می‌شود:
+   انتخاب سهام = بازده سبد سهام همتا − همتای کامل (همهٔ واجدان با وزن بازار)؛ اعضا و داده = همتای کامل − شاخص رسمی؛
+   هزینه = گردش ریبالانس × L × هزینهٔ رفت‌وبرگشت؛ نقد/وام = باقی‌مانده (اثر L ≠ ۱ و بهرهٔ وام/نقد). جمع ماه = جمع ساده‌ی روزها (تقریب حسابی).
+   سهم هر نماد در «انتخاب سهام» = Σ روزها (وزن همتا − وزن شاخص، هر دو رانش‌یافته) × بازده نماد؛ از SIM_REPX (همان بازده‌های روزانهٔ شاخص بهبودیافته). */
+function monthParts() {
+  if (!last || !last.sim) return [];
+  const p = prep(R), key = curKey(), r = seriesOf(R, key), c = R.configs[key], sim = last.sim, nm = R.mstart.length, n = R.dates.length, out = [];
+  for (let j = S.j0; j < nm; j++) {
+    const t0 = R.mstart[j], t1 = j + 1 < nm ? R.mstart[j + 1] : n;
+    let tot = 0, samp = 0, memb = 0, other = 0;
+    for (let t = Math.max(t0, sim.t0 + 1); t < t1; t++) {
+      const navR = sim.nav[t] / sim.nav[t - 1] - 1, d = navR - p.K[t];
+      tot += d; samp += r[t] - p.C[t]; memb += p.C[t] - p.K[t]; other += navR - r[t];
+    }
+    if (t1 - 1 <= sim.t0) continue;
+    const L = sim.Ls[j] === sim.Ls[j] ? sim.Ls[j] : 1, cost = j === S.j0 ? 0 : -c.to[j] * L * S.cost / 1e4;   // هزینهٔ خرید اولیه در روز شروع است که در سنجش نیست
+    out.push({ j, t0, t1, end: R.dates[t1 - 1], tot: 100 * tot, samp: 100 * samp, memb: 100 * memb, cost: 100 * cost, lev: 100 * (other - cost), L });
+  }
+  return out;
+}
+const CONTRIB = new Map();
+/** بزرگ‌ترین سهم‌های نمادها در «انتخاب سهام» یک ماه (نیازمند SIM_REPX) */
+function topContrib(m) {
+  const X = root.SIM_REPX; if (!X || !R.b || R !== R0) return null;
+  const k = `${curKey()}|${m.j}`; if (CONTRIB.has(k)) return CONTRIB.get(k);
+  if (!X._ret) { const bin = atob(X.ret), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); X._ret = new Float32Array(u.buffer); X._di = new Map(X.dates.map((d, i) => [d, i])); }
+  const K = X.k, c = R.configs[curKey()], sel = c.sel[m.j], bj = R.b[m.j];
+  const w = new Map(), b = new Map();
+  sel[0].forEach((i, q) => w.set(i, sel[1][q] / 1e5)); bj[0].forEach((i, q) => b.set(i, bj[1][q] / 1e5));
+  const ids = [...new Set([...w.keys(), ...b.keys()])], ww = ids.map(i => w.get(i) || 0), bb = ids.map(i => b.get(i) || 0), con = ids.map(() => 0), cum = ids.map(() => 0);
+  for (let t = m.t0 + 1; t < m.t1; t++) {
+    const xi = X._di.get(R.dates[t]); if (xi == null) continue;
+    const sw = ww.reduce((s, v) => s + v, 0) || 1, sb = bb.reduce((s, v) => s + v, 0) || 1;
+    ids.forEach((i, q) => { const x = X._ret[xi * K + i], rr = x === x ? x : 0; con[q] += (ww[q] / sw - bb[q] / sb) * rr; cum[q] = (1 + cum[q]) * (1 + rr) - 1; ww[q] *= 1 + rr; bb[q] *= 1 + rr; });
+  }
+  const all = ids.map((i, q) => ({ s: R.names[i].s, sec: R.names[i].sec, w: w.get(i) || 0, b: b.get(i) || 0, ret: cum[q], c: 100 * con[q] }));
+  const out_ = all.filter(x => x.w === 0), sum = a => a.reduce((t, x) => t + x.c, 0);
+  // نمادهای هم‌جهت با کل «انتخاب سهام» (علت اصلی)، به‌علاوهٔ اثر جمعی نمادهای شاخص که در همتا نبودند
+  const sgn = Math.sign(sum(all)) || 1, top = all.filter(x => Math.sign(x.c) === sgn).sort((x, y) => sgn * (y.c - x.c)).slice(0, 4);
+  const res = { top, total: sum(all), outN: out_.length, outC: sum(out_), outUp: out_.filter(x => x.ret > 0).length };
+  CONTRIB.set(k, res); return res;
+}
+function ensureRepx(cb) {
+  if (root.SIM_REPX) return cb();
+  if (ensureRepx.p) { ensureRepx.p.push(cb); return; }
+  ensureRepx.p = [cb]; const s = document.createElement('script'); s.src = 'data/replica_x.js';
+  s.onload = () => { const q = ensureRepx.p; ensureRepx.p = null; q.forEach(f => f()); }; s.onerror = () => { ensureRepx.p = null; };
+  document.head.appendChild(s);
+}
+const PART_FA = { samp: 'انتخاب سهام', memb: 'اعضا و داده', lev: 'نقد/وام', cost: 'هزینهٔ ریبالانس' };
+function explain(m) {
+  const parts = ['samp', 'memb', 'lev', 'cost'].map(k => [k, m[k]]).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const [mk] = parts[0], dir = m.tot >= 0 ? 'جلو افتاد' : 'عقب ماند', pp = v => `<span dir="ltr" style="unicode-bidi:isolate">${sg(v, 2)}</span>`;
+  let why = '';
+  if (mk === 'samp') {
+    const tc = topContrib(m);
+    why = 'احتمالاً <b>انتخاب سهام</b>: وزن نمادها در همتا با وزنشان در شاخص فرق داشت و همین نمادها حرکت بزرگ داشتند.';
+    if (tc) {
+      why += '<ul>' + tc.top.map(x => `<li>${esc(x.s)}: همتا ${f(100 * x.w, 1)}٪ در برابر شاخص ${f(100 * x.b, 1)}٪، بازده دوره ${sg(100 * x.ret, 1)}٪ ⇒ ${pp(x.c)} واحد${x.w === 0 ? ' (در همتا نبود)' : x.w > x.b ? ' (بیش‌وزن)' : ' (کم‌وزن)'}</li>`).join('') + '</ul>';
+      if (tc.outN) {
+        const same = Math.sign(tc.outC) === Math.sign(tc.total);
+        why += `<div>${tc.outN} نماد شاخص در همتا نبودند (${tc.outUp} تا بالا رفتند): اثر جمعی ${pp(tc.outC)} واحد${same && Math.abs(tc.outC) >= Math.abs(tc.total) / 2 ? ' — بیشترِ اختلاف از همین سهام نخریده است' : !same ? ' — در جهت مخالف؛ بیش‌وزن‌ها بیش از آن جبران کردند' : ''}.</div>`;
+      }
+    }
+    else if (R !== R0) why += ' <span class="mute">(برای هدف تیلت‌شده جزئیات نماد محاسبه نمی‌شود.)</span>';
+    else why += ' <span class="mute">(جزئیات نمادها در حال بارگذاری…)</span>';
+  } else if (mk === 'memb') why = 'احتمالاً <b>تفاوت اعضا و داده</b>: حتی خرید همهٔ واجدان هم این ماه با شاخص رسمی فاصله داشت؛ معمولاً نماد تازه‌عرضه یا کم‌سابقه که در شاخص رسمی هست ولی هنوز واجد همتا نیست، بازگشایی پس از توقف، یا تفاوت ثبت سود و افزایش سرمایه.';
+  else if (mk === 'lev') why = `احتمالاً <b>${m.L < 1 ? 'نقد' : m.L > 1 ? 'وام' : 'نقد/وام'}</b>: L این ماه ${f(m.L, 2)} بود؛ ${m.L < 1 ? 'بخشی از سرمایه بیرون بازار بود و بازار ' + (m.tot < 0 ? 'بالا رفت' : 'پایین آمد') : 'وام اثر حرکت بازار را بزرگ کرد و بهرهٔ وام هم کم شد'}.`;
+  else why = 'احتمالاً <b>هزینهٔ ریبالانس</b>: گردش سبد در ابتدای این دوره زیاد بود.';
+  return `<div class="tt">دوره تا ${dj(m.end)}: همتا ${pp(m.tot)} واحد درصد از شاخص ${dir}</div>
+    <div class="td">${why}</div>
+    <div class="tf">${parts.map(([k, v]) => `${PART_FA[k]}: ${pp(v)}`).join(' · ')}</div>
+    <div class="ts">جمع ساده‌ی اختلاف روزانه (تقریب حسابی)؛ «انتخاب سهام» = سبد همتا منهای خرید همهٔ واجدان، «اعضا و داده» = همهٔ واجدان منهای شاخص رسمی.</div>`;
+}
+function drawDiffBars() {
+  const el = $('rb-ch3'); if (!el) return;
+  const ms = monthParts(); if (!ms.length) { el.innerHTML = ''; return; }
+  const W = 980, H = 140, pl = 48, pr = 12, pt = 8, pb = 22, n = ms.length;
+  const mx = Math.max(0.5, ...ms.map(m => Math.abs(m.tot))) * 1.08, Y = v => pt + (H - pt - pb) * (1 - (v + mx) / (2 * mx)), bw = (W - pl - pr) / n;
+  let g = '';
+  [mx, mx / 2, 0, -mx / 2, -mx].forEach(v => { g += `<line x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${v === 0 ? 'var(--tx-3)' : 'var(--line)'}" stroke-width="${v === 0 ? 0.8 : 0.5}"/><text x="${pl - 6}" y="${Y(v) + 3}" text-anchor="end" font-size="9" fill="var(--tx-3)">${f(v, 1)}</text>`; });
+  let lastY = null; ms.forEach((m, i) => { const y = jyear(m.end); if (y !== lastY && jmonth(m.end) <= 1) { lastY = y; g += `<text x="${pl + bw * (i + 0.5)}" y="${H - 7}" text-anchor="middle" font-size="9" fill="var(--tx-3)">${y}</text>`; } });
+  ms.forEach((m, i) => { const y0 = Y(0), y1 = Y(m.tot); g += `<rect data-i="${i}" x="${pl + bw * i + bw * 0.12}" y="${Math.min(y0, y1)}" width="${Math.max(bw * 0.76, 1)}" height="${Math.max(Math.abs(y1 - y0), 0.8)}" fill="${m.tot >= 0 ? 'var(--up)' : 'var(--down)'}" opacity=".85"/>`; });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block">${g}<rect class="hv" x="${pl}" y="${pt}" width="${W - pl - pr}" height="${H - pt - pb}" fill="transparent"/></svg><div class="rb-bartip" hidden></div>`;
+  const svg = el.firstChild, tipEl = el.querySelector('.rb-bartip');
+  el.style.position = 'relative';
+  const show = e => {
+    const r = svg.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.floor(((e.clientX - r.left) / r.width * W - pl) / bw))), m = ms[i];
+    svg.querySelectorAll('rect[data-i]').forEach(x => x.setAttribute('opacity', +x.dataset.i === i ? '1' : '.55'));
+    const paint = () => { tipEl.innerHTML = explain(m); tipEl.hidden = false; const x = e.clientX - r.left, w = tipEl.offsetWidth; tipEl.style.left = Math.max(0, Math.min(x - w / 2, r.width - w)) + 'px'; tipEl.style.top = (r.height + 4) + 'px'; };
+    paint();
+    if (Math.abs(m.samp) >= Math.max(Math.abs(m.memb), Math.abs(m.lev), Math.abs(m.cost)) && !root.SIM_REPX && R === R0) ensureRepx(paint);
+  };
+  svg.querySelector('.hv').onmousemove = show;
+  svg.querySelector('.hv').onmouseleave = () => { tipEl.hidden = true; svg.querySelectorAll('rect[data-i]').forEach(x => x.setAttribute('opacity', '.85')); };
 }
 
 function renderYears(o, key) {

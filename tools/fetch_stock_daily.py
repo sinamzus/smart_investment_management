@@ -256,8 +256,21 @@ def write_prices(ins_code: str, items: list[dict]) -> int:
     return len(items)
 
 
+def merge_prices(ins_code: str, items: list[dict]) -> int:
+    """ردیف‌های تازه را با فایل موجود ادغام می‌کند (کلید dEven؛ ردیف تازه جایگزین قدیمی). بدون این، دریافت چند روز آخر تاریخچه را پاک می‌کرد."""
+    if not items:
+        return 0
+    f = PRICES / f"{ins_code}.csv.gz"
+    with gzip.open(f, "rt", encoding="utf-8", newline="") as g:
+        old = list(csv.DictReader(g))
+    new_keys = {str(e["dEven"]) for e in items}
+    rows = [r for r in old if str(r.get("dEven")) not in new_keys] + items
+    rows.sort(key=lambda e: int(float(e["dEven"])))
+    return write_prices(ins_code, rows) - len(old) + len([r for r in old if str(r.get("dEven")) in new_keys])
+
+
 def collect(types: set[str], days: int, limit: int | None, force: bool, workers: int,
-            codes_file: str | None) -> None:
+            codes_file: str | None, update: int = 0) -> None:
     inst = [r for r in load_instruments() if r["type"] in types and r["market"] in ("bourse", "farabourse")]
     extra = []
     if codes_file:
@@ -275,12 +288,16 @@ def collect(types: set[str], days: int, limit: int | None, force: bool, workers:
     def one(r):
         nonlocal done, fail, skipped, rows_total
         code = r["ins_code"]
-        if (PRICES / f"{code}.csv.gz").exists() and not force:
+        exists = (PRICES / f"{code}.csv.gz").exists()
+        if exists and not force and not update:
             with lock:
                 skipped += 1
             return
         try:
-            n = write_prices(code, fetch_daily(code, days))
+            if exists and update and not force:                           # به‌روزرسانی سبک: فقط چند روز آخر، ادغام با فایل موجود
+                n = merge_prices(code, fetch_daily(code, update))
+            else:
+                n = write_prices(code, fetch_daily(code, days))
             with lock:
                 done += 1
                 rows_total += n
@@ -344,6 +361,7 @@ def main() -> int:
     ap.add_argument("--days", type=int, default=9999, help="حداکثر تعداد روز برای هر نماد")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--update", type=int, default=0, help="به‌روزرسانی سبک: برای نمادهای دارای فایل فقط N روز آخر دریافت و ادغام شود")
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--codes-file", help="فایل متنی ins_code اضافه (مثلاً نمادهای حذف‌شده)")
     a = ap.parse_args()
@@ -360,7 +378,7 @@ def main() -> int:
     if a.probe:
         probe(a.probe, a.days)
     if a.collect:
-        collect(set(a.types.split(",")), a.days, a.limit, a.force, a.workers, a.codes_file)
+        collect(set(a.types.split(",")), a.days, a.limit, a.force, a.workers, a.codes_file, a.update)
     if a.summary:
         summary()
     return 0

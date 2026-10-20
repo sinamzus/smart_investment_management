@@ -245,3 +245,18 @@ a.doclink { color: var(--accent-tx, var(--accent)); cursor: pointer; text-decora
 #docv .dv-hit { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 #docv h1.dv-hit, #docv h2.dv-hit, #docv h3.dv-hit, #docv h4.dv-hit { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 @media print { #docv, .doc-btn { display: none !important; } }
+
+/* ── پنل «داده و محاسبات» (ui/update.js؛ فصل ۰۹ §۹٫۶) ── */
+#upd-btn { margin-inline-start: 6px; white-space: nowrap; }
+#upd-btn.upd-run { color: var(--warn); } #upd-btn.upd-bad { color: var(--down); }
+.upd-overlay { position: fixed; inset: 0; z-index: 950; background: rgba(0,0,0,.35); display: flex; align-items: flex-start; justify-content: center; padding: 60px 16px; overflow: auto; }
+.upd-overlay[hidden] { display: none; }
+.upd-box { background: var(--bg-panel); border: var(--hair) solid var(--line-strong); border-radius: var(--radius-lg, 12px); max-width: 760px; width: 100%; padding: 16px 18px; box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+.upd-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: var(--fs-md, 15px); }
+.upd-top .spacer { flex: 1; }
+.upd-card { border: var(--hair) solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+.upd-h { display: flex; gap: 8px; align-items: center; }
+.upd-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0; font-size: var(--fs-sm); }
+.upd-file { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; font-size: var(--fs-xs); }
+.upd-file code { background: var(--bg-app); padding: 2px 6px; border-radius: 4px; }
+.upd-steps { margin: 6px 0 0; padding-inline-start: 18px; font-size: var(--fs-xs); line-height: 1.8; }
