@@ -14,7 +14,8 @@ const PART = 0.10;
 function loadX(X) {
   if (X._ctx) return X._ctx;
   X._ctx = { k: X.k, T: X.days, ret: b64(X.ret, Float32Array), K: b64(X.K, Float32Array), C: b64(X.C, Float32Array), dates: X.dates, names: X.names, sectors: X.sectors, nH: X.n_rebal,
-    months: X.months.map(m => ({ a: m.a, d: m.d, mcap: b64(m.mcap, Float32Array), adv: b64(m.adv, Float32Array), td: b64(m.td, Uint8Array), tr: m.tr ? b64(m.tr, Uint8Array) : null })), asof: X.asof };
+    months: X.months.map(m => ({ a: m.a, d: m.d, mcap: b64(m.mcap, Float32Array), adv: b64(m.adv, Float32Array), td: b64(m.td, Uint8Array), tr: m.tr ? b64(m.tr, Uint8Array) : null })), asof: X.asof,
+    div: (X.div || []).reduce((mp, [t, i, y, p]) => { if (!mp.has(t)) mp.set(t, []); mp.get(t).push([i, y, p]); return mp; }, new Map()) };   // سود نقدی: روز ⇒ [[نماد، سهم سود، روز پرداخت]]
   return X._ctx;
 }
 const eligIdx = (ctx, j) => { const m = ctx.months[j].mcap, o = []; for (let i = 0; i < ctx.k; i++) if (m[i] > 0) o.push(i); return Int32Array.from(o); };
@@ -134,6 +135,7 @@ function select(ctx, method, N, liq, bt, j, iters) {
 /** سری ماهانه و روزانهٔ همتا (بدون اهرم) و «هدف تیلت‌شده» (خرید همهٔ واجدان با b′)؛ فرمت سازگار با builder.js. progress(j, nm) اختیاری. */
 async function runEnh(ctx, cfg, zFor, progress) {
   const k = ctx.k, nm = ctx.nH, d0 = ctx.months[0].a + 1, L = ctx.T - d0, r = new Float64Array(L), tr = new Float64Array(L);
+  const dvT = [], dvP = [], dvY = [];                                   // برنامهٔ سود نقدی هدف (همان dv در build_replica_panel؛ فصل ۳ §۳٫۵)
   const to = [], beta = [], cap = [], sel = [], bsm = [], tto = [];
   let wp = new Float64Array(k), tp = new Float64Array(k);
   for (let j = 0; j < nm; j++) {
@@ -163,7 +165,9 @@ async function runEnh(ctx, cfg, zFor, progress) {
     bsm.push([Array.from(bt.idx), Array.from(bt.idx, i => Math.round(bt.b[i] * 1e5)), Array.from(bt.idx, i => Math.round(bt.b0[i] * 1e5))]);
     const wv = Float64Array.from(wf), tv = Float64Array.from(bt.b);
     for (let t = a + 1; t <= end; t++) {
-      let v0 = 0, v1 = 0; for (const i of S.sel) { v0 += wv[i]; wv[i] *= 1 + ctx.ret[t * k + i]; v1 += wv[i]; } r[t - d0] = v1 / v0 - 1;
+      let v0 = 0, v1 = 0; for (const i of S.sel) v0 += wv[i];
+      const ev = ctx.div.get(t); if (ev && v0 > 0) for (const [i, y, p] of ev) if (wv[i] > 0) { dvT.push(t - d0); dvP.push(p - d0); dvY.push(wv[i] * y / v0); }
+      for (const i of S.sel) { wv[i] *= 1 + ctx.ret[t * k + i]; v1 += wv[i]; } r[t - d0] = v1 / v0 - 1;
       let u0 = 0, u1 = 0; for (const i of bt.idx) { u0 += tv[i]; tv[i] *= 1 + ctx.ret[t * k + i]; u1 += tv[i]; } tr[t - d0] = u1 / u0 - 1;
     }
     let sw = 0, st = 0; for (const i of S.sel) sw += wv[i]; for (const i of bt.idx) st += tv[i];
@@ -179,7 +183,7 @@ async function runEnh(ctx, cfg, zFor, progress) {
     dates: ctx.dates.slice(d0), mstart: ctx.months.slice(0, nm).map(m => m.a - ctx.months[0].a), sig: ctx.months.slice(0, nm).map(m => m.d), asof: ctx.asof, part: PART,
     names: ctx.names.map(n => ({ c: n.c, s: n.s, sec: ctx.sectors[n.sec] })), b: bsm.map(x => [x[0], x[1]]), b0: bsm.map(x => [x[0], x[2]]),
     live_b: [Array.from(btl.idx), Array.from(btl.idx, i => Math.round(btl.b[i] * 1e5))], live_b0: [Array.from(btl.idx), Array.from(btl.idx, i => Math.round(btl.b0[i] * 1e5))], adv_live: adv,
-    Ns: [cfg.N], liq: { 0: {}, 1: {}, 2: {}, 3: {} }, methods: ['top', 'strat', 'opt'], configs: { enh: { to, beta, cap, sel, live } }, n_elig: [],
+    Ns: [cfg.N], liq: { 0: {}, 1: {}, 2: {}, 3: {} }, methods: ['top', 'strat', 'opt'], configs: { enh: { to, beta, cap, sel, live, dv: [dvT, dvP, dvY] } }, n_elig: [],
     _p: { K: ctx.K.subarray(d0), C: ctx.C.subarray(d0), cfg: { enh: r } }, target: { r: tr, to: tto },
   };
   return R;
@@ -282,7 +286,7 @@ function summary(R, cfg) {
     ['نسبت اطلاعات', f(mT.gap / mT.te, 2), 'بازده اضافی ÷ TE. بالای ۰٫۵ در ادبیات خوب است، ولی اینجا درون‌نمونه است.'],
     ['t تفاضل ماهانه', f(tstat, 2), 'آمارهٔ t میانگین تفاضل ماهانهٔ هدف−شاخص (ساده، بدون تصحیح چندگانگی). |t| < ۲ یعنی بی‌معنا؛ تیلت‌های آزموده‌شده را در Lab با Bonferroni/DSR بسنجید.'],
     ['گردش ماهانهٔ هدف', f(100 * tov, 1) + '٪', 'گردش یک‌طرفهٔ ماهانهٔ خریدن همهٔ هدف (پیش از نمونه‌گیری).'],
-    ['TE همتا در برابر شاخص', f(m.te, 2) + '٪', 'همتای N‌سهمی هدف در برابر «شاخص كل» (با هزینهٔ ۱۲۵bp، بدون اهرم).']];
+    ['TE همتا در برابر شاخص', f(m.te, 2) + '٪', 'همتای N‌سهمی هدف در برابر «شاخص كل» (با هزینهٔ ۱۲۵bp، بدون وام؛ سود نقدی با تأخیر واقعی پرداخت).']];
   $('en-kpi').innerHTML = kp.map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v num">${v}</div></div>`).join('');
   const t = cfg.tilt, parts = [];
   if (t.gamma !== 1) parts.push(`توان اندازه ${t.gamma}`); if (t.ew) parts.push(`آمیخته با هم‌وزن ${f(100 * t.ew, 0)}٪`); if (t.cap) parts.push(`سقف ${f(100 * t.cap, 0)}٪`); if (t.kappa) parts.push(`کم‌نوسان κ=${t.kappa}`);

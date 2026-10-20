@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""بازسازی «شاخص كل» (ارزش‌وزن، بازده کل) با N سهم، با اهرم/وام اختیاری — فصل ۳ §۳٫۷.
+"""بازسازی «شاخص كل» (ارزش‌وزن، بازده کل) با N سهم؛ سود نقدی با تأخیر واقعی پرداخت و وام فقط به‌عنوان پل سود — فصل ۳ §۳٫۷.
 
-    python tools/sampled_replica.py                         # جدول N × روش انتخاب × اهرم
-    python tools/sampled_replica.py --rate 0.30 --cost 125  # نرخ وام سالانه و هزینهٔ رفت‌وبرگشت (bp)
+    python tools/sampled_replica.py                         # جدول N × روش انتخاب × حالت (بدون وام / پل سود / تراز بتا)
+    python tools/sampled_replica.py --rate 0.30 --cost 125  # نرخ وام پل سالانه و هزینهٔ رفت‌وبرگشت (bp)
 
 مراحل (هر پایان ماه جلالی، اجرا با بازده از روز بعد):
   ۱ وزن هدف b = ارزش بازار نمادهای واجد بورس ÷ مجموع (همان روش وزن «شاخص كل» رسمی: ارزش بازار کل، نه شناور آزاد).
   ۲ انتخاب N سهم: top (N بزرگ‌ترین)، strat (طبقه‌ای: سهم هر صنعت از N ∝ وزنش؛ در هر صنعت بزرگ‌ترین‌ها)،
     opt (بهینه‌سازی: min (w−b)ᵀΣ(w−b) روی ۳N بزرگ‌ترین، فقط‌خرید؛ سپس N وزن برتر و حل دوباره؛ Σ = Ledoit–Wolf روی ۲۵۲ روز).
-  ۳ اهرم L: ۱ (بدون وام) یا «تراز بتا» L = ۱/β (β رگرسیون ۲۵۲ روزهٔ نمونه روی شاخص هدف، بُرش [۰٫۷، ۱٫۵]).
-    L > ۱: وام (L−۱)×NAV با نرخ rb؛ L < ۱: بخش نقد بدون بهره. وام و L هر ماه بازتنظیم می‌شود.
-  ۴ هزینه: گردش یک‌طرفه × هزینهٔ رفت‌وبرگشت؛ بهرهٔ وام روزانه از NAV کم می‌شود.
-  ۵ ارزیابی روی بازده روزانه در برابر «شاخص كل» رسمی (بازده کل) و در برابر همتای ارزش‌وزن کامل خودمان
+  ۳ سود نقدی (تصمیم مالک ۲۰۲۶-۱۰-۲۰): در روز استحقاق، سود y_t·V از بخش سرمایه‌گذاری‌شده جدا و «طلب» می‌شود و تا روز پرداخت
+    واقعی (dividend_pay.pay_days: فارابی، fundai، وگرنه +۹۶ روز) بی‌بازده می‌ماند؛ در روز پرداخت دوباره سرمایه‌گذاری می‌شود.
+  ۴ حالت‌ها: none = تمام سرمایه‌گذاری، سود با تأخیر؛ bridge = «وام پل سود»: در روز استحقاق دقیقاً به اندازهٔ طلب وام گرفته و
+    سرمایه‌گذاری می‌شود، پرداخت سود وام را تسویه می‌کند، بهره با نرخ rb انباشته و بدهی هرگز از طلب بیشتر نمی‌شود (مازاد بهره از
+    فروش سهام پرداخت می‌شود)؛ beta = «تراز بتا» فقط نقد: L = clip(1/β, ۰٫۷, ۱) — وام برای اهرم مجاز نیست.
+  ۵ هزینه: گردش یک‌طرفه × L × هزینهٔ رفت‌وبرگشت.
+  ۶ ارزیابی روی بازده روزانه در برابر «شاخص كل» رسمی (بازده کل) و در برابر همتای ارزش‌وزن کامل خودمان
     (دومی فقط خطای نمونه‌گیری را نشان می‌دهد؛ اولی خطای تفاوت اعضا (شرط واجدیت ۲۵۲ روزه، ماهانه) و داده را هم دارد).
-محدودیت: بدون صف/حد نوسان/توقف؛ نرخ وام و دسترسی به وام (مارجین) واقعی نیست **[تأیید لازم]**.
+همان به‌روزرسانی روزانهٔ مقیاس‌دار (step_day) در موتور مرورگر (ui/builder.js simulate) هست؛ node tools/replica_selftest.js هم‌ارزی را می‌سنجد.
+محدودیت: بدون صف/حد نوسان/توقف؛ نرخ و دسترسی به وام پل واقعی نیست **[تأیید لازم]**.
 """
 import argparse
 import sys
@@ -97,12 +101,45 @@ def pick_opt(b, idx, N, Sig, pos):
     return sel, w1
 
 
-def run(mk, K, rate, cost_bp, N, method, lev_mode):
+def step_day(V, D, rcv, g, divs, paid, sched, bridge, rate, days):
+    """یک روز مدل سود/پل (همان ui/builder.js simulate). V سهام، D بدهی پل، rcv طلب سود؛ g بازده کل روز سبد؛
+    divs = [(روز پرداخت، سهم سود از V دیروز)]؛ paid = پرداخت‌های رسیدهٔ امروز (پیش از ثبت سودهای امروز برداشته شده)."""
+    if D > 0:
+        D *= 1 + rate * days / 365.0
+    ytot = 0.0
+    for p, y in divs:
+        A = y * V
+        sched[p] = sched.get(p, 0.0) + A
+        rcv += A
+        ytot += y
+        if bridge:
+            D += A
+    V *= 1 + g - (0.0 if bridge else ytot)                             # بدون وام: سود از سهام جدا و طلب می‌شود
+    if paid:
+        rcv -= paid
+        if bridge:
+            D -= paid
+        else:
+            V += paid                                                   # سرمایه‌گذاری دوبارهٔ سود دریافتی
+    if D > rcv:                                                         # سقف روزانه: بدهی پل ≤ طلب سود؛ بهرهٔ مازاد از فروش سهام
+        V -= D - rcv
+        D = rcv
+    return V, D, rcv
+
+
+def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None):
+    """lev_mode: none | bridge | beta. pays: dividend_pay.pay_days(mk) (برای سرعت یک بار ساخته و دوباره استفاده شود)."""
+    if pays is None:
+        import dividend_pay
+        pays = dividend_pay.pay_days(mk)
+    bridge = lev_mode == "bridge"
+    Y = np.nan_to_num(mk.Y)
     n, k = mk.n, mk.k
     me = [int(a) for a in mk.month_end if mk.dates[a] >= START and a >= 252 and a + 1 < n]
     me.append(None)
     ok_all = np.isin(mk.market, ["bourse"])
-    nav, V, D, cash = 1.0, 1.0, 0.0, 0.0
+    V, D, cash, rcv = 1.0, 0.0, 0.0, 0.0
+    sched = {}                                                          # روز پرداخت ⇒ مبلغ طلب سود
     w_prev = np.zeros(k)
     navs, dates, turn, lev_l = [], [], [], []
     X = np.nan_to_num(mk.X)
@@ -142,23 +179,28 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode):
             rs = X[a - 251: a + 1] @ w
             ri = np.nan_to_num(K.values[a - 251: a + 1])
             beta = np.cov(rs, ri)[0, 1] / max(np.var(ri, ddof=1), 1e-12)
-            L = float(np.clip(1.0 / beta if beta > 0 else 1.0, 0.7, 1.5))
-        # ریبالانس: NAV فعلی، سرمایه‌گذاری L×NAV، بدهی (L−1)×NAV (یا نقد بدون بهره)
-        nav = V + cash - D
+            L = float(np.clip(1.0 / beta if beta > 0 else 1.0, 0.7, 1.0))   # فقط نقد؛ وام برای اهرم نه
+        # ریبالانس: بدهی پل هرگز بیش از طلب سود نیست (مازاد بهره از دارایی پرداخت می‌شود)؛ سرمایهٔ قابل‌سرمایه‌گذاری = دارایی منهای طلب
+        if D > rcv:
+            V -= D - rcv
+            D = rcv
+        E = V + cash
         drift_w = w_prev
-        to = 0.5 * np.abs(w - drift_w).sum() * (L if nav > 0 else 1.0)
-        nav -= to * nav * cost_bp / 1e4
-        V, D = L * nav, max(L - 1.0, 0.0) * nav
-        cash = nav - V if L < 1.0 else 0.0                             # L<1: بقیه نقد بدون بهره
+        to = 0.5 * np.abs(w - drift_w).sum() * L
+        E -= to * E * cost_bp / 1e4
+        V, cash = L * E, (1.0 - L) * E                                  # L<1: بقیه نقد بدون بهره
         turn.append(to); lev_l.append(L)
-        wv = w * V                                                      # ارزش هر سهم
+        wv = w.copy()                                                   # فقط برای وزن و بازده روزانهٔ سبد (رانش TR)
         prev_d = mk.dates[a]
         for t in range(a + 1, b_end + 1):
             days = (mk.dates[t] - prev_d).days; prev_d = mk.dates[t]
+            v0 = wv.sum()
+            yv = wv * Y[t] / v0 if v0 > 0 else np.zeros(k)              # سهم سود هر نماد از ارزش دیروز سبد
             wv = wv * (1 + X[t])
-            D *= 1 + rate * days / 365.0
-            V = wv.sum()
-            navs.append(V + cash - D); dates.append(mk.dates[t])
+            g = wv.sum() / v0 - 1 if v0 > 0 else 0.0
+            V, D, rcv = step_day(V, D, rcv, g, [(pays.get((t, int(i)), mk.n), float(yv[i])) for i in np.nonzero(yv > 0)[0]],
+                                 sched.pop(t, 0.0), sched, bridge, rate, days)
+            navs.append(V + cash + rcv - D); dates.append(mk.dates[t])
         w_prev = wv / wv.sum() if wv.sum() > 0 else w_prev
     s = pd.Series(navs, index=pd.DatetimeIndex(dates))
     return s, np.mean(turn), np.mean(lev_l)
@@ -205,14 +247,14 @@ def main():
                "full_replica": {k: float(v) for k, v in base.items()}}, open(ROOT / "data" / "research" / "sampled_replica_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     for N in [int(x) for x in a.ns.split(",")]:
         for m in METHODS:
-            for lev in ("none", "beta"):
+            for lev in ("none", "bridge", "beta"):
                 try:
                     s, to, L = run(mk, K, a.rate, a.cost, N, m, lev)
                 except Exception as e:  # noqa: BLE001
                     print("خطا", N, m, lev, type(e).__name__, e); continue
                 ev = evaluate(s, K, Cfull)
                 rows.append({"N": N, "method": m, "leverage": lev, "mean_L": L, "turnover_oneway_pct": 100 * to, **ev})
-                print(f"N={N:3d} {m:5s} L={'1' if lev == 'none' else 'β'} (L̄={L:.2f}) بازده {ev['ann_pct']:6.1f}٪ شاخص {ev['ann_index_pct']:6.1f}٪ فاصله {ev['gap_pct']:+6.1f} TE_رسمی {ev['te_vs_official_pct']:5.2f} TE_همتا {ev['te_vs_fullreplica_pct']:5.2f} β={ev['beta']:.2f} ρ={ev['corr']:.3f} گردش {100 * to:4.0f}٪", flush=True)
+                print(f"N={N:3d} {m:5s} L={ {'none': '1', 'bridge': 'پل'}.get(lev, 'β') } (L̄={L:.2f}) بازده {ev['ann_pct']:6.1f}٪ شاخص {ev['ann_index_pct']:6.1f}٪ فاصله {ev['gap_pct']:+6.1f} TE_رسمی {ev['te_vs_official_pct']:5.2f} TE_همتا {ev['te_vs_fullreplica_pct']:5.2f} β={ev['beta']:.2f} ρ={ev['corr']:.3f} گردش {100 * to:4.0f}٪", flush=True)
     out = pd.DataFrame(rows)
     out.to_csv(ROOT / "data" / "research" / "sampled_replica.csv", index=False, encoding="utf-8-sig")
     print("\nذخیره شد: data/research/sampled_replica.csv")

@@ -18,6 +18,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import sampled_replica as sr  # noqa: E402
+import dividend_pay as dp  # noqa: E402
 
 EPOCH = pd.Timestamp("1970-01-01")
 
@@ -57,9 +58,14 @@ def main():
             m[pos[int(i)]] = mc[a, i]; ad[pos[int(i)]] = (adv[a, i] if np.isfinite(adv[a, i]) else 0) / 1e9; tdv[pos[int(i)]] = int(td[a, i]) if np.isfinite(td[a, i]) else 0
         months.append({"a": a - d0, "d": int((mk.dates[a] - EPOCH).days), "mcap": f32(m), "adv": f32(ad), "td": b64encode(tdv.tobytes()).decode(), "tr": b64encode(trv.tobytes()).decode()})
     ret = X[d0:][:, used]
+    # سود نقدی هر نماد: [روز استحقاق، نماد، سهم سود، روز پرداخت] (نسبی به d0؛ فصل ۳ §۳٫۵، ui/enhance.js برنامهٔ سود هدف تیلت‌شده را می‌سازد)
+    pays = dp.pay_days(mk)
+    Y = np.nan_to_num(mk.Y)
+    div = [[int(t - d0), pos[int(i)], round(float(Y[t, i]), 7), int(pays.get((int(t), int(i)), n) - d0)]
+           for t, i in zip(*np.nonzero(Y[d0:] > 0)) for t in [t + d0] if int(i) in pos]
     out = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "asof": str(mk.dates[-1].date()), "k": len(used), "days": n - d0,
            "dates": [int((d - EPOCH).days) for d in mk.dates[d0:]], "ret": f32(ret), "K": f32(K.values[d0:]), "C": f32(Cfull[d0:]),
-           "names": [{"c": str(mk.cols[i]), "s": str(mk.sym[i]), "sec": sid[str(mk.sector[i])]} for i in used], "sectors": sectors, "months": months, "n_rebal": len(me)}
+           "names": [{"c": str(mk.cols[i]), "s": str(mk.sym[i]), "sec": sid[str(mk.sector[i])]} for i in used], "sectors": sectors, "months": months, "n_rebal": len(me), "div": div}
     path = ROOT / "ui" / "data" / "replica_x.js"
     path.write_text("window.SIM_REPX = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
     print(f"ذخیره شد: {path} ({path.stat().st_size / 1e6:.1f} MB)؛ {len(used)} نماد × {n - d0} روز؛ {len(months)} ماه (آخرین = زنده)")

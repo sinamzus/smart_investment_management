@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import construction as cn  # noqa: E402
 import sampled_replica as sr  # noqa: E402
+import dividend_pay as dp  # noqa: E402
 
 NS = (10, 20, 30, 50, 80, 120)
 METHODS = ("top", "strat", "opt")
@@ -96,6 +97,9 @@ def main():
     K = K.fillna(0)
     n, k = mk.n, mk.k
     X = np.nan_to_num(mk.X)
+    Y = np.nan_to_num(mk.Y)                                                 # بازده سود نقدی روز استحقاق
+    pays = dp.pay_days(mk)                                                  # روز پرداخت واقعی هر سود (فصل ۳ §۳٫۵)
+    print("سود نقدی:", dp.lag_summary(mk, pays))
     mc = np.nan_to_num(mk.mcap)
     ok_all = np.isin(mk.market, ["bourse"])
     val = pd.DataFrame(mk.val)
@@ -159,6 +163,7 @@ def main():
     cfg = {}
     for key in keys:
         r = np.zeros(len(dates)); to, beta, cap = [], [], []
+        dv = {}                                                             # (روز استحقاق، روز پرداخت) ⇒ سهم سود از ارزش دیروز سبد
         w_prev = np.zeros(k)
         for j, aidx in enumerate(me):
             sel, w, ad = W[key][j]
@@ -181,10 +186,14 @@ def main():
             wv = wf.copy()
             for t in range(aidx + 1, ends[j] + 1):
                 v0 = wv.sum()
+                for i in np.nonzero((Y[t] > 0) & (wv > 0))[0]:
+                    kk = (t - days0, pays.get((t, int(i)), n) - days0)
+                    dv[kk] = dv.get(kk, 0.0) + float(wv[i] * Y[t, i] / v0)
                 wv = wv * (1 + X[t])
                 r[t - days0] = wv.sum() / v0 - 1
             w_prev = wv / wv.sum()
-        cfg["|".join(map(str, key))] = {"r": f32(r), "to": [round(x, 4) for x in to], "beta": [round(x, 3) for x in beta], "cap": [round(x / 1e9, 2) for x in cap],
+        dvk = sorted(dv)
+        cfg["|".join(map(str, key))] = {"r": f32(r), "dv": [[a_ for a_, _ in dvk], [b_ for _, b_ in dvk], f32([dv[x] for x in dvk])], "to": [round(x, 4) for x in to], "beta": [round(x, 3) for x in beta], "cap": [round(x / 1e9, 2) for x in cap],
                                        "sel": [[[int(i) for i in s], [int(round(x * 1e5)) for x in w]] for s, w, _ in W[key]],
                                        "live": [[int(i) for i in LIVE[key][0]], [int(round(x * 1e5)) for x in LIVE[key][1]], round(float(np.min(PART * np.nan_to_num(LIVE[key][2]) / np.maximum(LIVE[key][1], 1e-9))) / 1e9, 2)]}
     idx_live = np.where(mk.eligible(live_a, require_trade=False) & ok_all & (mc[live_a] > 0))[0]

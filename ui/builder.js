@@ -1,4 +1,4 @@
-/* همتا — «همتاساز»: بازسازی شاخص كل با نمونهٔ کوچک، فیلتر نقدشوندگی، نقد/وام/اهرم، و نگاه به گذشته (فصل ۳ §۳٫۷)
+/* همتا — «همتاساز»: بازسازی شاخص كل با نمونهٔ کوچک، فیلتر نقدشوندگی، نقد و وام پل سود/تسویه (نه اهرم)، و نگاه به گذشته (فصل ۳ §۳٫۷)
    داده: window.SIM_REP (tools/build_replica_panel.py). موتور (بخش اول) خالص است و در node هم آزمون می‌شود: node tools/replica_selftest.js
    فرمول درون هر ماه (خطی در بازده ناخالص G): NAV_t = L·nav₀·G_t + نقد − بدهیِ انباشته؛ هزینه = گردش × L × هزینهٔ رفت‌وبرگشت. */
 (function (root) {
@@ -15,25 +15,52 @@ function prep(R) {
 function seriesOf(R, key) { const p = prep(R); return p.cfg[key] || (p.cfg[key] = b64f(R.configs[key].r)); }
 const keyOf = (m, N, q) => `${m}|${N}|${q}`;
 
-/** شبیهٔ NAV. o = {mode:'none'|'fixed'|'beta', L, rb, rc, cost, j0}. اهرم هر ماه بازتنظیم می‌شود. */
+/** برنامهٔ سود نقدی هر ترکیب: روز استحقاق ⇒ [[روز پرداخت، سهم سود از ارزش دیروز سبد]] (tools/build_replica_panel.py، dv). */
+function divOf(R, key) {
+  const p = prep(R), c = R.configs[key]; if (p.dv && p.dv[key]) return p.dv[key];
+  const m = new Map();
+  if (c && c.dv) { const ys = typeof c.dv[2] === 'string' ? b64f(c.dv[2]) : c.dv[2]; c.dv[0].forEach((t, i) => { if (!m.has(t)) m.set(t, []); m.get(t).push([c.dv[1][i], ys[i]]); }); }
+  (p.dv || (p.dv = {}))[key] = m; return m;
+}
+/** شبیهٔ NAV (فصل ۳ §۳٫۵؛ همان tools/sampled_replica.step_day).
+ *  o = {mode:'none'|'fixed'|'beta', L, loan, rb, rc, q, s, cost, j0}
+ *  • mode: none تمام سرمایه‌گذاری؛ fixed نقد ثابت (L = ۱ − نقد)؛ beta تراز بتا فقط نقد (L = clip(1/β, 0.7, 1)). وام برای اهرم مجاز نیست.
+ *  • سود نقدی: روز استحقاق y·V از سهام جدا و «طلب» می‌شود و در روز پرداخت واقعی برمی‌گردد. بدون وام طلب بی‌بازده است.
+ *  • loan = «وام پل سود و تسویه»: (۱) در روز استحقاق دقیقاً به اندازهٔ طلب وام و سرمایه‌گذاری؛ پرداخت سود وام را تسویه می‌کند؛
+ *    بدهی هرگز از طلب بیشتر نمی‌شود (بهرهٔ مازاد از فروش سهام). (۲) ابطال ماهانهٔ q از NAV: بدون وام به‌اندازهٔ q نقد کنار گذاشته می‌شود؛
+ *    با وام، پرداخت به ابطال‌کننده تا رسیدن پول فروش (s روز، تسویهٔ T+n) با وام پل و هزینهٔ q·rb·s/365 در هر ماه. */
 function simulate(R, key, o) {
-  const c = R.configs[key], r = seriesOf(R, key), nm = R.mstart.length, n = R.dates.length, nav = new Float64Array(n).fill(NaN), Ls = new Float64Array(nm).fill(NaN);
-  let cur = 1;
+  const c = R.configs[key], r = seriesOf(R, key), dv = divOf(R, key), nm = R.mstart.length, n = R.dates.length;
+  const nav = new Float64Array(n).fill(NaN), Ls = new Float64Array(nm).fill(NaN), q = o.q || 0, loan = !!o.loan;
+  let V = 1, cash = 0, D = 0, rcv = 0, sD = 0, sR = 0, cnt = 0, interest = 0;
+  const sched = new Map();
   for (let j = o.j0; j < nm; j++) {
     const t0 = R.mstart[j], t1 = j + 1 < nm ? R.mstart[j + 1] : n;
     let L = 1;
-    if (o.mode === 'fixed') L = o.L; else if (o.mode === 'beta') { const be = c.beta[j]; L = be > 0 ? Math.min(1.5, Math.max(0.7, 1 / be)) : 1; }
+    if (o.mode === 'fixed') L = Math.min(o.L, 1); else if (o.mode === 'beta') { const be = c.beta[j]; L = be > 0 ? Math.min(1, Math.max(0.7, 1 / be)) : 1; }
+    if (!loan && q > 0) L = Math.min(L, 1 - q);                         // بدون وام پل: ذخیرهٔ نقد برای ابطال
     Ls[j] = L;
+    if (D > rcv) { V -= D - rcv; D = rcv; }                            // سقف بدهی = طلب سود
+    let E = V + cash;
+    if (loan && q > 0 && j > o.j0) { const ci = q * E * o.rb * (o.s || 0) / 365; E -= ci; interest += ci; }
     const to = j === o.j0 ? 0.5 : c.to[j];
-    cur -= to * L * cur * o.cost / 1e4;
-    let V = L * cur, D = Math.max(L - 1, 0) * cur, cash = L < 1 ? cur - V : 0, prev = R.sig[j];
+    E -= to * L * E * o.cost / 1e4;
+    V = L * E; cash = E - V;
+    let prev = R.sig[j];
     for (let t = t0; t < t1; t++) {
       const gap = R.dates[t] - prev; prev = R.dates[t];
-      V *= 1 + r[t]; D *= 1 + o.rb * gap / 365; cash *= 1 + o.rc * gap / 365;
-      cur = V + cash - D; nav[t] = cur;
+      if (D > 0) { const d0 = D; D *= 1 + o.rb * gap / 365; interest += D - d0; }
+      cash *= 1 + o.rc * gap / 365;
+      const paid = sched.get(t) || 0; sched.delete(t);
+      let ytot = 0; const ev = dv.get(t);
+      if (ev) for (const [p, y] of ev) { const A = y * V; sched.set(p, (sched.get(p) || 0) + A); rcv += A; ytot += y; if (loan) D += A; }
+      V *= 1 + r[t] - (loan ? 0 : ytot);
+      if (paid) { rcv -= paid; if (loan) D -= paid; else V += paid; }
+      if (D > rcv) { V -= D - rcv; D = rcv; }                          // سقف روزانه: بدهی پل ≤ طلب سود (بهرهٔ مازاد از فروش سهام)
+      const nv = V + cash + rcv - D; nav[t] = nv; sD += D / nv; sR += rcv / nv; cnt++;
     }
   }
-  return { nav, t0: R.mstart[o.j0], Ls };
+  return { nav, t0: R.mstart[o.j0], Ls, debtAvg: cnt ? sD / cnt : 0, rcvAvg: cnt ? sR / cnt : 0, interest, hasDiv: dv.size > 0 };
 }
 const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
 function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / (a.length - 1)); }
@@ -73,7 +100,7 @@ const f = (x, d = 1) => x == null || x !== x ? '—' : fmt(x, d);
 const sg = (x, d = 1) => x == null || x !== x ? '—' : sgn(x, d);
 const tip = (t, d) => ` data-tip="${esc(t)}"${d ? ` data-doc="${d}"` : ''}`;    // d: نشانی بند سند (ui/docs.js)
 // بندهای سند این صفحه (فصل ۳ §۳٫۵ و فصل‌های ۶، ۷ و ۱۴)
-const DOC = { samp: '3:3.5/نمونهٔ کوچک و وام', build: '3:3.5/همتاساز', enh: '3:3.5/شاخص بهبودیافته', te: '3:3.5/خطای ردیابی', act: '7:7.4', ret: '7:7.3', cost: '6:6.1', cap: '14:14.2.6', plan: '5:5.8' };
+const DOC = { samp: '3:3.5/نمونهٔ کوچک و وام', build: '3:3.5/همتاساز', loan: '3:3.5/وام پل', enh: '3:3.5/شاخص بهبودیافته', te: '3:3.5/خطای ردیابی', act: '7:7.4', ret: '7:7.3', cost: '6:6.1', cap: '14:14.2.6', plan: '5:5.8' };
 const MTIP = {
   top: 'N بزرگ‌ترین: N سهم با بیشترین ارزش بازار، با وزن ارزش بازارشان (نرمال‌شده). ساده، کم‌گردش و قابل توضیح؛ ولی صنایعی که سهم بزرگ ندارند جا می‌مانند و بتا معمولاً بالای ۱ است.',
   strat: 'طبقه‌ای (صنعت): تعداد سهم هر صنعت از N به نسبت وزن آن صنعت در شاخص، و درون هر صنعت بزرگ‌ترین‌ها؛ وزن‌ها ارزش بازار نرمال‌شده. همهٔ صنایع بزرگ حاضرند، ولی در دادهٔ ما TE آن تقریباً هم‌اندازهٔ «N بزرگ‌ترین» است (فصل ۳ §۳٫۵، جدول).',
@@ -85,7 +112,7 @@ const jyear = d => +dj(d).split('/')[0], jmonth = d => +dj(d).split('/')[1];
 const METHODS = { top: 'N بزرگ‌ترین', strat: 'طبقه‌ای (صنعت)', opt: 'بهینه‌سازی TE' };
 const LIQN = { 0: ['بدون فیلتر', 'همهٔ واجدان بورس نامزد نگهداری‌اند.'], 1: ['ملایم', 'نماد باید دست‌کم ۵۰ روز از ۶۳ روز اخیر معامله شده و میانهٔ ارزش معاملاتش بالاتر از صدک ۲۰ واجدان باشد.'],
   2: ['متوسط', 'دست‌کم ۵۶ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۴۰ واجدان.'], 3: ['سخت', 'دست‌کم ۶۰ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۶۰ واجدان.'] };
-const S = { method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, loan: 20, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 500 };
+const S = { method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, br: false, q: 0, s: 3, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 500 };
 let R = null, R0 = null, host = null, last = null;
 
 function mount(el) {
@@ -98,7 +125,7 @@ function mount(el) {
   const dateOpts = `<option value="live">امروز (زنده) · ${esc(R.asof)}</option>` + R.sig.map((d, j) => `<option value="${j}">${dj(d)}</option>`).reverse().join('');
   el.innerHTML = `
   <section class="panel rb-panel" style="--lg:var(--lg-a)">
-    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('آزمایشگاه همتا: «شاخص كل» را با N سهم بسازید، فقط نمادهای نقدشونده را راه بدهید، بخشی را نقد نگه دارید یا وام بگیرید، و ببینید اگر از هر ماه گذشته شروع کرده بودید تا امروز چقدر از شاخص فاصله می‌گرفتید. همه‌چیز در مرورگر از سری‌های ازپیش‌ساختهٔ پایتون (tools/build_replica_panel.py) حساب می‌شود: هر ماه ریبالانس، اجرا از روز بعد، بازده کل.', DOC.build)}>همتای خودتان را بسازید و بسنجید</span><span class="chip" id="rb-chip"${tip('نخستین ماه سیگنال تا آخرین روز داده، و تعداد ریبالانس‌های ماهانه‌ای که در این بازه شبیه‌سازی شده است.', DOC.build)}></span></div>
+    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('آزمایشگاه همتا: «شاخص كل» را با N سهم بسازید، فقط نمادهای نقدشونده را راه بدهید، بخشی را نقد نگه دارید یا برای تأخیر پرداخت سود و تسویهٔ ابطال وام پل بگیرید، و ببینید اگر از هر ماه گذشته شروع کرده بودید تا امروز چقدر از شاخص فاصله می‌گرفتید. همه‌چیز در مرورگر از سری‌های ازپیش‌ساختهٔ پایتون (tools/build_replica_panel.py) حساب می‌شود: هر ماه ریبالانس، اجرا از روز بعد، بازده کل.', DOC.build)}>همتای خودتان را بسازید و بسنجید</span><span class="chip" id="rb-chip"${tip('نخستین ماه سیگنال تا آخرین روز داده، و تعداد ریبالانس‌های ماهانه‌ای که در این بازه شبیه‌سازی شده است.', DOC.build)}></span></div>
     <div class="rb-grid">
       <div class="rb-ctl">
         <div class="rb-g"><div class="rb-gt"${tip('گام اول: از میان نمادهای واجد بورس، کدام و چند سهم خریده شوند. هرچه N بیشتر، خطای ردیابی کمتر ولی تعداد سفارش و نیاز به نقدشوندگی بیشتر.', DOC.samp)}>۱ · نمونه</div>
@@ -106,12 +133,15 @@ function mount(el) {
           <label${tip('N: تعداد سهامی که واقعاً خریده می‌شود. خطای ردیابی با N تند پایین می‌آید و بعد به «کف خطا» نزدیک می‌شود (خطای خرید همهٔ واجدان در برابر شاخص رسمی، حدود ۱٫۴٪). برای انتخاب N، پاسخ پنل ۱ بالای صفحه را ببینید؛ توضیح هر گزینه در فهرست آمده است.', DOC.samp)}>تعداد سهام <select id="rb-n">${R.Ns.map(n => `<option data-tip="نمونهٔ ${n} سهمی: ${n < 30 ? 'ردیابی ضعیف (TE بالای ۴٪)؛ فقط برای سرمایهٔ خیلی کوچک.' : n < 80 ? 'سازش خطای ردیابی و هزینه (TE ≈ ۳ تا ۴٪ با بهینه‌سازی).' : 'نزدیک کف خطا (TE ≈ ۲٪ با بهینه‌سازی)؛ نیاز به نقدشوندگی بیشتر.'}">${n}</option>`).join('')}</select></label>
           <label${tip('فیلتر ورود به نمونه بر پایهٔ ۶۳ روز اخیر: چند روز معامله شده و میانهٔ ارزش معاملات روزانه در چه صدکی از واجدان است. هدف (وزن شاخص) عوض نمی‌شود، فقط نامزدها کم می‌شوند؛ پس TE کمی بالا می‌رود ولی همتا با سرمایهٔ بزرگ‌تر و بدون گیرکردن در صف ساخته می‌شود.', DOC.build)}>نقدشوندگی <span class="seg" id="rb-liq">${Object.keys(R.liq).map(q => `<button data-v="${q}" aria-pressed="false"${tip(LIQN[q][1])}>${LIQN[q][0]}</button>`).join('')}</span></label>
         </div>
-        <div class="rb-g"><div class="rb-gt"${tip('گام دوم: نسبت سهام به سرمایه L. ‏L = ۱ یعنی همهٔ پول در سهام؛ L < ۱ بخشی نقد (بازده و نوسان کمتر)؛ L > ۱ وام (بهره هر روز از ارزش کم می‌شود). L هر ماه در روز ریبالانس دوباره تنظیم می‌شود.', DOC.build)}>۲ · سرمایه: نقد یا وام</div>
-          <label${tip('نقد ثابت: درصدی از سرمایه بیرون از سهام (L < ۱). وام ثابت: درصدی وام و خرید سهام بیشتر (L > ۱). تراز بتا: هر ماه L = ۱/β که β بتای ۲۵۲ روزهٔ نمونه روی شاخص است (بُرش ۰٫۷ تا ۱٫۵)؛ نمونهٔ کوچک معمولاً β > ۱ دارد، پس تراز بتا بیشتر نقد نگه می‌دارد تا وام بگیرد. ارزش = L·سهام + نقد − بدهی.', DOC.build)}>نقد / وام <span class="seg" id="rb-mode">
-        <button data-v="none" aria-pressed="false"${tip('L = ۱: همهٔ سرمایه در سهام نمونه، بدون نقد و وام. مرجع مقایسهٔ دو حالت دیگر.', DOC.build)}>بدون</button><button data-v="cash" aria-pressed="false"${tip('L = ۱ − درصد نقد. نقد با «بازده نقد» رشد می‌کند. بتا و نوسان کم می‌شود ولی در بازار صعودی عقب می‌مانید؛ برای ورود و خروج وجوه صندوق مفید است.', DOC.build)}>نقد ثابت</button><button data-v="loan" aria-pressed="false"${tip('L = ۱ + درصد وام. وام با «نرخ وام» روزانه بهره می‌خورد. اگر بازده سهام از نرخ وام بیشتر باشد سود می‌دهد، ولی بتا و افت را بالا می‌برد. دسترسی و نرخ واقعی وام [تأیید لازم].', DOC.build)}>وام ثابت</button><button data-v="beta" aria-pressed="false"${tip('هر ماه L = ۱/β نمونه (بُرش ۰٫۷ تا ۱٫۵) تا حساسیت همتا به بازار حدود ۱ بماند. TE را کم می‌کند، ولی چون بتای نمونه معمولاً بالای ۱ است بخشی نقد می‌ماند و بازده کمی پایین می‌آید.', DOC.build)}>تراز بتا</button></span></label>
-          <label id="rb-amt-l"${tip('درصد نقد (یا وام) نسبت به کل سرمایه؛ مثلاً ۲۰٪ وام یعنی به‌ازای هر ۱۰۰ ریال سرمایه ۱۲۰ ریال سهام. حداکثر ۵۰٪.', DOC.build)}><span id="rb-amt-t">مقدار ٪</span> <input type="number" id="rb-amt" value="10" min="0" max="50" step="5"></label>
-          <label${tip('نرخ سادهٔ سالانهٔ وام؛ بهره هر روز به نسبت روزهای تقویمی به بدهی اضافه و از ارزش همتا کم می‌شود. پیش‌فرض ۳۰٪ فرضی است [تأیید لازم]؛ نرخ اعتبار کارگزاری یا تأمین مالی خودتان را بگذارید.', DOC.build)}>نرخ وام ٪ <input type="number" id="rb-rb" value="30" min="0" max="80" step="1"></label>
-          <label${tip('بازده سالانهٔ بخش نقد، مثلاً صندوق درآمد ثابت [راستی‌آزمایی نشده]؛ صفر یعنی نقد بی‌بهره. فقط وقتی L < ۱ است اثر دارد.', DOC.build)}>بازده نقد ٪ <input type="number" id="rb-rc" value="0" min="0" max="80" step="1"></label>
+        <div class="rb-g"><div class="rb-gt"${tip('گام دوم: چه سهمی از سرمایه در سهام باشد (L ≤ ۱؛ وام برای اهرم مجاز نیست) و آیا وام پل برای تأخیر پرداخت سود نقدی و تسویهٔ ابطال گرفته شود. سود نقدی همیشه با تأخیر واقعی پرداخت حساب می‌شود: روز استحقاق از سهام جدا و «طلب» می‌شود و تا روز پرداخت (فارابی/fundai، وگرنه ۹۶ روز) بی‌بازده می‌ماند.', DOC.loan)}>۲ · نقد و وام پل</div>
+          <label${tip('L = سهم سهام از سرمایهٔ قابل‌سرمایه‌گذاری، هر ماه در روز ریبالانس. «تمام» یعنی L = ۱؛ «نقد ثابت» L = ۱ − نقد؛ «تراز بتا» L = ۱/β نمونه (بُرش ۰٫۷ تا ۱): نمونهٔ کوچک معمولاً β > ۱ دارد، پس بخشی نقد می‌ماند. هیچ گزینه‌ای L > ۱ (وام برای خرید بیشتر) نمی‌دهد.', DOC.build)}>سهم سهام <span class="seg" id="rb-mode">
+        <button data-v="none" aria-pressed="false"${tip('L = ۱: همهٔ سرمایه (جز طلب سود) در سهام نمونه.', DOC.build)}>تمام</button><button data-v="cash" aria-pressed="false"${tip('L = ۱ − درصد نقد. نقد با «بازده نقد» رشد می‌کند. بتا و نوسان کم می‌شود ولی در بازار صعودی عقب می‌مانید.', DOC.build)}>نقد ثابت</button><button data-v="beta" aria-pressed="false"${tip('هر ماه L = ۱/β نمونه، بُرش ۰٫۷ تا ۱ (فقط نقد، هرگز وام) تا حساسیت همتا به بازار به ۱ نزدیک شود.', DOC.build)}>تراز بتا (فقط نقد)</button></span></label>
+          <label id="rb-amt-l"${tip('درصد سرمایه که نقد نگه داشته می‌شود (L = ۱ − این عدد). حداکثر ۵۰٪.', DOC.build)}><span id="rb-amt-t">نقد ٪</span> <input type="number" id="rb-amt" value="10" min="0" max="50" step="5"></label>
+          <label${tip('وام فقط برای دو کار، نه اهرم: (۱) پل سود نقدی: روز استحقاق دقیقاً به اندازهٔ طلب سود وام گرفته و در سهام می‌ماند؛ روز پرداخت، سود وام را تسویه می‌کند. بدهی هرگز از طلب سود بیشتر نمی‌شود و بهرهٔ اضافه از فروش سهام پرداخت می‌شود. (۲) پل تسویهٔ ابطال: پول ابطال‌کننده پیش از رسیدن وجه فروش (T+n) پرداخت می‌شود. بدون وام، سود تا پرداخت بی‌بازده است و برای ابطال باید نقد کنار گذاشت.', DOC.loan)}>وام پل <span class="seg" id="rb-br"><button data-v="0" aria-pressed="false"${tip('بدون وام: طلب سود تا روز پرداخت بی‌بازده؛ ذخیرهٔ نقد به‌اندازهٔ ابطال ماهانه.', DOC.loan)}>بدون</button><button data-v="1" aria-pressed="false"${tip('وام پل سود نقدی و تسویه با نرخ وام؛ سقف وام = طلب سود + ابطال در حال تسویه.', DOC.loan)}>پل سود و تسویه</button></span></label>
+          <label${tip('ابطال (خروج سرمایه‌گذاران) هر ماه به درصد NAV. بدون وام همین‌قدر نقد بی‌بهره کنار گذاشته می‌شود؛ با وام پل، پرداخت ابطال تا رسیدن وجه فروش با وام انجام می‌شود (هزینه = ابطال × نرخ وام × روز تسویه ÷ ۳۶۵ در هر ماه). صفر یعنی بدون ورود و خروج وجوه.', DOC.loan)}>ابطال ماهانه ٪ <input type="number" id="rb-q" value="0" min="0" max="20" step="0.5"></label>
+          <label id="rb-s-l"${tip('فاصلهٔ تقویمی تا رسیدن وجه فروش سهام (تسویهٔ T+n؛ T+2 بوده است [تأیید لازم]) — مدت وام پل ابطال.', DOC.loan)}>روز تسویه <input type="number" id="rb-s" value="3" min="0" max="10" step="1"></label>
+          <label id="rb-rb-l"${tip('نرخ سادهٔ سالانهٔ وام پل؛ بهره هر روز به نسبت روزهای تقویمی به بدهی اضافه می‌شود. پیش‌فرض ۳۰٪ فرضی است [تأیید لازم]؛ نرخ اعتبار کارگزاری یا تأمین مالی صندوق را بگذارید. اگر نرخ از بازده بازار بیشتر باشد پل زیان می‌دهد.', DOC.loan)}>نرخ وام ٪ <input type="number" id="rb-rb" value="30" min="0" max="80" step="1"></label>
+          <label${tip('بازده سالانهٔ بخش نقد، مثلاً صندوق درآمد ثابت [راستی‌آزمایی نشده]؛ صفر یعنی نقد بی‌بهره. فقط وقتی نقد نگه داشته می‌شود اثر دارد.', DOC.build)}>بازده نقد ٪ <input type="number" id="rb-rc" value="0" min="0" max="80" step="1"></label>
         </div>
         <div class="rb-g"><div class="rb-gt"${tip('گام سوم: با چه هزینه‌ای و از چه تاریخی بسنجیم. نتیجه همیشه «از شروع تا امروز» است؛ جدول «اگر از سال‌های گذشته شروع می‌کردیم» در پنل ۳ همین را برای همهٔ سال‌ها نشان می‌دهد.', DOC.build)}>۳ · سنجش</div>
           <label${tip('هزینهٔ رفت‌وبرگشت (خرید + فروش) بر حسب واحد پایه؛ ۱۰۰ bp = ۱٪. هر ماه: هزینه = گردش یک‌طرفه × L × این عدد. کارمزد، مالیات فروش و لغزش قیمت را با هم بگیرید؛ پیش‌فرض همهٔ برنامه ۱۲۵ bp است [تأیید لازم].', DOC.cost)}>هزینه (bp) <input type="number" id="rbx-cost" value="125" min="0" step="5"></label>
@@ -142,13 +172,15 @@ function mount(el) {
   <details class="sam-fold panel" id="rb-enh-box"><summary${tip('پیشرفته: به‌جای کپی دقیق «شاخص كل»، هدف را آگاهانه عوض کنید (کم یا زیاد کردن صنعت، تیلت به یک معیار مثل کم‌نوسان، سقف وزن هر سهم، آمیختن با هم‌وزن) و با همان N سهم و روش بسازید. خروجی: هدف تازه چقدر از شاخص فاصله می‌گیرد و چه بازده اضافه‌ای داشته است.', DOC.enh)}><span class="lg-badge">4</span> شاخص بهبودیافته (پیشرفته): هدف را با تیلت و قید تغییر دهید</summary><div id="rb-enh"></div></details>`;
   const seg = (id, key, cb) => $(id).querySelectorAll('button').forEach(b => { b.onclick = () => { if (key !== 'mode') stale(); S[key] = key === 'liq' ? +b.dataset.v : b.dataset.v; cb && cb(); render(); }; });
   seg('rb-method', 'method'); seg('rb-liq', 'liq'); seg('rb-mode', 'mode');
+  $('rb-br').querySelectorAll('button').forEach(b => { b.onclick = () => { S.br = b.dataset.v === '1'; render(); }; });
+  $('rb-q').onchange = e => { S.q = Math.max(0, +e.target.value || 0); render(); }; $('rb-s').onchange = e => { S.s = Math.max(0, +e.target.value || 0); render(); };
   $('rb-dtabs').querySelectorAll('button').forEach(b => { b.onclick = () => {                 // زبانه‌های «جزئیات همین همتا»
     const port = b.dataset.t === 'port';
     $('rb-dtabs').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     $('rb-d-years').hidden = port; $('rb-d-port').hidden = !port; $('rb-ptools').hidden = !port;
   }; });
   $('rb-n').onchange = e => { stale(); S.N = +e.target.value; render(); };
-  $('rb-amt').onchange = e => { S[S.mode === 'loan' ? 'loan' : 'cash'] = +e.target.value; render(); };
+  $('rb-amt').onchange = e => { S.cash = +e.target.value; render(); };
   $('rb-rb').onchange = e => { S.rb = +e.target.value; render(); }; $('rb-rc').onchange = e => { S.rc = +e.target.value; render(); };
   $('rbx-cost').onchange = e => { S.cost = +e.target.value; render(); };
   $('rb-j0').onchange = e => { S.j0 = +e.target.value; render(); };
@@ -159,7 +191,7 @@ function mount(el) {
   setChip();
   render();
 }
-const opts = () => ({ mode: S.mode === 'none' ? 'none' : S.mode === 'beta' ? 'beta' : 'fixed', L: S.mode === 'cash' ? 1 - S.cash / 100 : S.mode === 'loan' ? 1 + S.loan / 100 : 1, rb: S.rb / 100, rc: S.rc / 100, cost: S.cost, j0: S.j0 });
+const opts = () => ({ mode: S.mode === 'none' ? 'none' : S.mode === 'beta' ? 'beta' : 'fixed', L: S.mode === 'cash' ? 1 - S.cash / 100 : 1, loan: S.br, q: S.q / 100, s: S.s, rb: S.rb / 100, rc: S.rc / 100, cost: S.cost, j0: S.j0 });
 const curKey = () => R === R0 ? keyOf(S.method, S.N, S.liq) : 'enh';
 const stale = () => { if (R !== R0) { R = R0; if (root.SIM_ENH_STALE) root.SIM_ENH_STALE(); } };
 root.SIM_RB_API = { set(Rx) { R = Rx || R0; if (host) render(); }, state: () => ({ method: S.method, N: S.N, liq: S.liq }) };
@@ -169,8 +201,9 @@ function render() {
   if (!host) return;
   setChip();
   ['rb-method', 'rb-liq', 'rb-mode'].forEach(id => $(id).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v) === String({ 'rb-method': S.method, 'rb-liq': S.liq, 'rb-mode': S.mode }[id]))));
-  $('rb-amt-l').style.display = S.mode === 'cash' || S.mode === 'loan' ? '' : 'none';
-  if (S.mode === 'cash' || S.mode === 'loan') { $('rb-amt-t').textContent = S.mode === 'cash' ? 'نقد ٪' : 'وام ٪'; $('rb-amt').value = S[S.mode]; $('rb-amt').max = S.mode === 'cash' ? 50 : 50; }
+  $('rb-amt-l').style.display = S.mode === 'cash' ? '' : 'none'; $('rb-amt').value = S.cash;
+  $('rb-br').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.v === '1') === S.br)));
+  $('rb-s-l').style.display = $('rb-rb-l').style.display = S.br ? '' : 'none';
   const o = opts(), key = curKey(), sim = simulate(R, key, o), m = metrics(R, sim), cv = curves(R, sim), c = R.configs[key], nm = R.mstart.length;
   last = { sim, m, cv };
   let sL = 0, sT = 0, cnt = 0; for (let j = S.j0; j < nm; j++) { sL += sim.Ls[j]; sT += j === S.j0 ? 0 : c.to[j]; cnt++; }
@@ -183,7 +216,9 @@ function render() {
     ['تفاوت تجمعی تا امروز', sg(m.td) + '٪', `به زبان پول: اگر از ${dj(R.sig[S.j0])} تا امروز (${f(yrs, 1)} سال) ۱۰۰ ریال در همتا و ۱۰۰ ریال در شاخص بود، همتا این‌قدر درصد بیشتر یا کمتر داشت: (رشد همتا ÷ رشد شاخص) − ۱. مثبت یعنی جلوتر از شاخص.`, DOC.build],
     ['بتا', f(m.beta, 2), 'شیب رگرسیون بازده روزانهٔ همتا روی شاخص: اگر شاخص ۱٪ بالا رود، همتا به‌طور متوسط β٪ بالا می‌رود. بالای ۱ یعنی پرنوسان‌تر از بازار (معمول در نمونهٔ کوچک)؛ نقد آن را پایین و وام بالا می‌برد.', DOC.act],
     ['همبستگی', f(m.corr, 3), 'همبستگی بازده روزانهٔ همتا و شاخص (۱ یعنی هم‌حرکت کامل). بالای ۰٫۹۹ یعنی تقریباً همهٔ حرکت روزانهٔ شاخص را دارید؛ هرچه پایین‌تر، TE بیشتر.', DOC.act]] : [];
-  const kp2 = [['میانگین L', f(sL / cnt, 2), 'میانگین L در ماه‌های آزمون: ۱ یعنی همه در سهام، زیر ۱ بخشی نقد، بالای ۱ وام. در «تراز بتا» خودکار تعیین می‌شود.', DOC.build], ['گردش ماهانهٔ یک‌طرفه', f(100 * sT / Math.max(cnt - 1, 1), 0) + '٪', 'گردش یک‌طرفه: نصف مجموع قدرمطلق تغییر وزن‌ها در هر ریبالانس، میانگین ماه‌ها (پیش از ضرب در L). هزینهٔ ماهانه ≈ این عدد × هزینهٔ رفت‌وبرگشت. «بهینه‌سازی TE» معمولاً گردش بیشتری از «N بزرگ‌ترین» دارد.', DOC.cost],
+  const kp2 = [['میانگین L', f(sL / cnt, 2), 'میانگین سهم سهام از سرمایهٔ قابل‌سرمایه‌گذاری در ماه‌های آزمون: ۱ یعنی همه در سهام، زیر ۱ بخشی نقد (نقد ثابت، تراز بتا یا ذخیرهٔ ابطال). هرگز بالای ۱ نیست.', DOC.build],
+    ['طلب سود میانگین', f(100 * sim.rcvAvg, 2) + '٪ NAV', sim.hasDiv ? 'میانگین سود نقدیِ تصویب‌شده و هنوز پرداخت‌نشده نسبت به NAV. بدون وام این مبلغ بی‌بازده است (اصطکاک تأخیر سود)؛ با وام پل همین مبلغ وام گرفته و سرمایه‌گذاری می‌شود.' : 'این هدف برنامهٔ پرداخت سود ندارد (شاخص بهبودیافته)؛ سود نقدی مانند بازده کل همان روز استحقاق سرمایه‌گذاری می‌شود.', DOC.loan],
+    ['وام پل میانگین', S.br ? f(100 * sim.debtAvg, 2) + '٪ NAV' : '—', 'میانگین بدهی پل نسبت به NAV؛ سقف آن همیشه طلب سود است. بهرهٔ کل پرداختی دورهٔ آزمون: ' + f(100 * sim.interest, 2) + '٪ سرمایهٔ اولیه.', DOC.loan], ['گردش ماهانهٔ یک‌طرفه', f(100 * sT / Math.max(cnt - 1, 1), 0) + '٪', 'گردش یک‌طرفه: نصف مجموع قدرمطلق تغییر وزن‌ها در هر ریبالانس، میانگین ماه‌ها (پیش از ضرب در L). هزینهٔ ماهانه ≈ این عدد × هزینهٔ رفت‌وبرگشت. «بهینه‌سازی TE» معمولاً گردش بیشتری از «N بزرگ‌ترین» دارد.', DOC.cost],
     ['ظرفیت امروز (میلیارد ریال)', f(capNow, 0), 'بزرگ‌ترین سرمایه‌ای که پرتفوی امروز را در یک روز می‌سازد، اگر از هر نماد بیش از ۱۰٪ ارزش معاملات روزانه‌اش (میانهٔ ۶۳ روز) نخرید؛ محدودکننده کم‌نقدشونده‌ترین نماد نسبت به وزنش است. برای سرمایهٔ بزرگ‌تر، فیلتر نقدشوندگی را سخت‌تر کنید یا ساخت را چندروزه ببینید.', DOC.cap],
     ['پوشش وزن شاخص (آخرین ماه)', f(100 * covB, 0) + '٪', 'چند درصد از وزن «شاخص كل» در سهام نمونه است. مثلاً ۷۰٪ یعنی ۳۰٪ از شاخص (معمولاً سهام کوچک‌تر) اصلاً خریده نشده و روش انتخاب باید با وزن‌دهی جبرانش کند.', DOC.build]];
   const kpiHtml = a => a.map(([k, v, t, d]) => `<div class="kpi"${tip(t, d || DOC.build)}><div class="k"${tip(t, d || DOC.build)}>${k}</div><div class="v num">${v}</div></div>`).join('');
@@ -191,8 +226,8 @@ function render() {
   const MAIN = new Set(['TE در برابر شاخص رسمی', 'فاصلهٔ بازده سالانه (واحد درصد)', 'تفاوت تجمعی تا امروز', 'ظرفیت امروز (میلیارد ریال)']), all = [...kp, ...kp2];
   $('rb-kpi').innerHTML = kpiHtml(all.filter(x => MAIN.has(x[0]))); $('rb-kpi2').innerHTML = kpiHtml(all.filter(x => !MAIN.has(x[0])));
   if (m) {
-    const ov = S.mode === 'none' ? 'بدون وام و نقد' : S.mode === 'cash' ? `${S.cash}٪ نقد` : S.mode === 'loan' ? `${S.loan}٪ وام` : 'تراز بتا';
-    $('rbx-read').innerHTML = `<span><b${tip('جمع‌بندی خودکار همین تنظیمات به زبان ساده؛ با هر تغییر دوباره نوشته می‌شود.', DOC.build)}>خوانش</b> اگر از ${dj(R.sig[S.j0])} همتایی با ${S.N} سهم (${METHODS[S.method]}، نقدشوندگی ${LIQN[S.liq][0]}، ${ov}) ساخته بودیم، تا امروز (${f(yrs, 1)} سال) ارزش همتا نسبت به شاخص رسمی ${sg(m.td)}٪ تفاوت داشت و خطای ردیابی سالانه ${f(m.te, 1)}٪ بود.</span><span><b${tip('فرض‌های شبیه‌سازی: بازده کل (سود نقدی روز استحقاق دوباره سرمایه‌گذاری می‌شود)، ریبالانس پایان ماه شمسی و اجرا روز بعد، بدون صف خرید و فروش و حد نوسان. این‌ها نتیجه را کمی خوش‌بینانه می‌کنند.', DOC.build)}>فرض</b> بازده کل، ریبالانس پایان ماه جلالی، اجرا روز بعد، بدون صف و حد نوسان؛ نرخ وام ${S.rb}٪ و هزینه ${S.cost}bp [تأیید لازم].</span>`;
+    const ov = (S.mode === 'none' ? 'تمام در سهام' : S.mode === 'cash' ? `${S.cash}٪ نقد` : 'تراز بتا (فقط نقد)') + (S.br ? '، با وام پل سود و تسویه' : '، بدون وام') + (S.q > 0 ? `، ابطال ماهانه ${S.q}٪` : '');
+    $('rbx-read').innerHTML = `<span><b${tip('جمع‌بندی خودکار همین تنظیمات به زبان ساده؛ با هر تغییر دوباره نوشته می‌شود.', DOC.build)}>خوانش</b> اگر از ${dj(R.sig[S.j0])} همتایی با ${S.N} سهم (${METHODS[S.method]}، نقدشوندگی ${LIQN[S.liq][0]}، ${ov}) ساخته بودیم، تا امروز (${f(yrs, 1)} سال) ارزش همتا نسبت به شاخص رسمی ${sg(m.td)}٪ تفاوت داشت و خطای ردیابی سالانه ${f(m.te, 1)}٪ بود.</span><span><b${tip('فرض‌های شبیه‌سازی: سود نقدی با تأخیر واقعی پرداخت (بدون وام تا روز پرداخت بی‌بازده؛ با وام پل سرمایه‌گذاری‌شده با هزینهٔ بهره)، ریبالانس پایان ماه شمسی و اجرا روز بعد، بدون صف خرید و فروش و حد نوسان. نبود صف و حد نوسان نتیجه را کمی خوش‌بینانه می‌کند.', DOC.build)}>فرض</b> بازده کل، ریبالانس پایان ماه جلالی، اجرا روز بعد، بدون صف و حد نوسان؛ نرخ وام ${S.rb}٪ و هزینه ${S.cost}bp [تأیید لازم].</span>`;
   }
   drawCharts(cv, m);
   renderYears(o, key);
@@ -250,7 +285,7 @@ function drawCharts(cv, m) {
 /* ── اختلاف ماهانهٔ همتا با شاخص و تحلیل علت (۲۰۲۶-۱۰-۲۰؛ فصل ۳ §۳٫۵) ──
    هر ستون یک دورهٔ نگهداری (از ریبالانس تا ریبالانس بعد). اختلاف روزانه d = بازده همتا − بازده «شاخص كل» رسمی به چهار جزء جمع‌پذیر تقسیم می‌شود:
    انتخاب سهام = بازده سبد سهام همتا − همتای کامل (همهٔ واجدان با وزن بازار)؛ اعضا و داده = همتای کامل − شاخص رسمی؛
-   هزینه = گردش ریبالانس × L × هزینهٔ رفت‌وبرگشت؛ نقد/وام = باقی‌مانده (اثر L ≠ ۱ و بهرهٔ وام/نقد). جمع ماه = جمع ساده‌ی روزها (تقریب حسابی).
+   هزینه = گردش ریبالانس × L × هزینهٔ رفت‌وبرگشت؛ نقد، تأخیر سود و وام پل = باقی‌مانده (اثر L < ۱، طلب سود بی‌بازده یا بهرهٔ وام پل، بازده نقد). جمع ماه = جمع ساده‌ی روزها (تقریب حسابی).
    سهم هر نماد در «انتخاب سهام» = Σ روزها (وزن همتا − وزن شاخص، هر دو رانش‌یافته) × بازده نماد؛ از SIM_REPX (همان بازده‌های روزانهٔ شاخص بهبودیافته). */
 function monthParts() {
   if (!last || !last.sim) return [];
@@ -297,7 +332,7 @@ function ensureRepx(cb) {
   s.onload = () => { const q = ensureRepx.p; ensureRepx.p = null; q.forEach(f => f()); }; s.onerror = () => { ensureRepx.p = null; };
   document.head.appendChild(s);
 }
-const PART_FA = { samp: 'انتخاب سهام', memb: 'اعضا و داده', lev: 'نقد/وام', cost: 'هزینهٔ ریبالانس' };
+const PART_FA = { samp: 'انتخاب سهام', memb: 'اعضا و داده', lev: 'نقد، تأخیر سود و وام پل', cost: 'هزینهٔ ریبالانس' };
 function explain(m) {
   const parts = ['samp', 'memb', 'lev', 'cost'].map(k => [k, m[k]]).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   const [mk] = parts[0], dir = m.tot >= 0 ? 'جلو افتاد' : 'عقب ماند', pp = v => `<span dir="ltr" style="unicode-bidi:isolate">${sg(v, 2)}</span>`;
@@ -315,7 +350,7 @@ function explain(m) {
     else if (R !== R0) why += ' <span class="mute">(برای هدف تیلت‌شده جزئیات نماد محاسبه نمی‌شود.)</span>';
     else why += ' <span class="mute">(جزئیات نمادها در حال بارگذاری…)</span>';
   } else if (mk === 'memb') why = 'احتمالاً <b>تفاوت اعضا و داده</b>: حتی خرید همهٔ واجدان هم این ماه با شاخص رسمی فاصله داشت؛ معمولاً نماد تازه‌عرضه یا کم‌سابقه که در شاخص رسمی هست ولی هنوز واجد همتا نیست، بازگشایی پس از توقف، یا تفاوت ثبت سود و افزایش سرمایه.';
-  else if (mk === 'lev') why = `احتمالاً <b>${m.L < 1 ? 'نقد' : m.L > 1 ? 'وام' : 'نقد/وام'}</b>: L این ماه ${f(m.L, 2)} بود؛ ${m.L < 1 ? 'بخشی از سرمایه بیرون بازار بود و بازار ' + (m.tot < 0 ? 'بالا رفت' : 'پایین آمد') : 'وام اثر حرکت بازار را بزرگ کرد و بهرهٔ وام هم کم شد'}.`;
+  else if (mk === 'lev') why = `احتمالاً <b>${m.L < 1 ? 'نقد' : S.br ? 'وام پل سود' : 'تأخیر پرداخت سود'}</b>: L این ماه ${f(m.L, 2)} بود؛ ${m.L < 1 ? 'بخشی از سرمایه بیرون بازار بود و بازار ' + (m.tot < 0 ? 'بالا رفت' : 'پایین آمد') : S.br ? 'طلب سود با وام سرمایه‌گذاری بود و بهرهٔ وام پل کسر شد' : 'سود تصویب‌شده تا روز پرداخت بی‌بازده ماند در حالی که شاخص رسمی آن را همان روز استحقاق دوباره سرمایه‌گذاری می‌کند'}.`;
   else why = 'احتمالاً <b>هزینهٔ ریبالانس</b>: گردش سبد در ابتدای این دوره زیاد بود.';
   return `<div class="tt">دوره تا ${dj(m.end)}: همتا ${pp(m.tot)} واحد درصد از شاخص ${dir}</div>
     <div class="td">${why}</div>
