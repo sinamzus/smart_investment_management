@@ -146,7 +146,7 @@ details.panel.sam-fold { display: block; }
 .v-port .ctl[hidden] { display: none; }
 
 /* اختلاف دوره‌ای همتا با شاخص و راهنمای علت (ui/builder.js drawDiffBars) */
-.rb-bartip { position: absolute; z-index: 20; max-width: 460px; padding: 10px 12px; border-radius: 10px; background: var(--bg-panel); border: var(--hair) solid var(--line-strong); box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: var(--fs-xs); line-height: 1.7; pointer-events: none; }
+.rb-bartip { position: fixed; z-index: 1000; max-width: min(460px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; direction: rtl; text-align: right; padding: 10px 12px; border-radius: 10px; background: var(--bg-panel); border: var(--hair) solid var(--line-strong); box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: var(--fs-xs); line-height: 1.7; pointer-events: none; }
 .rb-bartip[hidden] { display: none; }
 .rb-bartip .tt { font-weight: 600; margin-bottom: 4px; } .rb-bartip .tf { margin-top: 6px; padding: 3px 6px; background: var(--bg-app); border-radius: 6px; } .rb-bartip .ts { margin-top: 4px; color: var(--tx-3); font-size: var(--fs-2xs); }
 .rb-bartip ul { margin: 4px 0 0; padding-inline-start: 16px; }

@@ -171,7 +171,14 @@ def discover() -> list[dict]:
 
 
 def save_instruments(rows: list[dict]) -> None:
+    """ادغام با فهرست موجود: ردیف‌های امروز MarketWatch جایگزین می‌شوند و ابزارهای قبلی که امروز نیستند
+    (حذف‌شده، تنزل‌یافته، متوقف) با همان مشخصات قبلی می‌مانند؛ بازنویسی کامل جهان ضدسوگیری بقا را کوچک می‌کرد."""
     DATA.mkdir(parents=True, exist_ok=True)
+    if INSTR.exists():
+        new = {r["ins_code"] for r in rows}
+        old = [r for r in csv.DictReader(INSTR.open(encoding="utf-8-sig")) if r["ins_code"] not in new]
+        print(f"{len(old)} ابزار قبلی که امروز در MarketWatch نیستند نگه داشته شد")
+        rows = rows + [{k: r.get(k, "") for k in ("ins_code", "symbol", "name", "market", "type", "base_volume")} for r in old]
     with INSTR.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["ins_code", "symbol", "name", "market", "type", "base_volume"])
         w.writeheader()

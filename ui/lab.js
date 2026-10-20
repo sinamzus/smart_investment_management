@@ -593,7 +593,7 @@ function selectSig(n) {
     ${z ? `<p><b>IC افق‌ها:</b> ۱ماه ${f1(z.ic, 3)} · ۳ماه ${f1(z.ic_3m, 3)} · ۶ماه ${f1(z.ic_6m, 3)} · ۱۲ماه ${f1(z.ic_12m, 3)} (زوال/ماندگاری سیگنال) &nbsp; <b>ماندگاری رتبه (خودهمبستگی ماه به ماه):</b> ${f1(z.rank_autocorr, 2)}</p>` : ''}`;
   $$$('#sg-detail a[data-s]').forEach(a => a.onclick = () => selectSig(a.dataset.s));
   if (d) { const base = ((z && z.q5_excess_ann != null) ? 0 : 0); sbars($('sg-bars'), d.ann_net.map((_, i) => 'D' + (i + 1)), d.ann_net, v => f1(v, 0), i => i === 9); $('sg-hz').innerHTML = `<tbody><tr><td>اسپیرمن رتبهٔ دهک با بازده</td><td class="n">${f1(spearmanArr(d.ann_net), 2)}</td></tr><tr><td>دهک ۱۰ − دهک ۱ (t)</td><td class="n ${tcls(d.spread_t)}">${f1(d.spread_t, 2)}</td></tr><tr><td>ماه‌های ارزیابی</td><td class="n">${d.n_months}</td></tr></tbody>`; } else { $('sg-bars').innerHTML = ''; $('sg-hz').innerHTML = ''; }
-  $('sg-dlin').innerHTML = '<span><b>دهک‌ها</b> بازده خالص (۱۰۰ bp)، خام (بدون خنثی‌سازی)، هم‌وزن</span>';
+  $('sg-dlin').innerHTML = '<span><b>دهک‌ها</b> بازده خالص (۱۲۵ bp)، خام (بدون خنثی‌سازی)، هم‌وزن</span>';
 }
 function renderCorr() {
   const names = L.corr.names, host = $('sg-corr'); const col = v => v == null ? 'transparent' : v >= 0 ? `rgba(47,194,123,${Math.min(Math.abs(v), 1) * .85})` : `rgba(240,97,95,${Math.min(Math.abs(v), 1) * .85})`;

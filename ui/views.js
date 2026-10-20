@@ -110,7 +110,7 @@ function mstats(x) {
   let c = 1, pk = 1, mdd = 0; x.forEach(r => { c *= 1 + r; pk = Math.max(pk, c); mdd = Math.min(mdd, c / pk - 1); });
   return { mu, sd, ann: (Math.pow(c, 12 / n) - 1) * 100, vol: sd * Math.sqrt(12) * 100, t: mu / Math.sqrt(v / n), ir: mu / sd * Math.sqrt(12), hit: x.filter(r => r > 0).length / n * 100, mdd: mdd * 100 };
 }
-function facNet(F, bp = 100) {
+function facNet(F, bp = 125) {
   const M = F.monthly, c = bp / 1e4, Q = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'ALL'], net = {}, to = {};
   Q.forEach(q => { net[q] = M[q].map((g, i) => g / 100 - (M.to[q][i] || 0) / 100 * c); to[q] = M.to[q].reduce((a, b) => a + (b || 0), 0); });
   const yrs = (Date.parse(M.end[M.end.length - 1]) - Date.parse(M.end[0])) / 864e5 / 365.25 + 1 / 12;
@@ -169,8 +169,8 @@ function initRep() {
     ['شاخص‌های صنعت', `${Q.comparable} قابل مقایسه · ${Q.n_corr99} با همبستگی ≥ ۰٫۹۹ · میانهٔ TE ${fmt(Q.median_te)}٪`, 'فصل ۳ §۳٫۴'],
     ['هزینهٔ تأخیر سود ۹۰ روزه (K / EW)', `${sgn(dvK.A.gap_pct_yr)}٪ / ${sgn(dvE.A.gap_pct_yr)}٪ در سال (بدون وام)`, 'فصل ۳ §۳٫۵'],
     ...(X.divlab.K.empirical ? [['هزینهٔ تأخیر سود با توزیع واقعی (K / EW)', `${sgn(X.divlab.K.empirical.A.gap_pct_yr)}٪ / ${sgn(X.divlab.EW.empirical.A.gap_pct_yr)}٪ در سال (بدون وام؛ ${X.divlab.payment_data.with_ex} رویداد، میانگین وزنی ${X.divlab.payment_data.k.mean} / ${X.divlab.payment_data.ew.mean} روز)`, 'فصل ۳ §۳٫۵']] : []),
-    ...[['مومنتوم ۱۲−۱ (بورس+فرابورس)', X.factor], ['کم‌نوسان ۲۵۲ روزه (بورس+فرابورس)', X.factor_lowvol], ...(X.factor_quality ? [['کیفیت (رهاورد؛ بورس+فرابورس)', X.factor_quality]] : [])].map(([n, G]) => { const N = facNet(G, 100), s = mstats(N.ex), a = mstats(N.net.Q5).ann - mstats(N.net.ALL).ann;
-      return [n + ' (خالص ۱۰۰ bp)', `پنجک ۵ نسبت به همه ${sgn(a, 1)}٪ در سال · t نیوی‌وست ${fmt(s.t, 2)} · ${Math.abs(s.t) >= 1.96 ? 'معنادار' : 'غیرمعنادار'} در سطح ۵٪`, 'فصل ۵']; })];
+    ...[['مومنتوم ۱۲−۱ (بورس+فرابورس)', X.factor], ['کم‌نوسان ۲۵۲ روزه (بورس+فرابورس)', X.factor_lowvol], ...(X.factor_quality ? [['کیفیت (رهاورد؛ بورس+فرابورس)', X.factor_quality]] : [])].map(([n, G]) => { const N = facNet(G, 125), s = mstats(N.ex), a = mstats(N.net.Q5).ann - mstats(N.net.ALL).ann;
+      return [n + ' (خالص ۱۲۵ bp)', `پنجک ۵ نسبت به همه ${sgn(a, 1)}٪ در سال · t نیوی‌وست ${fmt(s.t, 2)} · ${Math.abs(s.t) >= 1.96 ? 'معنادار' : 'غیرمعنادار'} در سطح ۵٪`, 'فصل ۵']; })];
   $('rp-sum').innerHTML = th([['نتیجه'], ['مقدار'], ['مرجع']]) + '<tbody>' + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="mute">${r[2]}</td></tr>`).join('') + '</tbody>';
   $('rp-text').innerHTML = `<b>وضعیت.</b> داده تا <span class="num">${D.meta.asof}</span>؛ ${fmt(D.meta.n_price_rows, 0)} ردیف قیمت. مرجع‌ها: «شاخص كل» و «كل (هم وزن)» رسمی. همتای سرمایه‌پذیر با بازتولید کامل و بدون سقف سرمایه/وزن؛ تنها شکاف ساختاری، تأخیر پرداخت سود است و با تأخیر یکسان L مدل می‌شود. فاکتورها با بک‌تست ماهانهٔ خالص هزینه و آزمون نیوی‌وست سنجیده می‌شوند؛ بازده‌ها با سال تقویمی سالانه شده‌اند. «چاپ» ← PDF.`;
   $('rp-lin-a').innerHTML = `<span><b>ساخت</b> <span class="num">${X.built}</span></span><span><b>داده</b> <span class="num">${D.meta.built}</span></span><span><b>قاعدهٔ سند</b> هر تغییر روش‌شناسی ← فصل + CHANGELOG (<code>CLAUDE.md</code>)</span>`;

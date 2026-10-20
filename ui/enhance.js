@@ -271,7 +271,7 @@ async function go(api) {
 function summary(R, cfg) {
   const E = root.SIM_RB, o = { mode: 'none', L: 1, rb: 0.3, rc: 0, cost: 0, j0: 0 };
   const nav = new Float64Array(R.dates.length); let v = 1; nav[0] = 1; for (let t = 1; t < nav.length; t++) { v *= 1 + R.target.r[t]; nav[t] = v; }
-  const mT = E.metrics(R, { nav, t0: 0 }), m = E.metrics(R, E.simulate(R, 'enh', { ...o, cost: 100 }));
+  const mT = E.metrics(R, { nav, t0: 0 }), m = E.metrics(R, E.simulate(R, 'enh', { ...o, cost: 125 }));
   // سری ماهانهٔ تفاضل هدف−شاخص برای t ساده
   const p = E.prep(R), mon = [];
   for (let j = 0; j < R.mstart.length; j++) { const a = R.mstart[j], e = j + 1 < R.mstart.length ? R.mstart[j + 1] : R.dates.length; let g = 1, h = 1; for (let t = a; t < e; t++) { g *= 1 + R.target.r[t]; h *= 1 + p.K[t]; } mon.push(g - h); }
@@ -282,7 +282,7 @@ function summary(R, cfg) {
     ['نسبت اطلاعات', f(mT.gap / mT.te, 2), 'بازده اضافی ÷ TE. بالای ۰٫۵ در ادبیات خوب است، ولی اینجا درون‌نمونه است.'],
     ['t تفاضل ماهانه', f(tstat, 2), 'آمارهٔ t میانگین تفاضل ماهانهٔ هدف−شاخص (ساده، بدون تصحیح چندگانگی). |t| < ۲ یعنی بی‌معنا؛ تیلت‌های آزموده‌شده را در Lab با Bonferroni/DSR بسنجید.'],
     ['گردش ماهانهٔ هدف', f(100 * tov, 1) + '٪', 'گردش یک‌طرفهٔ ماهانهٔ خریدن همهٔ هدف (پیش از نمونه‌گیری).'],
-    ['TE همتا در برابر شاخص', f(m.te, 2) + '٪', 'همتای N‌سهمی هدف در برابر «شاخص كل» (با هزینهٔ ۱۰۰bp، بدون اهرم).']];
+    ['TE همتا در برابر شاخص', f(m.te, 2) + '٪', 'همتای N‌سهمی هدف در برابر «شاخص كل» (با هزینهٔ ۱۲۵bp، بدون اهرم).']];
   $('en-kpi').innerHTML = kp.map(([k, v, t]) => `<div class="kpi"${tip(t)}><div class="k"${tip(t)}>${k}</div><div class="v num">${v}</div></div>`).join('');
   const t = cfg.tilt, parts = [];
   if (t.gamma !== 1) parts.push(`توان اندازه ${t.gamma}`); if (t.ew) parts.push(`آمیخته با هم‌وزن ${f(100 * t.ew, 0)}٪`); if (t.cap) parts.push(`سقف ${f(100 * t.cap, 0)}٪`); if (t.kappa) parts.push(`کم‌نوسان κ=${t.kappa}`);

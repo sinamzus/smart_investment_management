@@ -85,7 +85,7 @@ const jyear = d => +dj(d).split('/')[0], jmonth = d => +dj(d).split('/')[1];
 const METHODS = { top: 'N بزرگ‌ترین', strat: 'طبقه‌ای (صنعت)', opt: 'بهینه‌سازی TE' };
 const LIQN = { 0: ['بدون فیلتر', 'همهٔ واجدان بورس نامزد نگهداری‌اند.'], 1: ['ملایم', 'نماد باید دست‌کم ۵۰ روز از ۶۳ روز اخیر معامله شده و میانهٔ ارزش معاملاتش بالاتر از صدک ۲۰ واجدان باشد.'],
   2: ['متوسط', 'دست‌کم ۵۶ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۴۰ واجدان.'], 3: ['سخت', 'دست‌کم ۶۰ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۶۰ واجدان.'] };
-const S = { method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, loan: 20, rb: 30, rc: 0, cost: 100, j0: 0, pdate: 'live', aum: 500 };
+const S = { method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, loan: 20, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 500 };
 let R = null, R0 = null, host = null, last = null;
 
 function mount(el) {
@@ -114,7 +114,7 @@ function mount(el) {
           <label${tip('بازده سالانهٔ بخش نقد، مثلاً صندوق درآمد ثابت [راستی‌آزمایی نشده]؛ صفر یعنی نقد بی‌بهره. فقط وقتی L < ۱ است اثر دارد.', DOC.build)}>بازده نقد ٪ <input type="number" id="rb-rc" value="0" min="0" max="80" step="1"></label>
         </div>
         <div class="rb-g"><div class="rb-gt"${tip('گام سوم: با چه هزینه‌ای و از چه تاریخی بسنجیم. نتیجه همیشه «از شروع تا امروز» است؛ جدول «اگر از سال‌های گذشته شروع می‌کردیم» در پنل ۳ همین را برای همهٔ سال‌ها نشان می‌دهد.', DOC.build)}>۳ · سنجش</div>
-          <label${tip('هزینهٔ رفت‌وبرگشت (خرید + فروش) بر حسب واحد پایه؛ ۱۰۰ bp = ۱٪. هر ماه: هزینه = گردش یک‌طرفه × L × این عدد. کارمزد، مالیات فروش و لغزش قیمت را با هم بگیرید؛ برآورد پروژه ۱۲۵ bp است [تأیید لازم].', DOC.cost)}>هزینه (bp) <input type="number" id="rbx-cost" value="100" min="0" step="10"></label>
+          <label${tip('هزینهٔ رفت‌وبرگشت (خرید + فروش) بر حسب واحد پایه؛ ۱۰۰ bp = ۱٪. هر ماه: هزینه = گردش یک‌طرفه × L × این عدد. کارمزد، مالیات فروش و لغزش قیمت را با هم بگیرید؛ پیش‌فرض همهٔ برنامه ۱۲۵ bp است [تأیید لازم].', DOC.cost)}>هزینه (bp) <input type="number" id="rbx-cost" value="125" min="0" step="5"></label>
           <label${tip('فرض کنید همتا را در پایان این ماه شمسی خریده بودید. همهٔ اعداد (TE، فاصله، تفاوت تجمعی) از همین ماه تا آخرین روز داده حساب می‌شود. شروع‌های دیرتر کوتاه‌اند و نویز بیشتری دارند.', DOC.build)}>شروع از <select id="rb-j0">${startOpts}</select></label>
         </div>
       </div>
@@ -209,16 +209,41 @@ function chart(el, series, o) {
   let lastY = null; o.dates.forEach((d, i) => { const y = jyear(d); if (y !== lastY && jmonth(d) <= 1) { lastY = y; g += `<line x1="${X(i)}" x2="${X(i)}" y1="${pt}" y2="${H - pb}" stroke="var(--line)" stroke-width=".4"/><text x="${X(i)}" y="${H - 7}" text-anchor="middle" font-size="9" fill="var(--tx-3)">${y}</text>`; } });
   if (o.zero) g += `<line x1="${pl}" x2="${W - pr}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--tx-3)" stroke-width=".8"/>`;
   series.forEach(s => { let d = '', pen = false; s.v.forEach((v, i) => { if (v !== v) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(v).toFixed(1); pen = true; }); g += `<path d="${d}" fill="none" stroke="${s.c}" stroke-width="${s.w || 1.6}"${s.dash ? ' stroke-dasharray="4 3"' : ''}/>`; });
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block" data-n="${n}">${g}<rect class="hv" x="${pl}" y="${pt}" width="${W - pl - pr}" height="${H - pt - pb}" fill="transparent"/></svg>`;
-  const svg = el.firstChild;
-  svg.querySelector('.hv').onmousemove = e => { const r = svg.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.round(((e.clientX - r.left) / r.width * W - pl) / (W - pl - pr) * (n - 1)))); $('rb-hov').textContent = `${dj(o.dates[i])} · ` + series.map(s => `${s.t}: ${f(s.v[i], o.d == null ? 1 : o.d)}`).join(' · '); };
+  const xh = `<g class="xh" style="display:none;pointer-events:none"><line y1="${pt}" y2="${H - pb}" stroke="var(--tx-3)" stroke-width=".7" stroke-dasharray="3 3"/>${series.map(s => `<circle r="3.2" fill="${s.c}" stroke="var(--bg-panel)" stroke-width="1.2"/>`).join('')}</g>`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block" data-n="${n}">${g}${xh}<rect class="hv" x="${pl}" y="${pt}" width="${W - pl - pr}" height="${H - pt - pb}" fill="transparent"/></svg>`;
+  const svg = el.firstChild, hv = svg.querySelector('.hv'), xg = svg.querySelector('.xh'), dots = xg.querySelectorAll('circle'), tipEl = floatTip();
+  const dg = o.td != null ? o.td : o.d == null ? 1 : o.d;
+  // نشانگر: خط عمودی، نقطه روی هر سری و راهنمای شناور با تاریخ و مقدارها
+  hv.onmousemove = e => {
+    const r = svg.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.round(((e.clientX - r.left) / r.width * W - pl) / (W - pl - pr) * (n - 1))));
+    xg.style.display = ''; xg.querySelector('line').setAttribute('x1', X(i)); xg.querySelector('line').setAttribute('x2', X(i));
+    series.forEach((s, k) => { const v = s.v[i]; dots[k].style.display = v === v ? '' : 'none'; if (v === v) { dots[k].setAttribute('cx', X(i)); dots[k].setAttribute('cy', Y(v)); } });
+    $('rb-hov').textContent = `${dj(o.dates[i])} · ` + series.map(s => `${s.t}: ${f(s.v[i], dg)}`).join(' · ');
+    tipEl.innerHTML = `<div class="tt">${dj(o.dates[i])}</div>` + series.map(s => `<div><span style="display:inline-block;width:10px;height:3px;background:${s.c};vertical-align:middle;margin-inline-end:6px"></span>${s.t}: <b class="num" dir="ltr">${s.v[i] === s.v[i] ? f(s.v[i], dg) + (s.u || '') : '—'}</b></div>`).join('') + (o.extra ? o.extra(i) : '');
+    placeTip(tipEl, e);
+  };
+  hv.onmouseleave = () => { xg.style.display = 'none'; tipEl.hidden = true; };
+}
+// یک راهنمای شناور مشترک برای نمودارهای این صفحه؛ لایهٔ ثابت روی کل صفحه تا پنل‌ها یا اسکرول والد آن را نپوشانند
+function floatTip() {
+  let t = document.getElementById('rb-bartip');
+  if (!t) { t = document.createElement('div'); t.id = 'rb-bartip'; t.className = 'rb-bartip'; t.hidden = true; document.body.appendChild(t); document.addEventListener('scroll', () => { t.hidden = true; }, true); }
+  return t;
+}
+function placeTip(t, e) {
+  t.hidden = false;
+  const w = t.offsetWidth, h = t.offsetHeight, vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  t.style.left = Math.max(8, Math.min(e.clientX - w / 2, vw - w - 8)) + 'px';
+  t.style.top = (e.clientY - h - 14 >= 8 ? e.clientY - h - 14 : Math.min(e.clientY + 18, vh - h - 8)) + 'px';
 }
 function drawCharts(cv, m) {
   const dts = cv.idx.map(t => R.dates[t]);
   $('rb-ch1-t').innerHTML = 'رشد ۱۰۰ واحد (مقیاس لگاریتمی): <b style="color:var(--ch-1)">━ همتا</b> در برابر <b style="color:var(--warn)">━ «شاخص كل» رسمی (بازده کل)</b>';
-  chart($('rb-ch1'), [{ v: cv.k, c: 'var(--warn)', t: 'شاخص' }, { v: cv.a, c: 'var(--ch-1)', t: 'همتا', w: 1.8 }], { dates: dts, h: 210, d: 0, log: true });
+  chart($('rb-ch1'), [{ v: cv.k, c: 'var(--warn)', t: 'شاخص' }, { v: cv.a, c: 'var(--ch-1)', t: 'همتا', w: 1.8 }], { dates: dts, h: 210, d: 0, td: 1, log: true,
+    extra: i => cv.k[i] > 0 && cv.a[i] === cv.a[i] ? `<div class="ts">رشد ۱۰۰ واحد از شروع · همتا نسبت به شاخص: <b dir="ltr" class="${cv.a[i] >= cv.k[i] ? 'up' : 'down'}">${sg(100 * (cv.a[i] / cv.k[i] - 1))}٪</b></div>` : '' });
   $('rb-ch2-t').textContent = 'رشد نسبی همتا به شاخص (٪، خط پُر) و TE غلتان تا ۲۵۲ روز (از ۱۲۶ روز به بعد؛ خط‌چین قرمز)';
-  chart($('rb-ch2'), [{ v: cv.td, c: 'var(--ch-1)', t: 'تفاوت تجمعی' }, { v: cv.te, c: 'var(--down)', t: 'TE غلتان', dash: true, w: 1.2 }], { dates: dts, h: 150, d: 1, zero: true });
+  chart($('rb-ch2'), [{ v: cv.td, c: 'var(--ch-1)', t: 'رشد نسبی', u: '٪' }, { v: cv.te, c: 'var(--down)', t: 'TE غلتان', u: '٪', dash: true, w: 1.2 }], { dates: dts, h: 150, d: 1, td: 2, zero: true,
+    extra: () => '<div class="ts">رشد نسبی = (رشد همتا ÷ رشد شاخص) − ۱ از شروع؛ TE = انحراف معیار سالانهٔ اختلاف روزانه در ۲۵۲ روز اخیر.</div>' });
   drawDiffBars();
 }
 
@@ -306,13 +331,12 @@ function drawDiffBars() {
   [mx, mx / 2, 0, -mx / 2, -mx].forEach(v => { g += `<line x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${v === 0 ? 'var(--tx-3)' : 'var(--line)'}" stroke-width="${v === 0 ? 0.8 : 0.5}"/><text x="${pl - 6}" y="${Y(v) + 3}" text-anchor="end" font-size="9" fill="var(--tx-3)">${f(v, 1)}</text>`; });
   let lastY = null; ms.forEach((m, i) => { const y = jyear(m.end); if (y !== lastY && jmonth(m.end) <= 1) { lastY = y; g += `<text x="${pl + bw * (i + 0.5)}" y="${H - 7}" text-anchor="middle" font-size="9" fill="var(--tx-3)">${y}</text>`; } });
   ms.forEach((m, i) => { const y0 = Y(0), y1 = Y(m.tot); g += `<rect data-i="${i}" x="${pl + bw * i + bw * 0.12}" y="${Math.min(y0, y1)}" width="${Math.max(bw * 0.76, 1)}" height="${Math.max(Math.abs(y1 - y0), 0.8)}" fill="${m.tot >= 0 ? 'var(--up)' : 'var(--down)'}" opacity=".85"/>`; });
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block">${g}<rect class="hv" x="${pl}" y="${pt}" width="${W - pl - pr}" height="${H - pt - pb}" fill="transparent"/></svg><div class="rb-bartip" hidden></div>`;
-  const svg = el.firstChild, tipEl = el.querySelector('.rb-bartip');
-  el.style.position = 'relative';
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block">${g}<rect class="hv" x="${pl}" y="${pt}" width="${W - pl - pr}" height="${H - pt - pb}" fill="transparent"/></svg>`;
+  const svg = el.firstChild, tipEl = floatTip();
   const show = e => {
     const r = svg.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.floor(((e.clientX - r.left) / r.width * W - pl) / bw))), m = ms[i];
     svg.querySelectorAll('rect[data-i]').forEach(x => x.setAttribute('opacity', +x.dataset.i === i ? '1' : '.55'));
-    const paint = () => { tipEl.innerHTML = explain(m); tipEl.hidden = false; const x = e.clientX - r.left, w = tipEl.offsetWidth; tipEl.style.left = Math.max(0, Math.min(x - w / 2, r.width - w)) + 'px'; tipEl.style.top = (r.height + 4) + 'px'; };
+    const paint = () => { tipEl.innerHTML = explain(m); placeTip(tipEl, e); };
     paint();
     if (Math.abs(m.samp) >= Math.max(Math.abs(m.memb), Math.abs(m.lev), Math.abs(m.cost)) && !root.SIM_REPX && R === R0) ensureRepx(paint);
   };

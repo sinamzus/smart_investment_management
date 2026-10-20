@@ -3,7 +3,7 @@
 """بازسازی «شاخص كل» (ارزش‌وزن، بازده کل) با N سهم، با اهرم/وام اختیاری — فصل ۳ §۳٫۷.
 
     python tools/sampled_replica.py                         # جدول N × روش انتخاب × اهرم
-    python tools/sampled_replica.py --rate 0.30 --cost 100  # نرخ وام سالانه و هزینهٔ رفت‌وبرگشت (bp)
+    python tools/sampled_replica.py --rate 0.30 --cost 125  # نرخ وام سالانه و هزینهٔ رفت‌وبرگشت (bp)
 
 مراحل (هر پایان ماه جلالی، اجرا با بازده از روز بعد):
   ۱ وزن هدف b = ارزش بازار نمادهای واجد بورس ÷ مجموع (همان روش وزن «شاخص كل» رسمی: ارزش بازار کل، نه شناور آزاد).
@@ -181,7 +181,7 @@ def evaluate(s, K, Cfull):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rate", type=float, default=0.30, help="نرخ وام سالانه")
-    ap.add_argument("--cost", type=float, default=100.0, help="هزینهٔ رفت‌وبرگشت (bp)")
+    ap.add_argument("--cost", type=float, default=125.0, help="هزینهٔ رفت‌وبرگشت (bp؛ پیش‌فرض همهٔ برنامه ۱۲۵)")
     ap.add_argument("--ns", type=str, default=",".join(map(str, NS)))
     a = ap.parse_args()
     mk, K = load()

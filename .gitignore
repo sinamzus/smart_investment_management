@@ -9,3 +9,5 @@ data/derived/cache/
 # وضعیت اجرای دریافت/بازسازی (tools/update_pipeline.py) و فهرست نمادهای تغییرکرده: حالت همین ماشین، نه سند
 ui/data/update_status.js
 data/derived/refresh_codes.txt
+data/derived/recent_extra_codes.txt
+data/derived/all_extra_codes.txt
