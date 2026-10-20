@@ -693,6 +693,50 @@ def clamp_announce(E: pd.DataFrame, date_col: str = "date", fy_col: str = "fy") 
     return E
 
 
+def clamp_period(E: pd.DataFrame) -> pd.DataFrame:
+    """مثل clamp_announce برای دورهٔ میان‌دوره‌ای k ماهه: زمان دانستن ≥ فردای پایان همان دوره (fy − (۱۲ − k) ماه)."""
+    E = E.copy()
+    pe = [fy - pd.DateOffset(months=12 - int(k)) for fy, k in zip(E.fy, E.period)]
+    E["date"] = np.maximum(E.date.values.astype("datetime64[ns]"), (pd.DatetimeIndex(pe) + pd.Timedelta(days=1)).values.astype("datetime64[ns]"))
+    return E
+
+
+def ttm_parts(Q: pd.DataFrame, t, max_age_days: int = 540) -> pd.DataFrame:
+    """اجزای EPS دوازده ماه اخیر (TTM) هر نماد در روز t، فقط از اعلام‌های دانسته‌شده تا t (point-in-time).
+
+    EPS میان‌دوره‌ای رهاورد انباشته (از ابتدای سال مالی) است. برای پیشرفته‌ترین دورهٔ دانسته‌شده (FY, k):
+        k = 12:  TTM = EPS₁₂(FY)
+        k < 12:  TTM = EPS_k(FY) + EPS₁₂(FY−1) − EPS_k(FY−1)
+    از هر (نماد، FY، دوره) آخرین نسخهٔ اعلام‌شده تا t (مثلاً حسابرسی‌شده) به‌کار می‌رود. اگر جزء سال قبل دانسته نباشد،
+    آخرین EPS سالانهٔ دانسته‌شده جایگزین می‌شود (همان ep). اعلام کهنه‌تر از max_age_days کنار می‌رود.
+    خروجی: ستون‌های ins_code، eps، sign (+۱/−۱)، date (تاریخ اعلام هر جزء) و ttm (۱ اگر TTM واقعی، ۰ اگر جایگزین سالانه)."""
+    t = pd.Timestamp(t)
+    K = Q[Q.date <= t]
+    if not len(K):
+        return pd.DataFrame(columns=["ins_code", "eps", "sign", "date", "ttm"])
+    V = K.groupby(["ins_code", "fy", "period"], sort=False).tail(1)                     # آخرین نسخهٔ هر دوره
+    rows = []
+    for code, g in V.groupby("ins_code", sort=False):
+        g = g.sort_values(["fy", "period"])
+        top = g.iloc[-1]
+        if (t - top.date).days > max_age_days:
+            continue
+        fy, k = top.fy, int(top.period)
+        if k == 12:
+            rows.append((code, float(top.eps), 1, top.date, 1))
+            continue
+        prev = g[(g.fy < fy - pd.Timedelta(days=330)) & (g.fy > fy - pd.Timedelta(days=400))]
+        a12, ak = prev[prev.period == 12], prev[prev.period == k]
+        if len(a12) and len(ak):
+            rows += [(code, float(top.eps), 1, top.date, 1), (code, float(a12.iloc[-1].eps), 1, a12.iloc[-1].date, 1),
+                     (code, float(ak.iloc[-1].eps), -1, ak.iloc[-1].date, 1)]
+            continue
+        ann = g[g.period == 12]
+        if len(ann) and (t - ann.iloc[-1].date).days <= max_age_days:
+            rows.append((code, float(ann.iloc[-1].eps), 1, ann.iloc[-1].date, 0))
+    return pd.DataFrame(rows, columns=["ins_code", "eps", "sign", "date", "ttm"])
+
+
 def load_fund(cols, dates):
     """{کلید: DataFrame[روز × نماد]} آخرین مقدار سالانهٔ شناخته‌شده و {کلید}_std (انحراف معیار ۵ سال اخیر)؛ و EPS آخرین ۱۲ماهه."""
     f1, f2 = ROOT / "data/fundamentals/rahavard_long.csv", ROOT / "data/fundamentals/rahavard_eps.csv"
@@ -720,6 +764,9 @@ def load_fund(cols, dates):
         g["avail"] = g.avail.fillna(g.fy_end + pd.Timedelta(days=120)) + pd.Timedelta(days=1)
         out[key] = g.drop(columns=["sd"])
     out["_eps"] = E12.sort_values("date")
+    # EPS میان‌دوره‌ای انباشته (۳، ۶، ۹ و ۱۲ ماهه) برای TTM؛ زمان دانستن هر دوره ≥ فردای پایان همان دوره (ep_ttm)
+    Q = E[(E.kind == "midterm") & E.period.isin([3, 6, 9, 12])].copy()
+    out["_eps_q"] = clamp_period(Q).sort_values("date")
     # نمادهای بدون رهاورد: نسبت‌ها و EPS از کدال (tools/fetch_codal_fundamentals.py) اشتقاق می‌شود؛ مقیاس‌ها با رهاورد یکی است
     # (ROE/حاشیه به درصد؛ بدهی÷دارایی و گردش دارایی نسبت). جاری، پوشش بدهی از کدال ساخته نمی‌شود.
     C = bq.codal_base(set(L.ins_code))
@@ -790,7 +837,7 @@ _mk_fund("roe", "q_roe_stab", "ثبات سودآوری", "ROE stability", "من�
 _mk_fund("roe", "q_droe", "بهبود ROE", "ROE change", "ROE جاری − ROE سال قبل", "Piotroski (2000) ΔROA", diff=True)
 
 
-@signal("ep", "value", "بازده سود هر سهم (E/P)", "Earnings yield", "EPS آخرین ۱۲ماهه ÷ قیمت (EPS با نسبت تعداد سهام تعدیل می‌شود)", "Basu (1977)؛ Fama & French (1992)", needs="fund", window=540)
+@signal("ep", "value", "بازده سود هر سهم (E/P)", "Earnings yield", "EPS آخرین سال مالی کامل (سالانه، نه TTM) ÷ قیمت (EPS با نسبت تعداد سهام تعدیل می‌شود)؛ نسخهٔ دوازده ماه اخیر: ep_ttm", "Basu (1977)؛ Fama & French (1992)", needs="fund", window=540)
 def ep(mk, a):
     if not mk.fund:
         return None
@@ -814,6 +861,33 @@ def ep(mk, a):
         s0, s1 = mk.shares[j, i], mk.shares[a, i]
         adj = (s0 / s1) if (s0 > 0 and s1 > 0) else 1.0           # افزایش سرمایه پس از اعلام EPS آن را رقیق می‌کند
         out[i] = r.eps * adj / mk.close[a, i]
+    return out
+
+
+@signal("ep_ttm", "value", "بازده سود دوازده ماه اخیر (E/P، TTM)", "Earnings yield (TTM)", "EPS دوازده ماه اخیر ÷ قیمت: EPS انباشتهٔ آخرین دورهٔ میان‌دوره‌ای + EPS سالانهٔ قبل − همان دورهٔ سال قبل (ttm_parts)؛ هر جزء با نسبت تعداد سهام روز اعلامش تعدیل؛ بی‌داده ← EPS سالانه (رهاورد، سپس کدال)", "Basu (1977)؛ Fama & French (1992)", needs="fund", window=540)
+def ep_ttm(mk, a):
+    if not mk.fund or "_eps_q" not in mk.fund:
+        return None
+    t = mk.dates[a]
+    P = ttm_parts(mk.fund["_eps_q"], t)
+    Ec = mk.fund.get("_eps_codal")
+    if Ec is not None and len(Ec):                               # نمادهای فقط-کدال: EPS سالانه
+        ec = Ec[Ec.date <= t].groupby("ins_code").tail(1)
+        ec = ec[((t - ec.date).dt.days <= 540) & ~ec.ins_code.isin(set(P.ins_code))]
+        P = pd.concat([P, pd.DataFrame({"ins_code": ec.ins_code, "eps": ec.eps, "sign": 1, "date": ec.date, "ttm": 0})], ignore_index=True)
+    out = np.full(mk.k, np.nan)
+    pos = {c: i for i, c in enumerate(mk.cols)}
+    acc = {}
+    for r in P.itertuples():
+        i = pos.get(r.ins_code)
+        if i is None or not (mk.close[a, i] > 0) or r.eps != r.eps:
+            continue
+        j = min(int(mk.dates.searchsorted(r.date)), mk.n - 1)
+        s0, s1 = mk.shares[j, i], mk.shares[a, i]
+        adj = (s0 / s1) if (s0 > 0 and s1 > 0) else 1.0           # افزایش سرمایه پس از اعلام هر جزء آن را رقیق می‌کند
+        acc[i] = acc.get(i, 0.0) + r.sign * r.eps * adj
+    for i, e in acc.items():
+        out[i] = e / mk.close[a, i]
     return out
 
 
