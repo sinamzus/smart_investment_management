@@ -58,10 +58,40 @@ def classify_events(R: pd.DataFrame, sc: pd.DataFrame) -> pd.DataFrame:
         a = ev_dates.get(c)
         return a is not None and (np.abs((a - np.datetime64(d)).astype("timedelta64[D]").astype(int)) <= 7).any()
 
+    # سود نقدی = کاهش مبنا (f < ۱) بدون تغییر تعداد سهام در ±۷ روز، به شرط تأیید (ممیزی ۲۰۲۶-۱۰-۲۰؛ فصل ۰۲ §۲٫۴):
+    #   (۱) TSETMC خودش در ±۱۰ روز رویداد تعدیل ثبت کرده باشد (price_adjust.csv)؛ تغییر مبنای بی‌رویداد (۴۶۹ ردیف، بیشتر بهار ۲۰۲۰ و ۲۰۲۳،
+    #       میانهٔ ۰٫۸٪) بازنشانی قیمت مبنا است نه سود؛
+    #   (۲) افزایش مبنا (f > ۱؛ ۲۳۷ ردیف) هرگز سود نیست؛
+    #   (۳) «سود» بالای ۳۰٪ فقط با سود اعلام‌شده (فارابی، رهاورد، fundai) در ±۶۰ روز پذیرفته می‌شود؛ وگرنه احتمالاً افزایش سرمایهٔ ثبت‌نشده است.
+    # ردیف ردشده بازدهٔ کل (r_tr) را عوض نمی‌کند (همان مبنای TSETMC، سازگار با شاخص رسمی)؛ فقط در بازده سود (div_yield) و شاخص قیمت نمی‌آید.
+    pa = ROOT / "data/corporate_actions/price_adjust.csv"
+    adj_dates = {}
+    if pa.exists():
+        A = pd.read_csv(pa, dtype={"ins_code": str})
+        A["d"] = pd.to_datetime(A.dEven.astype(int).astype(str), format="%Y%m%d")
+        adj_dates = {c: g.d.values for c, g in A.groupby("ins_code")}
+    ann = {}
+    dm = ROOT / "data/corporate_actions/dividend_events_merged.csv"
+    if dm.exists():
+        M = pd.read_csv(dm, dtype={"ins_code": str})
+        M = M[M[["farabi_dps", "rv_dps", "fd_dps"]].max(axis=1) > 0]
+        ann = {c: pd.to_datetime(g.ex_date).values for c, g in M.groupby("ins_code")}
+
+    def within(tab, c, d, days):
+        a = tab.get(c)
+        return a is not None and (np.abs((a - np.datetime64(d)).astype("timedelta64[D]").astype(int)) <= days).any()
+
     adj = R[(R.f - 1).abs() > 1e-3]
     cap = pd.Series([near(c, d) for c, d in zip(adj.ins_code, adj.date)], index=adj.index)
+    cand = adj[~cap & (adj.f < 1)]
+    conf = pd.Series([within(adj_dates, c, d, 10) if adj_dates else True for c, d in zip(cand.ins_code, cand.date)], index=cand.index)
+    big = (1 - cand.f) > 0.30
+    big_ok = pd.Series([within(ann, c, d, 60) for c, d in zip(cand.ins_code, cand.date)], index=cand.index)
+    keep = conf & (~big | big_ok)
     R["is_dividend"] = False
-    R.loc[cap[~cap].index, "is_dividend"] = True
+    R.loc[keep[keep].index, "is_dividend"] = True
+    print(f"سود نقدی: {int(keep.sum())} ردیف؛ رد شد: افزایش مبنا {int((~cap & (adj.f > 1)).sum())}، بدون تعدیل TSETMC {int((~conf).sum())}، "
+          f"بالای ۳۰٪ بدون سود اعلام‌شده {int((conf & big & ~big_ok).sum())}")
     R["r_tr"] = R.r
     R["r_pr"] = np.where(R.is_dividend, R.pClosing / R.prevC - 1, R.r)
     return fix_unadjusted_capital_events(R, sc)

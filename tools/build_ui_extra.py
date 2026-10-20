@@ -245,8 +245,10 @@ def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
             d_ -= 1
         return d_
 
+    D = 1                                   # تأخیر اجرا: سیگنال در بستهٔ a، خرید در بستهٔ روز بعد (همان قرارداد Lab؛ ممیزی ۲۰۲۶-۱۰-۲۰)
+
     def exec_day(a_):
-        e_ = a_ + 1
+        e_ = a_ + D
         while e_ < len(dates) - 1 and not mopen[e_] and e_ - a_ < 90:
             e_ += 1
         return e_
@@ -261,7 +263,7 @@ def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
         if a < 252 + 21 or a < start - 1:
             continue
         i1, i0 = (a + 1 - 21, a + 1 - 252) if signal in ("mom", "quality") else (a + 1, a + 1 - 252)   # mom: [t−252, t−21)؛ lowvol: [t−252, t)؛ quality: همان پنجرهٔ قیمتی برای واجدیت
-        ok = ((have[i1] - have[i0]) >= 0.8 * (i1 - i0)) & ((nz[i1] - nz[i0]) >= 0.5 * (i1 - i0)) & ~np.isnan(X[a + 1])   # بدون شرط پایان دوره (فصل ۱۴ §۱۴٫۲٫۱)
+        ok = ((have[i1] - have[i0]) >= 0.8 * (i1 - i0)) & ((nz[i1] - nz[i0]) >= 0.5 * (i1 - i0))   # بدون شرط داده پس از روز اجرا (نگاه به آینده؛ فصل ۱۴ §۱۴٫۲٫۱)
         ok &= ~np.isnan(X[a]) & (V[last_open(a)] > 0) & (V[exec_day(a)] > 0)   # معامله در روز سیگنال و روز اجرا؛ تعطیلی سراسری ⇒ روز بازگشایی (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، A2)
         if signal == "quality":
             if dates[a] not in qscore.index:
@@ -281,9 +283,13 @@ def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
         groups = np.array_split(order, 5)
         holds[a] = {f"Q{k+1}": g for k, g in enumerate(groups)}
         holds[a]["ALL"] = idx
+        lo_, hi_ = a + 1 + D, min(b + 1 + D, len(dates))
         for q, g in holds[a].items():
-            seg = X[a + 1:b + 1][:, g]
-            port[q][a + 1:b + 1] = np.nanmean(seg, axis=1)
+            seg = X[lo_:hi_][:, g]
+            # منحنی روزانه با خرید و نگهداری درون ماه (وزن‌ها رانش می‌کنند)، همان قرارداد آمار ماهانه؛ پیش‌تر میانگین ساده‌ی روزانه
+            # یعنی ریبالانس روزانه بود و منحنی با جدول آمار نمی‌خواند (ممیزی ۲۰۲۶-۱۰-۲۰)
+            cv = np.cumprod(1 + np.nan_to_num(seg), axis=0).mean(axis=1)
+            port[q][lo_:hi_] = cv / np.concatenate([[1.0], cv[:-1]]) - 1
             names[q].append(len(g))
             # گردش یک‌طرفهٔ واقعی: ½ Σ|وزن هدف − وزن رانش‌یافتهٔ دورهٔ قبل|
             w_new = np.zeros(X.shape[1]); w_new[g] = 1 / len(g)
@@ -296,7 +302,7 @@ def factor(R, signal: str = "mom", qscore: "pd.DataFrame | None" = None):
             wd = np.zeros(X.shape[1]); wd[g] = w_new[g] * grow
             prev[q] = wd / wd.sum() if wd.sum() > 0 else w_new
             mret[q].append(float(grow.mean() - 1))          # خرید و نگهداری در ماه (وزن‌ها رانش می‌کنند)
-        mret_end.append(dates[min(b, len(dates) - 1)]); mret_start.append(dates[a + 1])
+        mret_end.append(dates[min(b + D, len(dates) - 1)]); mret_start.append(dates[min(a + 1 + D, len(dates) - 1)])
     S = pd.DataFrame(port, index=dates).dropna(how="all")
     S = S[S.index >= "2016-03-21"]
     res = {"ann": {}, "curve": {}}                 # آمار سالانه از سری ماهانه (پایین‌تر، ×۱۲/n) می‌آید؛ نسخهٔ روزانهٔ ÷۲۵۲ حذف شد (فصل ۷ §۷٫۳)

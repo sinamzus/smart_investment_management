@@ -40,6 +40,10 @@ STRAT = LIVE / "strategy_v1.json"
 LEDGER = LIVE / "ledger.csv"
 MIN_TRADE_W = 0.0005          # معاملهٔ کمتر از ۰٫۰۵٪ وزن انجام نمی‌شود (گرد و خاک)
 PARTICIPATION = 0.10
+# پیش‌بررسی‌های پیش از معامله (ممیزی ۲۰۲۶-۱۰-۲۰؛ فصل ۱۰ تصمیم باز: قیود اساسنامه و مقررات) — فقط هشدار، تا عدد قطعی تعیین شود [تأیید لازم]
+CHECK_MAX_W = 0.10            # وزن یک نماد بیش از ۱۰٪ سرمایه
+CHECK_MAX_OWN = 0.05          # مالکیت بیش از ۵٪ سهام یک شرکت (آستانهٔ افشای سهامدار عمده)
+CHECK_MAX_DAYS = 5            # ساخت سفارش در بیش از ۵ روز با سقف مشارکت
 
 
 def frozen_spec():
@@ -47,7 +51,7 @@ def frozen_spec():
     هزینهٔ رفت‌وبرگشت ۱۲۵ bp [تأیید لازم]، اجرا با تأخیر یک روز (سیگنال در بستهٔ روز a، خرید در بستهٔ روز a+1 — همان قاعدهٔ زنده؛ ممیزی سوگیری ۲۰۲۶-۱۰-۱۹ B2/B3)."""
     return {"signals": [["vol_252", 1.0], ["size", 1.0], ["div_yield", 1.0]], "combine": "rank", "neutral": True,
             "algo": "topfrac", "params": {"entry": 0.2, "exit": 0.3}, "partial": 0.5,
-            "universe": {"markets": ["bourse", "farabourse"], "min_adv": 0}, "cost_bp": 125, "delay": 1}
+            "universe": {"markets": ["bourse", "farabourse"], "min_adv": 0}, "cost_bp": 125, "delay": 1, "min_w": MIN_TRADE_W}
 
 
 def spec_hash(spec):
@@ -55,10 +59,19 @@ def spec_hash(spec):
 
 
 def git_rev():
+    """کامیت کد؛ اگر درخت کار تغییر ثبت‌نشده در کد (tools/) دارد «+dirty» (ممیزی ۲۰۲۶-۱۰-۲۰: بدون این، کامیت ثبت‌شده ممکن بود کد واقعی اجرا نباشد)."""
     try:
-        return subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], text=True).strip()
+        h = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], text=True).strip()
+        d = subprocess.check_output(["git", "-C", str(ROOT), "status", "--porcelain", "--", "tools"], text=True).strip()
+        return h + ("+dirty" if d else "")
     except Exception:  # noqa: BLE001
         return "unknown"
+
+
+def data_fingerprint(mk):
+    """اثر انگشت داده: شمار روز و نماد، آخرین تاریخ و جمع قیمت‌های پایانی سه روز آخر (تغییر یا اصلاح داده ⇒ اثر انگشت دیگر)."""
+    tail = np.nan_to_num(mk.close[-3:]).sum()
+    return hashlib.sha256(f"{mk.n}|{mk.k}|{mk.dates[-1].date()}|{tail:.0f}".encode()).hexdigest()[:12]
 
 
 def load_strategy():
@@ -79,7 +92,7 @@ def cmd_freeze(a):
     res = cn.backtest(lab, spec, live=False)
     st = fe.stats_of(res, "S", spec["cost_bp"])
     stc = fe.stats_of(res, "S", spec["cost_bp"], bench="CAP")
-    ex = fe.net(res["ret"]["S"], res["to"]["S"], spec["cost_bp"]) - fe.net(res["ret"]["ALL"], res["to"]["ALL"], spec["cost_bp"])
+    ex = fe.net(res["ret"]["S"], res["to"]["S"], spec["cost_bp"]) - res["ret"]["ALL"]          # مرجع بدون هزینه (فصل ۷ §۷٫۴)
     keep = {k: (float(st[k]) if isinstance(st[k], (int, float, np.floating)) else st[k]) for k in
             ("excess_net", "t_net", "ir", "te", "vol", "turn_ann", "ex_h1", "ex_h2", "boot_lo", "boot_hi", "hit", "mdd_active") if k in st}
     keep["frozen_w_mean"] = float(np.nanmean(res["frozen"])) if len(res.get("frozen", [])) else 0.0   # سهم وزن نگه‌داشته‌شدهٔ غیرقابل‌فروش در روز اجرا
@@ -90,7 +103,7 @@ def cmd_freeze(a):
     imp = res["impact"].get(1e11)
     keep["impact_ann_at_1e11"] = float(np.nansum(imp) / max(len(ex), 1) * 12 * 100) if imp is not None else None   # اثر بازار سالانه (واحد درصد) در ۱۰۰ میلیارد ریال
     S = {"id": "c1-rank-partial50-v1", "frozen_at": pd.Timestamp.now(tz="UTC").isoformat(), "code_commit": git_rev(),
-         "data_through": str(mk.dates[-1].date()), "spec": spec, "spec_hash": spec_hash(spec),
+         "data_through": str(mk.dates[-1].date()), "data_fingerprint": data_fingerprint(mk), "spec": spec, "spec_hash": spec_hash(spec),
          "note": ("ترکیب c1 با امتیاز رتبه‌ای و ریبالانس جزئی ۵۰٪ — این ترکیب دقیق در شبکهٔ ۱۲۰ آزمایش فصل ۱۴ نبود (c1:rank با κ=۱ و c1:equal با κ=۰٫۵ بودند)؛ "
                   "پس آزمایش ۱۲۱ام است و DSR باید با N=۱۲۱ خوانده شود. آمار زیر درون‌نمونه است."),
          "backtest_in_sample": {**keep, "excess_net_vs_cap": float(stc["excess_net"]), "t_net_vs_cap": float(stc["t_net"]),
@@ -149,13 +162,20 @@ def cmd_orders(a):
         sys.exit("وزن هدف تهی است.")
     w = prev + kappa * (w_star - prev) if prev.sum() > 0 and kappa < 1 else w_star.copy()
     w = np.maximum(w, 0)
-    small = (np.abs(w - prev) < MIN_TRADE_W) & (prev > 0)
-    w[small] = prev[small]                           # معاملهٔ ناچیز انجام نمی‌شود
-    w[(w < MIN_TRADE_W) & (prev == 0)] = 0           # ورود ناچیز انجام نمی‌شود
+    w[(w < spec.get("min_w", MIN_TRADE_W)) & (w_star <= 0)] = 0.0   # باقی‌ماندهٔ ناچیز نمادِ خارج‌شده کامل فروخته می‌شود (همان بک‌تست)
     w = w / w.sum()
-    # نماد نگه‌داشته‌شده‌ای که در روز سیگنال معامله نشده فروختنی فرض نمی‌شود (A2): وزن فعلی‌اش می‌ماند و بقیه بازنرمال می‌شود
+    # نماد نگه‌داشته‌شده‌ای که در روز سیگنال معامله نشده فروختنی فرض نمی‌شود (A2)؛ نماد در صف خرید/فروش همان روز در آن جهت معامله نمی‌شود
     traded = mk.traded(mk.last_open(n))
-    w = cn.freeze_untradable(w, prev, traded)
+    lb, ls = mk.locks(mk.last_open(n))
+    w = cn.freeze_locked(w, prev, traded, lb, ls)
+    # معاملهٔ ناچیز (کمتر از MIN_TRADE_W) انجام نمی‌شود و ورود ناچیز هم؛ کسری یا مازاد فقط میان نمادهایی که واقعاً معامله می‌شوند پخش می‌شود.
+    # ممیزی ۲۰۲۶-۱۰-۲۰: پیش‌تر بازنرمال‌سازی همهٔ وزن‌ها را جابه‌جا می‌کرد و برای همهٔ نمادهای نگه‌داشته دستور ریز صادر می‌شد.
+    keep = (np.abs(w - prev) < MIN_TRADE_W) & (prev > 0) & (w > 0)
+    w[keep] = prev[keep]
+    w[(w < MIN_TRADE_W) & (prev == 0)] = 0.0
+    trade = (np.abs(w - prev) > 1e-12) & (w > 0)
+    if trade.any():
+        w[trade] += (1.0 - w.sum()) * w[trade] / w[trade].sum()
     aum = float(a.aum)
     v63 = sg.W(mk.val, n, 63)
     adv = np.nan_to_num(np.nanmean(v63, axis=0)) if v63 is not None else np.zeros(mk.k)
@@ -172,7 +192,18 @@ def cmd_orders(a):
                        "split_days": int(np.ceil(part / PARTICIPATION)) if part == part and part > 0 else 1,
                        "market": str(mk.market[i]), "traded_signal_day": bool(traded[i])})
     orders.sort(key=lambda o: (o["side"], -o["value_rial"]))
-    plan_id = hashlib.sha256(f"{S['spec_hash']}|{asof.date()}|{aum}".encode()).hexdigest()[:12]
+    # شناسه به محتوای سفارش‌ها هم وابسته است: بازسازی پس از اصلاح داده با مقدار متفاوت، شناسهٔ دیگری می‌گیرد (ممیزی ۲۰۲۶-۱۰-۲۰)
+    body_sig = "|".join(f"{o['ins_code']}:{o['side']}:{o['qty']}" for o in orders)
+    plan_id = hashlib.sha256(f"{S['spec_hash']}|{asof.date()}|{aum}|{body_sig}".encode()).hexdigest()[:12]
+    # پیش‌بررسی‌ها: وزن، مالکیت از کل سهام شرکت، روز لازم برای ساخت (فقط هشدار؛ عدد قطعی در فصل ۱۰ باز است)
+    mcap = np.nan_to_num(mk.mcap[n])
+    checks = []
+    for i in np.where(w > 0)[0]:
+        own = w[i] * aum / mcap[i] if mcap[i] > 0 else float("nan")
+        days = (w[i] * aum / (PARTICIPATION * adv[i])) if adv[i] > 0 else float("inf")
+        for kind, val, lim in (("max_weight", w[i], CHECK_MAX_W), ("ownership", own, CHECK_MAX_OWN), ("build_days", days, CHECK_MAX_DAYS)):
+            if val == val and val > lim:
+                checks.append({"symbol": str(mk.sym[i]), "ins_code": str(mk.cols[i]), "check": kind, "value": float(val), "limit": lim})
     body = {"schema": "sim.trade_plan/1", "plan_id": plan_id, "strategy": S["id"], "spec_hash": S["spec_hash"], "code_commit": git_rev(),
             "asof": str(asof.date()), "created": pd.Timestamp.now(tz="UTC").isoformat(), "official_month_end": official, "cold_start": bool(prev.sum() == 0),
             "kappa": kappa, "aum_rial": aum, "cost_bp_roundtrip": spec["cost_bp"],
@@ -180,7 +211,8 @@ def cmd_orders(a):
                           "price_basis": "last_close_ref", "note": "قیمت مرجع آخرین بسته است؛ سامانه باید با قیمت زنده/محدودهٔ مجاز نوسان جایگزین کند"},
             "n_hold": int((w > 0).sum()), "turnover_oneway": float(np.maximum(w - prev, 0).sum()),
             "frozen_w": float(prev[(prev > 0) & ~traded].sum()), "n_frozen": int(((prev > 0) & ~traded).sum()),
-            "orders": [{"id": hashlib.sha256((plan_id + o["ins_code"] + o["side"]).encode()).hexdigest()[:10], "type": "rebalance", **o} for o in orders]}   # ins_code یکتاست؛ نماد ممکن است تکراری باشد
+            "data_fingerprint": data_fingerprint(mk), "pretrade_checks": checks,
+            "orders": [{"id": hashlib.sha256((plan_id + o["ins_code"] + o["side"] + str(o["qty"])).encode()).hexdigest()[:10], "type": "rebalance", **o} for o in orders]}   # ins_code یکتاست؛ نماد ممکن است تکراری باشد
     LIVE.mkdir(parents=True, exist_ok=True)
     tag = ("" if official else "_interim")
     fj = LIVE / f"orders_{asof.date()}{tag}.json"
@@ -192,11 +224,14 @@ def cmd_orders(a):
             wr.writerow([o["side"], o["symbol"], o["market"], o["qty"], o["ref_price"], round(o["value_rial"]), round(o["w_now_pct"], 3), round(o["w_target_pct"], 3),
                          "" if o["adv_participation"] is None else round(o["adv_participation"], 4), o["split_days"]])
     nb = sum(o["side"] == "BUY" for o in orders)
+    if checks:
+        print(f"هشدار پیش‌بررسی ({len(checks)}): " + "، ".join(f"{c['symbol']} {c['check']}={c['value']:.3g}" for c in checks[:8]))
     print(f"{fj.name}: {body['n_hold']} نماد در پرتفوی، {nb} خرید، {len(orders) - nb} فروش، گردش یک‌طرفه {100 * body['turnover_oneway']:.1f}٪، "
           f"{'شروع سرد' if body['cold_start'] else 'ریبالانس جزئی'}، {'رسمی' if official else 'میان‌ماه (پیش‌نویس؛ ثبت رسمی نمی‌شود)'}")
     if a.accept:
-        if not official:
-            sys.exit("--accept فقط برای روز رسمی پایان ماه (آخرین روز دادهٔ ماه جلالی) مجاز است؛ پیش‌نویس ثبت نشد.")
+        if not official and not getattr(a, "month_end", False):
+            sys.exit("--accept فقط برای روز رسمی پایان ماه (آخرین روز دادهٔ ماه جلالی) مجاز است؛ پیش‌نویس ثبت نشد. "
+                     "اگر روزهای باقی‌ماندهٔ ماه تعطیل رسمی‌اند، آن‌ها را در data/calendar/holidays.csv بیفزایید یا --month-end بدهید.")
         if len(led) and str(asof.date()) <= str(last_sig):
             sys.exit("برای این تاریخ پیشتر ثبت شده است.")
         rows = [[str(asof.date()), str(mk.cols[i]), str(mk.sym[i]), float(w[i]), float(px[i]), plan_id, aum] for i in np.where(w > 0)[0]]
@@ -218,6 +253,7 @@ def cmd_track(a):
     mk, lab, _ = bl.get_lab()
     spec = S["spec"]
     cost = spec["cost_bp"] / 1e4
+    delay = int(spec.get("delay", 1))
     pos = {c: i for i, c in enumerate(mk.cols)}
     mk_ok = np.isin(mk.market, spec["universe"]["markets"])
     dates = sorted(led.signal_date.unique())
@@ -233,9 +269,9 @@ def cmd_track(a):
         for r in led[led.signal_date == d].itertuples():
             if r.ins_code in pos:
                 w[pos[r.ins_code]] = r.w_post
-        fwd = mk.fwd(a0, a1)
+        fwd = mk.fwd(a0, a1, delay)                   # همان تأخیر مشخصات (ممیزی ۲۰۲۶-۱۰-۲۰: پیش‌تر delay = 0 بازده روز اجرا را هم می‌شمرد)
         f = np.where(np.isnan(fwd), 0, fwd)
-        ok = mk.eligible(a0) & mk_ok & ~np.isnan(fwd)
+        ok = mk.eligible(a0) & mk_ok & mk.tradable(a0, delay)
         allw = ok / max(ok.sum(), 1)
         mc = np.where(ok, np.nan_to_num(mk.mcap[a0]), 0.0)
         cw = mc / mc.sum() if mc.sum() > 0 else mc
@@ -246,7 +282,7 @@ def cmd_track(a):
         toa = 0.5 * np.abs(allw - d_all).sum() if d_all is not None else np.nan
         r_s, r_a, r_c = float((w * f).sum()), float((allw * f).sum()), float((cw * f).sum())
         net_s = r_s - (0 if to != to else to * cost)       # هزینهٔ رفت‌وبرگشت × گردش یک‌طرفه (همان fe.net)
-        net_a = r_a - (0 if toa != toa else toa * cost)
+        net_a = r_a                                   # مرجع بدون هزینه (فصل ۷ §۷٫۴؛ ممیزی ۲۰۲۶-۱۰-۲۰)
         rows.append({"signal_date": d, "to_date": str(mk.dates[a1].date()), "days": a1 - a0, "ret_S": r_s, "ret_ALL": r_a, "ret_CAP": r_c,
                      "excess_net_vs_ALL": net_s - net_a, "excess_vs_CAP": r_s - r_c, "turnover_oneway": to,
                      "open": bool(a1 == mk.n - 1 and not last_is_end)})
@@ -273,6 +309,7 @@ def main():
     o = sub.add_parser("orders")
     o.add_argument("--aum", type=float, default=1e11, help="ارزش پرتفوی (ریال)")
     o.add_argument("--accept", action="store_true")
+    o.add_argument("--month-end", action="store_true", help="این روز را پایان رسمی ماه بدان (وقتی روزهای باقی‌مانده تعطیل رسمی‌اند و در holidays.csv نیستند)")
     sub.add_parser("track")
     a = ap.parse_args()
     {"freeze": cmd_freeze, "orders": cmd_orders, "track": cmd_track}[a.cmd](a)

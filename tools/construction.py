@@ -9,7 +9,7 @@
       "neutral": true,                                         # خنثی‌سازی صنعتی Z
       "algo": "topfrac", "params": {"entry": .2, "exit": .3},  # الگوریتم انتخاب
       "universe": {"markets": ["bourse", "farabourse"], "min_adv": 0},
-      "rebalance_every": 1, "partial": 1.0, "max_w": 0.05, "cost_bp": 125, "delay": 0
+      "rebalance_every": 1, "partial": 1.0, "max_w": 0.05, "cost_bp": 125, "delay": 1
     }
 نتیجه: سری ماهانهٔ بازده، گردش، تعداد نماد، وزن‌های زنده. قیاس‌پذیر با tools/factor_engine.py (همان واجدیت و همان قرارداد گردش).
 """
@@ -25,7 +25,9 @@ import signals as sg  # noqa: E402
 import factor_engine as fe  # noqa: E402
 
 ALGOS: dict = {}
-AUMS = [1e10, 5e10, 1e11, 5e11, 1e12, 5e12]      # سطوح سرمایهٔ سنجش ظرفیت (ریال = ۱۰ تا ۵۰۰۰ میلیارد)
+AUMS = [1e10, 5e10, 1e11, 5e11, 1e12, 5e12, 1e13, 5e13, 1e14]   # سطوح سرمایهٔ سنجش ظرفیت (ریال = ۱۰ تا ۱۰۰٬۰۰۰ میلیارد؛ ممیزی ۲۰۲۶-۱۰-۲۰: اندازهٔ نهادی)
+MIN_W = 0.0005                                    # نمادی که از هدف خارج شده و وزنش زیر ۰٫۰۵٪ رسیده کامل فروخته می‌شود (همان MIN_TRADE_W دفتر زنده)
+CAP_INFEASIBLE = [0]                              # شمار دفعاتی که سقف وزن با تعداد نماد ممکن نبود (n·max_w < 1)؛ بی‌صدا رد نمی‌شود، شمرده و گزارش می‌شود
 Y_IMPACT = 1.0                                    # ضریب اثر بازار Y در Yσ√(Q/ADV) [تأیید لازم؛ ادبیات ≈ ۰٫۵–۱]
 
 
@@ -51,9 +53,9 @@ class Lab:
         self.fw, self.ok, self.use = {}, {}, []
         for r in range(self.rows - 1):
             a, b = self.me[r], self.me[r + 1]
-            f = mk.fwd(a, b)
-            self.fw[r] = f
-            self.ok[r] = mk.eligible(a) & ~np.isnan(f)
+            f = mk.fwd(a, b, sg.LAB_DELAY)
+            self.ok[r] = mk.eligible(a) & mk.tradable(a, sg.LAB_DELAY)   # بدون شرط داده در روز بعد (نگاه به آینده؛ ممیزی ۲۰۲۶-۱۰-۲۰)
+            self.fw[r] = np.nan_to_num(f)            # همهٔ نمادها (نه فقط واجدان): نماد نگه‌داشتهٔ غیرواجد هم بازده واقعی دارد؛ بی‌داده = منجمد (۰)
             if mk.dates[a + 1] >= sg.EVAL_FROM:
                 self.use.append(r)
         self._z, self._ic = {}, {}
@@ -167,8 +169,11 @@ def mk_all_true(mk):
 # ═══════════════════ الگوریتم‌ها: (امتیاز، زمینه) ← وزن ═══════════════════
 def _cap(w, max_w, iters=50):
     w = w.copy()
-    if max_w is None or max_w <= 0 or (w > 0).sum() * max_w < 1:
+    if max_w is None or max_w <= 0:
         return w / w.sum() if w.sum() > 0 else w
+    if (w > 0).sum() * max_w < 1:                     # سقف ناممکن: هم‌وزن نزدیک‌ترین جواب ممکن است؛ شمرده می‌شود (ممیزی ۲۰۲۶-۱۰-۲۰)
+        CAP_INFEASIBLE[0] += 1
+        return np.where(w > 0, 1.0 / max((w > 0).sum(), 1), 0.0)
     for _ in range(iters):
         over = w > max_w
         if not over.any():
@@ -307,8 +312,10 @@ def _solve_qp(C, kind, max_w, prev=None, sig=None):
     w = cp.Variable(n, nonneg=True)
     L = np.linalg.cholesky(C + 1e-10 * np.eye(n))
     cons = [cp.sum(w) == 1]
-    if max_w:
-        cons.append(w <= max(max_w, 1.5 / n))
+    if max_w:                                         # سقف شل نمی‌شود (پیش‌تر max(max_w, 1.5/n))؛ اگر ناممکن بود هم‌وزن و شمارش
+        if max_w * n < 1:
+            CAP_INFEASIBLE[0] += 1
+        cons.append(w <= max(max_w, 1.0 / n) + 1e-9)
     var = w
     if kind == "minvar":
         prob = cp.Problem(cp.Minimize(cp.sum_squares(L.T @ w)), cons)
@@ -343,7 +350,7 @@ def a_min_var(ctx, entry=0.4, exit=0.5, max_w=0.05):
 
 
 @algo("max_div", "حداکثر تنوع", "Maximum diversification", "بیشینه‌کردن نسبت میانگین وزنی σ به σ پرتفوی (تنوع‌بخشی)", "Choueifaty & Coignard (2008)", {"entry": 0.4, "exit": 0.5})
-def a_max_div(ctx, entry=0.4, exit=0.5):
+def a_max_div(ctx, entry=0.4, exit=0.5, max_w=0.08):
     sel = _risk_pool(ctx, entry, exit)
     w = np.zeros(len(ctx["score"]))
     if len(sel) < 20:
@@ -353,11 +360,11 @@ def a_max_div(ctx, entry=0.4, exit=0.5):
         w[sel] = 1 / len(sel)
         return w
     w[sel] = _solve_qp(C, "maxdiv", None, sig=np.sqrt(np.diag(C)))
-    return _cap(w, 0.08)
+    return _cap(w, max_w)
 
 
 @algo("erc", "ریسک برابر (ERC)", "Equal risk contribution", "سهم هر نماد از ریسک پرتفوی برابر؛ حل مسئلهٔ لگاریتمی محدب.", "Maillard, Roncalli & Teiletche (2010)", {"entry": 0.4, "exit": 0.5})
-def a_erc(ctx, entry=0.4, exit=0.5):
+def a_erc(ctx, entry=0.4, exit=0.5, max_w=0.08):
     from scipy.optimize import minimize
     sel = _risk_pool(ctx, entry, exit)
     w = np.zeros(len(ctx["score"]))
@@ -374,11 +381,11 @@ def a_erc(ctx, entry=0.4, exit=0.5):
     res = minimize(f, y0 / y0.sum() * 0.5, jac=g, bounds=[(1e-8, None)] * n, method="L-BFGS-B")
     y = np.maximum(res.x, 1e-12)
     w[sel] = y / y.sum()
-    return _cap(w, 0.08)
+    return _cap(w, max_w)
 
 
 @algo("hrp", "ریسک سلسله‌مراتبی (HRP)", "Hierarchical risk parity", "خوشه‌بندی سلسله‌مراتبی همبستگی + دوبخشی بازگشتی؛ بدون وارونه‌سازی Σ.", "López de Prado (2016)", {"entry": 0.4, "exit": 0.5})
-def a_hrp(ctx, entry=0.4, exit=0.5):
+def a_hrp(ctx, entry=0.4, exit=0.5, max_w=0.08):
     from scipy.cluster.hierarchy import leaves_list, linkage
     from scipy.spatial.distance import squareform
     sel = _risk_pool(ctx, entry, exit)
@@ -411,7 +418,7 @@ def a_hrp(ctx, entry=0.4, exit=0.5):
             wts[a_] *= al
             wts[b_] *= 1 - al
     w[sel[wts.index.values]] = wts.values
-    return _cap(w / w.sum(), 0.08)
+    return _cap(w / w.sum(), max_w)
 
 
 @algo("mvo_te", "بهینه‌سازی میانگین–واریانس با قید خطای ردیابی", "TE-constrained MVO", "بیشینه‌کردن α'w − (λ/2)w'Σw − τ‖w−w₀‖₁ با قید خطای ردیابی نسبت به هم‌وزن واجدان، سقف وزن و انحراف صنعتی. α = IC·σ·z.",
@@ -467,13 +474,15 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
     kappa = float(spec.get("partial", 1.0))
     max_w = spec.get("max_w")
     cost = float(spec.get("cost_bp", 125)) / 1e4
-    delay = int(spec.get("delay", 0))
+    delay = int(spec.get("delay", 1))
+    min_w = float(spec.get("min_w", MIN_W))
     k = mk.k
     mk_ok = np.isin(mk.market, list(markets))
     adv_all = None
     prev_w = np.zeros(k)               # وزن رانش‌یافتهٔ دورهٔ قبل
     held = np.zeros(k, bool)
-    out = {"end": [], "sig_date": [], "S": [], "ALL": [], "CAP": [], "to": [], "n": [], "ic": [], "w": [], "frozen": [], "impact": {a_: [] for a_ in AUMS}}
+    out = {"end": [], "sig_date": [], "S": [], "ALL": [], "CAP": [], "to": [], "n": [], "ic": [], "w": [], "frozen": [], "impact": {a_: [] for a_ in AUMS}, "locked": []}
+    cap0 = CAP_INFEASIBLE[0]
     prev_all = None
     prev_cap = None
     to_all, to_cap = [], []
@@ -510,6 +519,7 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
             continue
         cnt += 1
         tr = mk.tradable(a, delay)                  # معامله در روز اجرا (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹، A2)
+        lb, ls = mk.locks(mk.exec_day(a, delay))    # صف خرید/فروش در روز اجرا (ممیزی ۲۰۲۶-۱۰-۲۰)
         ok = lab.ok[r] & mk_ok & tr
         if min_adv > 0:
             v = sg.W(mk.val, a, 63)
@@ -534,17 +544,23 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
         else:
             if max_w:
                 w = _cap(w, max_w)
+            w_star = w.copy()
             if kappa < 1.0 and prev_w.sum() > 0:
                 w = prev_w + kappa * (w - prev_w)
                 w = np.maximum(w, 0)
+                w[(w < min_w) & (w_star <= 0)] = 0.0       # خروج کامل باقی‌ماندهٔ ناچیز (بدون این، κ = ۰٫۵ هیچ نمادی را کامل خارج نمی‌کرد)
                 w /= w.sum()
-            w = freeze_untradable(w, prev_w, tr)
+            w0 = w.copy()
+            w = freeze_locked(w, prev_w, tr, lb, ls)
+            out["locked"].append(float(np.abs(w - w0).sum() / 2))
         held = w > 0
         out["frozen"].append(float(prev_w[(prev_w > 0) & ~tr].sum()))
         to = np.nan if first else 0.5 * np.abs(w - prev_w).sum()
         g = np.where(np.isnan(f), 0, f)
         ret = float((w * g).sum())
         allw = ok / max(ok.sum(), 1)
+        if prev_all is not None:                     # مرجع هم همان قاعدهٔ بی‌معامله و صف را دارد (وگرنه مرجع ناممکن معامله می‌کرد)
+            allw = freeze_locked(allw, prev_all, tr, lb, ls)
         out["end"].append(mk.dates[min(b + delay, mk.n - 1)]); out["sig_date"].append(mk.dates[a])
         out["S"].append(ret); out["to"].append(to); out["n"].append(int((w > 0).sum()))
         out["ALL"].append(float((allw * g).sum()))
@@ -552,6 +568,8 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
         prev_all = allw * (1 + g)
         prev_all = prev_all / prev_all.sum() if prev_all.sum() > 0 else prev_all
         cw = capweights(ok, a)
+        if prev_cap is not None:
+            cw = freeze_locked(cw, prev_cap, tr, lb, ls)
         out["CAP"].append(float((cw * g).sum()))
         to_cap.append(np.nan if prev_cap is None else 0.5 * np.abs(cw - prev_cap).sum())
         prev_cap = cw * (1 + g); prev_cap = prev_cap / prev_cap.sum() if prev_cap.sum() > 0 else prev_cap
@@ -566,7 +584,7 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
             dw = np.abs(w - prev_w)
             for a_ in AUMS:
                 part = np.where(advv > 0, dw * a_ / np.maximum(advv, 1), 0.0)
-                out["impact"][a_].append(float((dw * Y_IMPACT * sgm * np.sqrt(np.minimum(part, 1.0))).sum()))
+                out["impact"][a_].append(float((dw * Y_IMPACT * sgm * np.sqrt(part)).sum()))   # بدون سقف مشارکت (پیش‌تر min(part, 1) هزینهٔ معاملهٔ چندروزه را کم می‌شمرد)
         m = ok & ~np.isnan(sc) & ~np.isnan(f)
         out["ic"].append(sg.spearman_rows(sc, np.where(m, f, np.nan)) if m.sum() > 30 else np.nan)
         if keep_weights:
@@ -580,13 +598,35 @@ def backtest(lab: Lab, spec: dict, keep_weights: int = 0, live: bool = True):
            "to": {"S": np.array(out["to"], float), "ALL": None, "CAP": np.array(to_cap, float)},
            "impact": {a_: np.array(v, float) for a_, v in out["impact"].items()},
            "n": {"S": float(np.mean(out["n"])) if out["n"] else 0, "ALL": 0.0},
-           "ic": np.array(out["ic"], float), "frozen": np.array(out["frozen"], float), "ngroups": 0, "tops": {}, "spec": spec}
+           "ic": np.array(out["ic"], float), "frozen": np.array(out["frozen"], float), "ngroups": 0, "tops": {}, "spec": spec,
+           "locked": np.array(out["locked"], float), "cap_infeasible": int(CAP_INFEASIBLE[0] - cap0)}
     res["to"]["ALL"] = np.array(to_all, float)          # ALL = هم‌وزن واجدان با ریبالانس ماهانه؛ گردش واقعی
     if keep_weights:
         res["weights"] = out["w"]
     if live:
         res["live"] = live_target(lab, spec, algo_, params, prev_w, held, ok_univ=(mk_ok, min_adv))
     return res
+
+
+def freeze_locked(w, prev_w, tr, lock_buy=None, lock_sell=None, iters=6):
+    """قاعدهٔ اجرا در روز اجرا (ممیزی ۲۰۲۶-۱۰-۲۰؛ فصل ۶ §۶٫۲، فصل ۱۴ §۱۴٫۲٫۱): نماد بی‌معامله منجمد (freeze_untradable)؛ نمادی که در صف خرید
+    قفل است بیش از وزن فعلی‌اش خریده نمی‌شود و نمادی که در صف فروش است کمتر از وزن فعلی‌اش فروخته نمی‌شود. وزن ثابت‌شده‌ها می‌ماند و بقیه در
+    فضای باقی‌مانده بازنرمال می‌شوند (چند دور، چون بازنرمال‌سازی ممکن است نماد قفل دیگری را از مرز رد کند)."""
+    w = freeze_untradable(w, prev_w, tr)
+    if lock_buy is None or prev_w is None or prev_w.sum() <= 0:
+        return w
+    fixed = (prev_w > 0) & ~tr
+    for _ in range(iters):
+        fx = fixed | (lock_buy & (w > prev_w + 1e-12)) | (lock_sell & (w < prev_w - 1e-12))
+        if not (fx & ~fixed).any():
+            break
+        fixed = fx
+        w = np.where(fixed, prev_w, w)
+        free = ~fixed
+        s, fz = w[free].sum(), prev_w[fixed].sum()
+        if s > 0:
+            w[free] = w[free] / s * max(1.0 - fz, 0.0)
+    return w
 
 
 def freeze_untradable(w, prev_w, tr):

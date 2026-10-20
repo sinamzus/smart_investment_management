@@ -33,7 +33,7 @@ def fama_macbeth(lab, name, controls=(), rows=None, use_neutral=False):
     for r in rows:
         zs = [lab.z(n, r) for n in (name, *controls)]
         if use_neutral:
-            zs = [_neu(z, lab.sector) for z in zs]
+            zs = [_neu(z, lab.mk.sector_at(lab.me[r])) for z in zs]   # صنعت همان ماه (ممیزی ۲۰۲۶-۱۰-۲۰: پیش‌تر صنعت امروز = نگاه به آینده)
         y = lab.fw[r]
         A = np.column_stack(zs)
         m = ~np.isnan(A).any(axis=1) & ~np.isnan(y) & lab.ok[r]

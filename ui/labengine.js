@@ -25,13 +25,32 @@ function load(L) {
 const zAt = (ctx, name, r) => { const a = ctx.Z[name].z, out = new Float64Array(ctx.k), o = r * ctx.k; for (let i = 0; i < ctx.k; i++) { const v = a[o + i]; out[i] = v === -128 ? NaNv : v / 40; } return out; };
 const fwAt = (ctx, r) => { const out = new Float64Array(ctx.k), o = r * ctx.k; for (let i = 0; i < ctx.k; i++) { const v = ctx.fw[o + i]; out[i] = v <= -5 ? NaNv : v; } return out; };
 const okAt = (ctx, r) => { const out = new Uint8Array(ctx.k), o = r * ctx.k; for (let i = 0; i < ctx.k; i++) out[i] = ctx.ok[o + i]; return out; };
-const trAt = (ctx, r) => { const out = new Uint8Array(ctx.k).fill(1); if (!ctx.tr) return out; const o = r * ctx.k; for (let i = 0; i < ctx.k; i++) out[i] = ctx.tr[o + i]; return out; };
+const trAt = (ctx, r) => { const out = new Uint8Array(ctx.k).fill(1); if (!ctx.tr) return out; const o = r * ctx.k; for (let i = 0; i < ctx.k; i++) out[i] = ctx.tr[o + i] & 1; return out; };
+/* قفل صف در روز اجرا (بیت ۲: صف خرید، بیت ۴: صف فروش؛ tools/build_lab.export) — همان signals.Market.locks */
+const lkAt = (ctx, r) => { const lb = new Uint8Array(ctx.k), ls = new Uint8Array(ctx.k); if (!ctx.tr) return { lb, ls }; const o = r * ctx.k; for (let i = 0; i < ctx.k; i++) { lb[i] = (ctx.tr[o + i] >> 1) & 1; ls[i] = (ctx.tr[o + i] >> 2) & 1; } return { lb, ls }; };
 const secAt = (ctx, r) => { if (!ctx.secHist.length) return ctx.sec; const d = ctx.L.sig_dates[r], out = Uint8Array.from(ctx.sec); for (const h of ctx.secHist) if (d < h.to) out[h.i] = h.sec; return out; };
 function freezeUntradable(w, prev, tr, k) {         // نماد نگه‌داشته‌شدهٔ بی‌معامله در روز اجرا فروختنی نیست (tools/construction.freeze_untradable)
   let fz = 0, any = false; for (let i = 0; i < k; i++) if (prev[i] > 0 && !tr[i]) { any = true; fz += prev[i]; }
   if (!any) return w;
   const out = new Float64Array(k); let s = 0; for (let i = 0; i < k; i++) { out[i] = (prev[i] > 0 && !tr[i]) ? 0 : w[i]; s += out[i]; }
   const sc = s > 0 ? Math.max(1 - fz, 0) / s : 0; for (let i = 0; i < k; i++) out[i] = (prev[i] > 0 && !tr[i]) ? prev[i] : out[i] * sc;
+  return out;
+}
+
+/** همان construction.freeze_locked: بی‌معامله منجمد؛ صف خرید بیش از وزن فعلی خریده نمی‌شود؛ صف فروش کمتر از آن فروخته نمی‌شود */
+function freezeLocked(w, prev, tr, lb, ls, k) {
+  let out = freezeUntradable(w, prev, tr, k);
+  if (!prev || !lb) return out;
+  let ps = 0; for (let i = 0; i < k; i++) ps += prev[i]; if (ps <= 0) return out;
+  const fixed = new Uint8Array(k); for (let i = 0; i < k; i++) fixed[i] = prev[i] > 0 && !tr[i] ? 1 : 0;
+  for (let it = 0; it < 6; it++) {
+    let added = false;
+    for (let i = 0; i < k; i++) if (!fixed[i] && ((lb[i] && out[i] > prev[i] + 1e-12) || (ls[i] && out[i] < prev[i] - 1e-12))) { fixed[i] = 1; added = true; }
+    if (!added) break;
+    out = Float64Array.from(out); let s = 0, fz = 0;
+    for (let i = 0; i < k; i++) { if (fixed[i]) { out[i] = prev[i]; fz += prev[i]; } else s += out[i]; }
+    if (s > 0) { const sc = Math.max(1 - fz, 0) / s; for (let i = 0; i < k; i++) if (!fixed[i]) out[i] *= sc; }
+  }
   return out;
 }
 
@@ -145,7 +164,7 @@ function effWeights(ctx, spec) {
 
 /* ── الگوریتم‌ها: ctx = {score, ok, held, mcap, vol} → وزن ── */
 function capW(w, mx) {
-  if (!mx) return w; let n = 0, s = 0; for (const x of w) if (x > 0) { n++; s += x; } if (n * mx < 1) return w.map(x => x / (s || 1));
+  if (!mx) return w; let n = 0, s = 0; for (const x of w) if (x > 0) { n++; s += x; } if (n * mx < 1) return w.map(x => x > 0 ? 1 / n : 0);   // سقف ناممکن ⇒ هم‌وزن (همان construction._cap)
   w = Float64Array.from(w); for (let it = 0; it < 50; it++) { let ex = 0, free = 0; for (let i = 0; i < w.length; i++) { if (w[i] > mx) { ex += w[i] - mx; w[i] = mx; } }
     if (!ex) break; for (let i = 0; i < w.length; i++) if (w[i] > 0 && w[i] < mx) free += w[i]; if (!free) break; for (let i = 0; i < w.length; i++) if (w[i] > 0 && w[i] < mx) w[i] += ex * w[i] / free; }
   const t = w.reduce((a, b) => a + b, 0); return w.map(x => x / t);
@@ -174,19 +193,21 @@ const JS_ALGOS = Object.keys(ALGO);
 function run(ctx, spec) {
   const k = ctx.k, algo = ALGO[spec.algo]; if (!algo) throw new Error('الگوریتم در مرورگر نیست: ' + spec.algo);
   const p = spec.params || {}, univ = spec.universe || {}, mk = univ.markets ? new Set(univ.markets.map(x => x === 'bourse' ? 0 : 1)) : new Set([0, 1]);
-  const every = spec.rebalance_every || 1, kappa = spec.partial ?? 1, mx = spec.max_w, minAdv = univ.min_adv ? Math.log(univ.min_adv) : null;
+  const every = spec.rebalance_every || 1, kappa = spec.partial ?? 1, mx = spec.max_w, minAdv = univ.min_adv ? Math.log(univ.min_adv) : null, minW = spec.min_w ?? 0.0005;
   let prev = new Float64Array(k), held = new Uint8Array(k), prevAll = null, first = true, cnt = 0;
   const AUMS = ctx.L.aums || [], Y = ctx.L.y_impact || 1;
   const out = { end: [], ret: [], all: [], cap: [], to: [], toAll: [], toCap: [], n: [], ic: [], rows: [], impact: AUMS.map(() => []), W: spec._keepW ? [] : null };   // _keepW: وزن هدف هر ریبالانس (بخش «پرتفو»: هدف استراتژی در هر تاریخ)
   let prevCap = null;
   for (const r of ctx.use) {
-    const okr = okAt(ctx, r), f = fwAt(ctx, r), ok = new Uint8Array(k), tr = trAt(ctx, r);
+    const okr = okAt(ctx, r), f = fwAt(ctx, r), ok = new Uint8Array(k), tr = trAt(ctx, r), lk = lkAt(ctx, r);
     for (let i = 0; i < k; i++) ok[i] = okr[i] && tr[i] && mk.has(ctx.mkt[i]) && (minAdv == null || ctx.adv[r * k + i] >= minAdv) ? 1 : 0;
     let nAll = 0; for (let i = 0; i < k; i++) nAll += ok[i];
-    const allw = new Float64Array(k); for (let i = 0; i < k; i++) allw[i] = ok[i] ? 1 / Math.max(nAll, 1) : 0;
+    let allw = new Float64Array(k); for (let i = 0; i < k; i++) allw[i] = ok[i] ? 1 / Math.max(nAll, 1) : 0;
     const g = f.map(x => isNaN(x) ? 0 : x);
-    const capw = new Float64Array(k); { let t = 0; for (let i = 0; i < k; i++) if (ok[i]) { const v = ctx.mcap[r * k + i]; capw[i] = v < -40 ? 0 : Math.exp(v); t += capw[i]; } if (t > 0) for (let i = 0; i < k; i++) capw[i] /= t; }
+    let capw = new Float64Array(k); { let t = 0; for (let i = 0; i < k; i++) if (ok[i]) { const v = ctx.mcap[r * k + i]; capw[i] = v < -40 ? 0 : Math.exp(v); t += capw[i]; } if (t > 0) for (let i = 0; i < k; i++) capw[i] /= t; }
     const reb = (cnt % every === 0) || first; cnt++;
+    if (reb && prevAll) allw = freezeLocked(allw, prevAll, tr, lk.lb, lk.ls, k);       // مرجع هم قاعدهٔ بی‌معامله و صف را دارد
+    if (reb && prevCap) capw = freezeLocked(capw, prevCap, tr, lk.lb, lk.ls, k);
     let w = prev, to = 0, sc = null;
     if (reb) {
       sc = score(ctx, spec, r);
@@ -196,8 +217,8 @@ function run(ctx, spec) {
       if (s <= 0) wn = Float64Array.from(prev);                               // بدون سبد در میانهٔ نمونه: سبد قبلی نگه داشته و ماه ثبت می‌شود
       else {
         if (mx) wn = capW(wn, mx);
-        if (kappa < 1 && !first) { wn = wn.map((x, i) => Math.max(prev[i] + kappa * (x - prev[i]), 0)); const t = wn.reduce((a, b) => a + b, 0); wn = wn.map(x => x / t); }
-        wn = freezeUntradable(wn, prev, tr, k);
+        if (kappa < 1 && !first) { const ws = wn; wn = wn.map((x, i) => Math.max(prev[i] + kappa * (x - prev[i]), 0)); wn = wn.map((x, i) => x < minW && !(ws[i] > 0) ? 0 : x); const t = wn.reduce((a, b) => a + b, 0); wn = wn.map(x => x / t); }   // خروج کامل باقی‌ماندهٔ ناچیز
+        wn = freezeLocked(wn, prev, tr, lk.lb, lk.ls, k);
       }
       w = wn; held = w.map(x => x > 0 ? 1 : 0);
       if (!first) { to = 0; for (let i = 0; i < k; i++) to += Math.abs(w[i] - prev[i]); to *= 0.5; } else to = NaNv;
@@ -211,7 +232,7 @@ function run(ctx, spec) {
     { let nc = new Float64Array(k), tc = 0; for (let i = 0; i < k; i++) { nc[i] = capw[i] * (1 + g[i]); tc += nc[i]; } prevCap = tc > 0 ? nc.map(x => x / tc) : nc; }
     AUMS.forEach((aum, j) => {                                           // اثر بازار Yσ√(Δw·AUM/ADV) به‌ازای هر نماد
       if (!reb || first) { out.impact[j].push(first ? NaNv : 0); return; }
-      let c = 0; for (let i = 0; i < k; i++) { const dw = Math.abs(w[i] - prev[i]); if (dw <= 0) continue; const av = ctx.adv[r * k + i], adv = av < 0 ? 0 : Math.exp(av) - 1, sg = ctx.vol[r * k + i] > 0 ? ctx.vol[r * k + i] : 0; const part = adv > 0 ? Math.min(dw * aum / adv, 1) : 0; c += dw * Y * sg * Math.sqrt(part); }
+      let c = 0; for (let i = 0; i < k; i++) { const dw = Math.abs(w[i] - prev[i]); if (dw <= 0) continue; const av = ctx.adv[r * k + i], adv = av < 0 ? 0 : Math.exp(av) - 1, sg = ctx.vol[r * k + i] > 0 ? ctx.vol[r * k + i] : 0; const part = adv > 0 ? dw * aum / adv : 0; c += dw * Y * sg * Math.sqrt(part); }   // بدون سقف مشارکت (همان construction)
       out.impact[j].push(c);
     });
     out.end.push(ctx.L.months_end[r]); out.ret.push(ret); out.all.push(ra); out.to.push(reb ? to : 0); out.toAll.push(toA); out.n.push(w.reduce((a, b) => a + (b > 0 ? 1 : 0), 0)); out.rows.push(r); if (out.W) out.W.push(reb ? Float64Array.from(w) : null);
@@ -240,12 +261,13 @@ function bootMean(x, reps = 1000, block = 3, seed = 7) { const T = x.length, R =
   const a = Array.from(mu).sort((p, q) => p - q); return { lo: a[Math.floor(reps * 0.025)] * 1200, hi: a[Math.floor(reps * 0.975)] * 1200, p: a.filter(v => v > 0).length / reps }; }
 function stats(res, costBp = 125, jy, bench) {
   const cap = bench === 'cap' && res.cap && res.cap.length, c = costBp / 1e4, n = res.ret.length, r = res.ret, a = cap ? res.cap : res.all, to = res.to.map(v => isNaN(v) ? 0 : v), toa = (cap ? res.toCap : res.toAll).map(v => isNaN(v) ? 0 : v);
-  const rn = r.map((v, i) => v - to[i] * c), an = a.map((v, i) => v - toa[i] * c), exn = rn.map((v, i) => v - an[i]), exg = r.map((v, i) => v - a[i]), h = Math.floor(n / 2);
+  const rn = r.map((v, i) => v - to[i] * c), an = a.slice(), anNet = a.map((v, i) => v - toa[i] * c), exn = rn.map((v, i) => v - an[i]),   // مرجع بدون هزینه (فصل ۷ §۷٫۴؛ ممیزی ۲۰۲۶-۱۰-۲۰)
+    exg = r.map((v, i) => v - a[i]), h = Math.floor(n / 2);
   const m = mean(exn), s = sd(exn), bt = bootMean(exn), ic = res.ic.filter(v => v === v);
   const roll = []; for (let i = 0; i + 12 <= n; i++) roll.push(exn.slice(i, i + 12).reduce((p, v) => p * (1 + v), 1) - 1);
   const years = {}; res.end.forEach((d, i) => { const y = jy ? jy(d) : d.slice(0, 4); (years[y] = years[y] || []).push(exn[i]); });
   const yr = {}; Object.keys(years).forEach(y => { yr[y] = (years[y].reduce((p, v) => p * (1 + v), 1) - 1) * 100; });
-  return { n, ann_gross: annOf(r), ann_net: annOf(rn), ann_all_net: annOf(an), excess_net: annOf(rn) - annOf(an), excess_gross: annOf(r) - annOf(a),
+  return { n, ann_gross: annOf(r), ann_net: annOf(rn), ann_all_net: annOf(an), excess_net: annOf(rn) - annOf(an), excess_gross: annOf(r) - annOf(a), excess_vs_netbench: annOf(rn) - annOf(anNet),
     vol: sd(r) * Math.sqrt(12) * 100, te: s * Math.sqrt(12) * 100, ir: s > 0 ? m / s * Math.sqrt(12) : NaNv, t_net: nwT(exn), t_gross: nwT(exg), hit: exn.filter(v => v > 0).length / n * 100,
     t_h1: nwT(exn.slice(0, h)), t_h2: nwT(exn.slice(h)), ex_h1: mean(exn.slice(0, h)) * 1200, ex_h2: mean(exn.slice(h)) * 1200, mdd_active: mddOf(exn), mdd: mddOf(rn),
     turn_ann: to.reduce((p, v) => p + v, 0) / (n / 12) * 100, names: mean(res.n), boot_lo: bt.lo, boot_hi: bt.hi, boot_p: bt.p,
@@ -266,10 +288,12 @@ function dsr(exn, trialSR, N) {
   const sr0 = Math.sqrt(v) * ((1 - g) * PhiInv(1 - 1 / N) + g * PhiInv(1 - 1 / (N * Math.E))), den = Math.sqrt(Math.max(1 - sk * srr + (ku - 1) / 4 * srr * srr, 1e-9));
   return { sr_annual: srr * Math.sqrt(12), sr0_monthly: sr0, dsr: Phi((srr - sr0) * Math.sqrt(T - 1) / den), N, T };
 }
-function verdict(st, spearmanDec) {
-  const same = (st.ex_h1 > 0) === (st.ex_h2 > 0), t = st.t_net, bootOk = st.excess_net > 0 ? st.boot_lo > 0 : st.boot_hi < 0;
+/** آستانهٔ t استقرار: بیشینهٔ ۳ و t بونفرونی ۵٪ دوطرفه برای N آزمایش (همان factor_engine.t_threshold؛ ممیزی ۲۰۲۶-۱۰-۲۰) */
+const tThreshold = N => Math.max(3, Math.abs(PhiInv(1 - 0.05 / (2 * Math.max(N || 1, 1)))));
+function verdict(st, spearmanDec, N) {
+  const same = (st.ex_h1 > 0) === (st.ex_h2 > 0), t = st.t_net, bootOk = st.excess_net > 0 ? st.boot_lo > 0 : st.boot_hi < 0, thr = tThreshold(N);
   const mono = spearmanDec == null ? NaN : spearmanDec;                  // بدون دهک = یکنوایی نامعلوم ⇒ «استقرار» صادر نمی‌شود
-  if (Math.abs(t) >= 3 && same && bootOk && Math.abs(mono) >= 0.6) return st.excess_net > 0 ? { v: 'استقرار', why: 't خالص ≥ ۳، دو نیمه هم‌علامت، بوت‌استرپ بدون صفر، یکنوایی بالا', cls: 'ok' } : { v: 'معکوس معنادار', why: 'برتری معنادار ولی منفی؛ فروش استقراضی لازم است', cls: 'warn' };
+  if (Math.abs(t) >= thr && same && bootOk && Math.abs(mono) >= 0.6) return st.excess_net > 0 ? { v: 'استقرار', why: `t خالص ≥ ${thr.toFixed(2)} (بونفرونی برای ${N || 1} آزمایش)، دو نیمه هم‌علامت، بوت‌استرپ بدون صفر، یکنوایی بالا`, cls: 'ok' } : { v: 'معکوس معنادار', why: 'برتری معنادار ولی منفی؛ فروش استقراضی لازم است', cls: 'warn' };
   if (Math.abs(t) >= 2 && same) return { v: 'شاهد ضعیف', why: 't خالص ≥ ۲ و دو نیمه هم‌علامت، ولی آستانهٔ آزمون‌های چندگانه رد نشده', cls: 'warn' };
   return { v: 'بدون برتری معنادار', why: 't خالص < ۲ یا ناپایدار بین دو نیمه', cls: 'bad' };
 }
@@ -336,7 +360,7 @@ function attribution(L, res, costBp, roll = 36, opt = {}) {
   const codes = FACTORS.map(f => f[0]), n = Math.min(res.ret.length, ...codes.map(c => fac[c].length)), tail = a => a.slice(a.length - n);
   const rs = tail(res.ret), ra = tail(cap ? res.cap : res.all), ts = tail(res.to), ta = tail(cap ? (res.toCap || res.cap.map(() => 0)) : (res.toAll || res.all.map(() => 0))), Fc = codes.map(c => tail(fac[c])), c = costBp / 1e4;
   const y = [], F = [], drag = [], idx = [];
-  for (let i = 0; i < n; i++) { const yy = rs[i] - ra[i], ff = Fc.map(a => a[i]); if (isNaN(yy) || ff.some(isNaN)) continue; y.push(yy); F.push(ff); drag.push(((isNaN(ts[i]) ? 0 : ts[i]) - (isNaN(ta[i]) ? 0 : ta[i])) * c); idx.push(i); }
+  for (let i = 0; i < n; i++) { const yy = rs[i] - ra[i], ff = Fc.map(a => a[i]); if (isNaN(yy) || ff.some(isNaN)) continue; y.push(yy); F.push(ff); drag.push((isNaN(ts[i]) ? 0 : ts[i]) * c); idx.push(i); }   // drag: هزینهٔ استراتژی؛ مرجع بدون هزینه (فصل ۷ §۷٫۴)
   if (y.length < 24) return null;
   const o = olsHac(y, F); if (!o) return null;
   const self = o.r2 > 0.9999, T = y.length, mean = a => a.reduce((s, v) => s + v, 0) / a.length;
@@ -349,5 +373,5 @@ function attribution(L, res, costBp, roll = 36, opt = {}) {
     rolling: { win: roll, end: idx.slice(roll - 1).map(i => (res.end || [])[res.end ? res.end.length - n + i : 0]), beta: rolling } };
 }
 
-root.LabEngine = { load, run, stats, deciles, verdict, dsr, nwT, annOf, JS_ALGOS, zAt, fwAt, okAt, score, effWeights, attribution, factorSeriesFor, FACTORS, spearman, Phi, PhiInv };
+root.LabEngine = { load, run, stats, deciles, verdict, tThreshold, dsr, nwT, annOf, JS_ALGOS, zAt, fwAt, okAt, score, effWeights, attribution, factorSeriesFor, FACTORS, spearman, Phi, PhiInv };
 })(typeof window !== 'undefined' ? window : globalThis);

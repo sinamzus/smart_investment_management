@@ -16,7 +16,7 @@
 «شباهت به سبد آن معیار» دارد نه بار خالص روی یک پریمیوم مستقل. ارزش و کیفیت (۳۹ تا ۵۵ ماه) وارد نمی‌شوند.
 
 سهم هر جزء از میانگین برتری (سالانهٔ حسابی، ×۱۲): α·۱۲ + Σ β_f·mean(F_f)·۱۲ = mean(S − ALL)·۱۲ (دقیق، چون رگرسیون عرض از مبدأ دارد)؛
-هزینه جداگانه: −mean(گردش_S·c − گردش_ALL·c)·۱۲ ⇒ جمع = برتری خالص حسابی. خطای معیار ضرایب: نیوی‌وست (HAC) با ۳ وقفه.
+هزینه جداگانه: −mean(گردش_S·c)·۱۲ (مرجع بدون هزینه) ⇒ جمع = برتری خالص حسابی. خطای معیار ضرایب: نیوی‌وست (HAC) با ۳ وقفه.
 """
 from __future__ import annotations
 
@@ -76,13 +76,13 @@ def attribute(ret_s, ret_all, to_s, to_all, cost_bp, fac: dict):
     ok = ~np.isnan(y) & ~np.isnan(F).any(axis=1)
     y, F = y[ok], F[ok]
     c = cost_bp / 1e4
-    drag = (np.nan_to_num(ts[ok]) - np.nan_to_num(ta[ok])) * c
+    drag = np.nan_to_num(ts[ok]) * c                  # مرجع بدون هزینه (فصل ۷ §۷٫۴؛ ممیزی ۲۰۲۶-۱۰-۲۰)؛ ta فقط برای سازگاری امضا
     T = len(y)
     if T < MIN_MONTHS:
         return None
     b, se, r2 = ols_hac(y, F)
     self_fac = bool(r2 > 0.9999)                     # استراتژی خودش یکی از فاکتورهاست (مثلاً sig:size): t بی‌معناست
-    t = np.where((se > 1e-12) & ~self_fac, b / np.where(se > 1e-12, se, 1), np.nan)
+    t = np.where((se > 1e-12) & (not self_fac), b / np.where(se > 1e-12, se, 1), np.nan)
     mF = F.mean(axis=0)
     gross = 12 * 100 * y.mean()
     tf = lambda v: None if v != v else float(v)     # noqa: E731

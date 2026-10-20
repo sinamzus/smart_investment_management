@@ -31,8 +31,11 @@ function eventsBetween(X, hold, d1, d2) {
 
 /** وضعیت را از st.date تا d2 جلو می‌برد: سود نقدی ← طلب (و در روز پرداخت ← نقد)، سهام جایزه، حق‌تقدم (پذیره‌نویسی یا فروش).
     st = {date, hold: {ins_code: تعداد}, cash, recv: [{c, ex, pay, amt, est}]}؛ opt.rights[key] = 'sub' | 'sell' (پیش‌فرض sub)، opt.unsure: Set کلید رویدادهای نامطمئنی که اعمال شوند. */
+const REG_DAYS = 60;   // روز تقریبی از ایکس‌دیت حق‌تقدم تا ثبت افزایش سرمایه و قابل‌فروش شدن سهم جدید [تأیید لازم]
+const addDays = (d, n) => new Date(new Date(d + 'T00:00:00Z').getTime() + n * 864e5).toISOString().slice(0, 10);
 function roll(X, st, d2, opt = {}) {
   const hold = { ...st.hold }, recv = (st.recv || []).map(r => ({ ...r })), log = [];
+  const pend = (st.pend || []).map(r => ({ ...r }));
   let cash = +st.cash || 0;
   const par = X.par || 1000, rights = opt.rights || {}, unsure = opt.unsure || new Set();
   for (const v of eventsBetween(X, hold, st.date, d2)) {
@@ -51,7 +54,10 @@ function roll(X, st, d2, opt = {}) {
     let how = null, rv = 0;
     if (nR > 0) {
       how = rights[v.key] || 'sub';
-      if (how === 'sub') { cash -= nR * par; hold[c] += nR; }
+      if (how === 'sub') {
+        if (cash < nR * par) log.push({ d, t: 'short', c, need: nR * par, have: cash, key: v.key });   // نقد برای پذیره‌نویسی کافی نیست
+        cash -= nR * par; hold[c] += nR; pend.push({ c, n: nR, until: addDays(d, REG_DAYS) });       // تا ثبت افزایش سرمایه قابل‌فروش نیست
+      }
       else { rv = Math.max(pxAt(X, v.k, d) - par, 0); cash += nR * rv; }                // ارزش نظری حق‌تقدم = قیمت پس از رویداد − ۱۰۰۰ [تأیید لازم]
     }
     log.push({ d, t: 'cap', c, q, g, cs, bonus, nR, how, rv, unsure: status === 0, key: v.key });
@@ -60,7 +66,7 @@ function roll(X, st, d2, opt = {}) {
   for (const r of recv) { if (r.pay <= d2) { cash += r.amt; log.push({ d: r.pay, t: 'paid', c: r.c, amt: r.amt, est: r.est }); } else left.push(r); }
   Object.keys(hold).forEach(c => { if (!(hold[c] > 0)) delete hold[c]; });
   log.sort((a, b) => a.d.localeCompare(b.d));
-  return { date: d2, hold, cash, recv: left, log };
+  return { date: d2, hold, cash, recv: left, pend: pend.filter(r => r.until > d2 && hold[r.c] > 0), log };
 }
 
 /** ارزش‌گذاری در تاریخ d با قیمت پایانی آخرین روز معاملاتی ≤ d */
@@ -85,7 +91,10 @@ function orders(X, st, w, d, o = {}) {
   return r;
 }
 function orders1(X, st, w, d, o, V, invest) {
-  const p = prep(X), lot = o.lot || 1, minPct = o.minPct || 0, cost = (o.costBp || 0) / 1e4;
+  const p = prep(X), lot = o.lot || 1, minPct = o.minPct || 0;
+  // هزینهٔ نامتقارن (ممیزی ۲۰۲۶-۱۰-۲۰): فروش مالیات نقل‌وانتقال هم دارد؛ اگر فقط costBp داده شود، نصف‌نصف (رفت‌وبرگشت)
+  const cB = (o.costBuyBp != null ? o.costBuyBp : (o.costBp || 0) / 2) / 1e4, cS = (o.costSellBp != null ? o.costSellBp : (o.costBp || 0) / 2) / 1e4;
+  const pendQ = {}; (st.pend || []).forEach(r => { if (r.until > d) pendQ[r.c] = (pendQ[r.c] || 0) + r.n; });
   const codes = new Set([...Object.keys(st.hold || {}), ...Object.keys(w).filter(c => w[c] > 0)]);
   // قاعدهٔ نماد بی‌معامله (همان freeze_untradable بک‌تست، فصل ۸ §۸٫۱): موجودی بی‌معامله با ارزش فعلی‌اش منجمد می‌ماند،
   // نماد تازهٔ بی‌معامله خریده نمی‌شود، و باقی سرمایه به نسبت وزن میان نمادهای قابل‌معامله پخش می‌شود.
@@ -103,6 +112,7 @@ function orders1(X, st, w, d, o, V, invest) {
     if (k == null || !(px > 0)) { missing.push(c); if (q) hold2[c] = q; continue; }
     if (!tr) { if (q > 0 || (w[c] || 0) > 0) frozen.push(c); if (q) hold2[c] = q; continue; }
     let tq = Math.floor(wt * free / px / lot + 1e-9) * lot;
+    if (pendQ[c] && tq < Math.min(q, pendQ[c])) { tq = Math.min(q, pendQ[c]); if (!frozen.includes(c)) frozen.push(c); }   // سهم حق‌تقدم ثبت‌نشده فروختنی نیست
     let dq = tq - q;
     if (dq !== 0 && Math.abs(dq * px) < minPct * invest && tq > 0) { dq = 0; tq = q; }       // معاملهٔ خیلی کوچک حذف (مگر فروش کامل)
     if (tq > 0) hold2[c] = tq;
@@ -112,8 +122,8 @@ function orders1(X, st, w, d, o, V, invest) {
     out.push({ c, k, side: dq > 0 ? 'buy' : 'sell', qty: Math.abs(dq), px, val, q, tq, w_now: q * px / (V.stock + V.cash || 1), w_tgt: wt });
   }
   out.sort((a, b) => (a.side === b.side ? b.val - a.val : a.side === 'sell' ? -1 : 1));
-  const fee = (buy + sell) * cost / 2;
-  return { orders: out, buy, sell, fee, invest, V, after: { date: d, hold: hold2, cash: V.cash - buy + sell - fee, recv: st.recv || [] }, frozen, missing };
+  const fee = buy * cB + sell * cS;
+  return { orders: out, buy, sell, fee, invest, V, after: { date: d, hold: hold2, cash: V.cash - buy + sell - fee, recv: st.recv || [], pend: st.pend || [] }, frozen, missing };
 }
 
 /** انحراف وضعیت واقعی از برنامه در تاریخ d (وزن هر دو با قیمت همان روز) */
@@ -216,7 +226,7 @@ const holdText = h => Object.entries(h || {}).sort((a, b) => b[1] - a[1]).map(([
 const advOf = c => { const L = root.SIM_LAB, CTX = root.SIM_LAB_CTX && root.SIM_LAB_CTX(); if (!L || !CTX) return NaN; const i = L.codes.findIndex(x => x.c === c); if (i < 0) return NaN; const a = CTX.adv[(L.rows - 1) * L.k + i]; return a > 0 ? Math.exp(a) : NaN; };
 const port = () => db.ports.find(p => p.id === ui.pid) || null;
 const lastOf = (p, t) => p ? [...p.events].reverse().find(e => e.type === t) || null : null;
-const ui = { pid: null, bid: null, rb: { date: null, bid: null, lot: 1, min: 0.1, cost: 125, useRecv: false, rights: {}, unsure: new Set() }, res: null };
+const ui = { pid: null, bid: null, rb: { date: null, bid: null, lot: 1, min: 0.1, cb: 37, cs: 88, useRecv: false, rights: {}, unsure: new Set() }, res: null };
 
 function renderAll() { if ($('v-bsk') && $('v-bsk').dataset.ready) renderBaskets(); if ($('v-port') && $('v-port').dataset.ready) renderPort(); }
 
@@ -270,7 +280,8 @@ function initPort() {
     <div class="ctl"><label${tip('تاریخ ریبالانس (شمسی). قیمت‌ها پایانی آخرین روز معاملاتی تا این تاریخ‌اند؛ هدف سبد با آخرین سیگنال تا این تاریخ دوباره ساخته می‌شود.')}>تاریخ <input id="rb-d" style="width:100px"></label>
       <label${tip('استراتژی ریبالانس: همان سبد پرتفو یا هر سبد ذخیره‌شدهٔ دیگر.')}>سبد هدف <select id="rb-b"></select></label>
       <label${tip('کمترین معامله به درصد سرمایه؛ معاملهٔ کوچک‌تر حذف می‌شود (مگر فروش کامل).')}>حداقل معامله ٪ <input type="number" id="rb-min" value="0.1" min="0" step="0.05" style="width:70px"></label>
-      <label${tip('هزینهٔ رفت‌وبرگشت برای تخمین هزینه (bp) [تأیید لازم].', '6:6.1')}>هزینه bp <input type="number" id="rb-cost" value="125" min="0" step="5" style="width:70px"></label>
+      <label${tip('هزینهٔ خرید به bp از ارزش معامله: کارمزد کارگزاری، بورس، سپرده‌گذاری و نظارت [تأیید لازم].', '6:6.1')}>هزینهٔ خرید bp <input type="number" id="rb-cb" value="37" min="0" step="1" style="width:60px"></label>
+      <label${tip('هزینهٔ فروش به bp: کارمزدها + مالیات نقل‌وانتقال ۰٫۵٪ [تأیید لازم]. جمع خرید و فروش = هزینهٔ رفت‌وبرگشت پروژه (۱۲۵ bp).', '6:6.1')}>هزینهٔ فروش bp <input type="number" id="rb-cs" value="88" min="0" step="1" style="width:60px"></label>
       <label${tip('اگر روشن باشد، سود دریافت‌نشده هم بخشی از سرمایهٔ قابل‌سرمایه‌گذاری حساب می‌شود (یعنی پیش از وصول خرج می‌شود؛ نقد منفی ممکن است). پیش‌فرض خاموش: فقط سهام + نقد.')}><input type="checkbox" id="rb-recv"> سود دریافت‌نشده هم سرمایه‌گذاری شود</label></div>
     <div class="kpis" id="rb-kpi2"></div>
     <div class="lb-note" id="rb-evcap"></div><div class="panel-body scroll" style="max-height:260px"><table class="dt" id="rb-ev"></table></div>
@@ -286,10 +297,10 @@ function initPort() {
   $('pt-new').onclick = () => { $('pt-newf').hidden = !$('pt-newf').hidden; $('pt-bsk').innerHTML = bOpts(ui.newFrom); $('pt-d0').value = jdate(today()); };
   $('pt-del').onclick = () => { const p = port(); if (p && confirm(`پرتفوی «${p.name}» و تاریخچه‌اش حذف شود؟`)) { db.ports = db.ports.filter(x => x.id !== p.id); ui.pid = null; DB.save(db); renderPort(); } };
   $('pt-mk').onclick = makePort;
-  ['rb-d', 'rb-b', 'rb-min', 'rb-cost', 'rb-recv'].forEach(i => { $(i).onchange = () => renderRebal(); });
+  ['rb-d', 'rb-b', 'rb-min', 'rb-cb', 'rb-cs', 'rb-recv'].forEach(i => { $(i).onchange = () => renderRebal(); });
   $('rb-saveplan').onclick = savePlan; $('ac-save').onclick = saveActual; $('ac-calc').onclick = calcCash;
   $('rb-csv2').onclick = () => { const r = ui.res; if (!r) return; download(`rebalance_${(port() || {}).name}_${r.date}.csv`, [['action', 'symbol', 'ins_code', 'qty', 'ref_price', 'value_rial', 'qty_now', 'qty_target'], ...r.o.orders.map(x => [x.side.toUpperCase(), symOf(x.c), x.c, x.qty, x.px, Math.round(x.val), x.q, x.tq])]); };
-  $('rb-json2').onclick = () => { const r = ui.res, p = port(); if (!r || !p) return; const body = { schema: 'sim.trade_plan/1', plan_id: p.id + '-' + r.date, asof: r.date, created: new Date().toISOString(), target: r.bname, portfolio: p.name, aum_rial: Math.round(r.o.invest), cost_bp_roundtrip: ui.rb.cost, orders: r.o.orders.map(x => ({ symbol: symOf(x.c), ins_code: x.c, side: x.side.toUpperCase(), qty: x.qty, ref_price: x.px, type: 'rebalance' })) }; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(body, null, 1)], { type: 'application/json' })); a.download = `trade_plan_${p.name}_${r.date}.json`; a.click(); };
+  $('rb-json2').onclick = () => { const r = ui.res, p = port(); if (!r || !p) return; const body = { schema: 'sim.trade_plan/1', plan_id: p.id + '-' + r.date, asof: r.date, created: new Date().toISOString(), target: r.bname, portfolio: p.name, aum_rial: Math.round(r.o.invest), cost_bp_buy: ui.rb.cb, cost_bp_sell: ui.rb.cs, orders: r.o.orders.map(x => ({ symbol: symOf(x.c), ins_code: x.c, side: x.side.toUpperCase(), qty: x.qty, ref_price: x.px, type: 'rebalance' })) }; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(body, null, 1)], { type: 'application/json' })); a.download = `trade_plan_${p.name}_${r.date}.json`; a.click(); };
   if (ui.newFrom) { $('pt-newf').hidden = false; $('pt-bsk').innerHTML = bOpts(ui.newFrom); $('pt-d0').value = jdate(today()); }
   renderPort();
 }
@@ -332,13 +343,13 @@ function renderRebal() {
   const p = port(); if (!p) return;
   const act = lastOf(p, 'actual'), d2 = isoOf($('rb-d').value) || today();
   if (d2 < act.date) { $('rb-ord').innerHTML = `<tbody><tr><td class="mute" style="white-space:normal">تاریخ ریبالانس پیش از آخرین ثبت (${jdate(act.date)}) است.</td></tr></tbody>`; return; }
-  ui.rb.bid = $('rb-b').value || p.basketId; ui.rb.min = +$('rb-min').value || 0; ui.rb.cost = +$('rb-cost').value || 0; ui.rb.useRecv = $('rb-recv').checked;
+  ui.rb.bid = $('rb-b').value || p.basketId; ui.rb.min = +$('rb-min').value || 0; ui.rb.cb = +$('rb-cb').value || 0; ui.rb.cs = +$('rb-cs').value || 0; ui.rb.useRecv = $('rb-recv').checked;
   const b = db.baskets.find(x => x.id === ui.rb.bid); if (!b) return;
   const st = roll(X, act, d2, { rights: ui.rb.rights, unsure: ui.rb.unsure }), t = targetAt(b, d2);
-  const o = orders(X, st, t.w, d2, { minPct: ui.rb.min / 100, costBp: ui.rb.cost, useRecv: ui.rb.useRecv });
+  const o = orders(X, st, t.w, d2, { minPct: ui.rb.min / 100, costBuyBp: ui.rb.cb, costSellBp: ui.rb.cs, useRecv: ui.rb.useRecv });
   ui.res = { date: d2, st, t, o, bid: b.id, bname: b.name };
   const V = o.V;
-  $('rb-kpi2').innerHTML = [['ارزش کل (میلیارد ریال)', f(V.nav / 1e9, 2), 'سهام + نقد + سود دریافت‌نشده در تاریخ ریبالانس.'], ['قابل سرمایه‌گذاری', f(o.invest / 1e9, 2), 'پایهٔ وزن هدف: سهام + نقد' + (ui.rb.useRecv ? ' + سود دریافت‌نشده' : '') + '.'], ['خرید', f(o.buy / 1e9, 2), 'ارزش سفارش‌های خرید.'], ['فروش', f(o.sell / 1e9, 2), 'ارزش سفارش‌های فروش.'], ['هزینهٔ تخمینی (میلیون ریال)', f(o.fee / 1e6), 'نصف هزینهٔ رفت‌وبرگشت روی کل معاملات.'], ['نقد پس از اجرا (میلیون ریال)', f(Math.round(o.after.cash / 1e6) || 0), 'نقد فعلی − خرید + فروش − هزینه. منفی یعنی کسری نقد.'], ['سهم فعال پیش از ریبالانس', fmt(100 * deviation(X, o.after.hold, st, d2).active, 1) + '٪', 'فاصلهٔ موجودی فعلی تا هدف.']]
+  $('rb-kpi2').innerHTML = [['ارزش کل (میلیارد ریال)', f(V.nav / 1e9, 2), 'سهام + نقد + سود دریافت‌نشده در تاریخ ریبالانس.'], ['قابل سرمایه‌گذاری', f(o.invest / 1e9, 2), 'پایهٔ وزن هدف: سهام + نقد' + (ui.rb.useRecv ? ' + سود دریافت‌نشده' : '') + '.'], ['خرید', f(o.buy / 1e9, 2), 'ارزش سفارش‌های خرید.'], ['فروش', f(o.sell / 1e9, 2), 'ارزش سفارش‌های فروش.'], ['هزینهٔ تخمینی (میلیون ریال)', f(o.fee / 1e6), 'خرید × هزینهٔ خرید + فروش × هزینهٔ فروش.'], ['نقد پس از اجرا (میلیون ریال)', f(Math.round(o.after.cash / 1e6) || 0), 'نقد فعلی − خرید + فروش − هزینه. منفی یعنی کسری نقد.'], ['سهم فعال پیش از ریبالانس', fmt(100 * deviation(X, o.after.hold, st, d2).active, 1) + '٪', 'فاصلهٔ موجودی فعلی تا هدف.']]
     .map(([k, v, tt]) => `<div class="kpi"${tip(tt, DOCS)}><div class="k">${k}</div><div class="v ${k.startsWith('نقد پس') && o.after.cash < 0 ? 'down' : ''}">${v}</div></div>`).join('');
   // رویدادهای شرکتی میان آخرین ثبت و تاریخ ریبالانس
   const L = st.log;
@@ -346,6 +357,7 @@ function renderRebal() {
     (L.map(e => { const sy = esc(symOf(e.c));
       if (e.t === 'div') return `<tr><td class="num">${jdate(e.d)}</td><td>${sy}</td><td>سود نقدی ${fmt(e.dps, 0)} ریال × ${f(e.q)} ← طلب تا ${jdate(e.pay)}${e.est ? ' <span class="chip warn" data-tip="روز پرداخت اعلام نشده؛ استحقاق + میانهٔ ۹۶ روز.">برآورد</span>' : ''}</td><td class="n"></td><td class="n">${f(e.amt / 1e6, 1)}</td><td></td></tr>`;
       if (e.t === 'paid') return `<tr><td class="num">${jdate(e.d)}</td><td>${sy}</td><td>وصول سود${e.est ? ' (روز برآوردی)' : ''}</td><td class="n"></td><td class="n up">+${f(e.amt / 1e6, 1)}</td><td></td></tr>`;
+      if (e.t === 'short') return `<tr><td class="num">${jdate(e.d)}</td><td>${sy}</td><td data-tip="نقد پیش از پذیره‌نویسی کمتر از مبلغ لازم بود؛ یا نقد بیاورید یا «فروش حق‌تقدم» را انتخاب کنید.">⚠ کسری نقد برای پذیره‌نویسی</td><td class="n"></td><td class="n down">${f(e.need / 1e6, 1)}</td><td></td></tr>`;
       if (e.t === 'glitch') return `<tr class="weak"><td class="num">${jdate(e.d)}</td><td>${sy}</td><td data-tip="سرمایه چند روز قبل به همین نسبت کم و حالا برگشته؛ خطای دادهٔ TSETMC است و اعمال نمی‌شود.">بازگشت خطای دادهٔ سرمایه (اعمال نشد)</td><td class="n"></td><td class="n"></td><td></td></tr>`;
       if (e.t === 'unsure') return `<tr><td class="num">${jdate(e.d)}</td><td>${sy}</td><td data-tip="قیمت مرجع با نسبت افزایش سرمایه نمی‌خواند؛ ممکن است رویداد دیگری هم‌زمان بوده باشد. اگر از کدال مطمئنید اعمال کنید.">افزایش سرمایهٔ نامطمئن ${fmt(100 * (e.g - 1), 0)}٪</td><td class="n"></td><td class="n"></td><td><label><input type="checkbox" data-uns="${esc(e.key)}"> اعمال شود</label></td></tr>`;
       const parts = [e.bonus ? `جایزه +${f(e.bonus)}` : '', e.nR ? `حق‌تقدم ${f(e.nR)}` : ''].filter(Boolean).join('، ');
@@ -380,7 +392,7 @@ function saveActual() {
   const act = lastOf(p, 'actual'); if (act && d < act.date) { toast('تاریخ پیش از آخرین ثبت است'); return; }
   const pl = lastOf(p, 'plan'), rolled = act ? roll(X, act, d, { rights: (pl && pl.rights) || {}, unsure: new Set((pl && pl.unsure) || []) }) : null;
   const cashIn = $('ac-cash').value === '' ? (rolled ? rolled.cash : 0) : +$('ac-cash').value;
-  p.events.push({ type: 'actual', date: d, hold, cash: cashIn, recv: rolled ? rolled.recv : [], note: `${Object.keys(hold).length} نماد` });
+  p.events.push({ type: 'actual', date: d, hold, cash: cashIn, recv: rolled ? rolled.recv : [], pend: rolled ? rolled.pend : [], note: `${Object.keys(hold).length} نماد` });
   DB.save(db); $('ac-note').textContent = 'ثبت شد'; renderPort();
 }
 function calcCash() {
@@ -390,7 +402,8 @@ function calcCash() {
   const pl = lastOf(p, 'plan'), st = roll(X, act, d, { rights: (pl && pl.rights) || {}, unsure: new Set((pl && pl.unsure) || []) }), pr = prep(X);
   let trade = 0, gross = 0;
   for (const c of new Set([...Object.keys(st.hold), ...Object.keys(hold)])) { const k = pr.ci.get(String(c)), px = k == null ? 0 : pxAt(X, k, d) || 0, dq = (hold[c] || 0) - (st.hold[c] || 0); trade += dq * px; gross += Math.abs(dq * px); }
-  const cash = st.cash - trade - gross * ((+$('rb-cost').value || 0) / 1e4) / 2;
+  let buyV = 0, sellV = 0; for (const c of new Set([...Object.keys(st.hold), ...Object.keys(hold)])) { const k = pr.ci.get(String(c)), px = k == null ? 0 : pxAt(X, k, d) || 0, dq = (hold[c] || 0) - (st.hold[c] || 0); if (dq > 0) buyV += dq * px; else sellV -= dq * px; }
+  const cash = st.cash - trade - buyV * ((+$('rb-cb').value || 0) / 1e4) - sellV * ((+$('rb-cs').value || 0) / 1e4);
   $('ac-cash').value = Math.round(cash); $('ac-note').textContent = `نقد برآوردی ${fmt(cash / 1e6, 0)} میلیون ریال (معاملات ${fmt(gross / 1e9, 2)} میلیارد ریال)`;
 }
 function renderHist() {

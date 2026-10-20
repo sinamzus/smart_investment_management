@@ -96,7 +96,7 @@ def _spearman(x, y):
     return float(np.corrcoef(rx, ry)[0, 1])
 
 
-def run(P: Panel, signal: str, ngroups: int = 10, tops: dict | None = None, delay: int = 0, qscore=None, min_names: int = 50, live: bool = False):
+def run(P: Panel, signal: str, ngroups: int = 10, tops: dict | None = None, delay: int = 1, qscore=None, min_names: int = 50, live: bool = False):
     """ماه‌به‌ماه: گروه‌های ngroups‌تایی، ALL و سبدهای TOP با بافر.
     tops: {نام: (ورود، خروج)} رتبهٔ درصدی از بالا؛ مثلاً {"T20_30": (0.2, 0.3)} = ورود اگر در ۲۰٪ برتر، ماندن تا ۳۰٪.
     live=True: وضعیت امتیازها در آخرین روز داده (برای فهرست اقدام) هم در out["live"] می‌آید."""
@@ -112,7 +112,7 @@ def run(P: Panel, signal: str, ngroups: int = 10, tops: dict | None = None, dela
         if a < 252 + 21:
             continue
         s, ok = P.score(signal, a, qscore)
-        ok = ok & ~np.isnan(X[a + 1]) & P.traded(a + 1 + delay)   # فقط روز اجرا و معامله‌شده در آن روز؛ شرط «داده در پایان دوره» نگاه به آینده بود (فصل ۱۴ §۱۴٫۲٫۱)
+        ok = ok & ~np.isnan(X[a]) & P.traded(a + delay)   # معامله در روز اجرا (ورود در بستهٔ a+delay)؛ بدون شرط داده پس از آن (نگاه به آینده؛ ممیزی ۲۰۲۶-۱۰-۲۰)
         idx = np.where(ok)[0]
         if len(idx) < min_names:
             continue
@@ -216,7 +216,11 @@ def stats_of(res: dict, key: str, cost_bp: float = 125.0, bench: str = "ALL") ->
     """آمار یک سبد (G1..Gn یا TOP) نسبت به ALL: ناخالص/خالص، t، IR، برد، افت، گردش، پایداری، بوت‌استرپ."""
     r, a = res["ret"][key], res["ret"][bench]
     to, toa = res["to"][key], res["to"][bench]
-    rn, an = net(r, to, cost_bp), net(a, toa, cost_bp)
+    rn = net(r, to, cost_bp)
+    # مرجع بدون هزینه (ممیزی ۲۰۲۶-۱۰-۲۰؛ فصل ۰۷ §۷٫۴): شاخص مرجع هزینهٔ معامله نمی‌پردازد. پیش‌تر مرجع هم‌وزن (گردش ~۲۸۴٪ در سال) هزینه
+    # می‌پرداخت و «برتری خالص» با بالا رفتن هزینه بیشتر می‌شد (۰ bp: ۱۷٫۹، ۱۲۵: ۱۸٫۸، ۲۵۰: ۱۹٫۷). عدد قبلی در excess_vs_netbench می‌ماند.
+    an = np.asarray(a, float)
+    an_net = net(a, toa, cost_bp)
     ex_g, ex_n = r - a, rn - an
     half = len(ex_n) // 2
     lo, hi, p = boot_mean(ex_n)
@@ -226,6 +230,7 @@ def stats_of(res: dict, key: str, cost_bp: float = 125.0, bench: str = "ALL") ->
         by_year.setdefault(ewr.g2j(d.year, d.month, d.day)[0], []).append(v)
     return {
         "ann_gross": ann(r), "ann_net": ann(rn), "ann_all_net": ann(an), "excess_net": ann(rn) - ann(an), "excess_gross": ann(r) - ann(a),
+        "excess_vs_netbench": ann(rn) - ann(an_net),
         "vol": float(np.std(r, ddof=1) * np.sqrt(12) * 100), "te": float(np.std(ex_n, ddof=1) * np.sqrt(12) * 100),
         "ir": float(ex_n.mean() / ex_n.std(ddof=1) * np.sqrt(12)) if ex_n.std() > 0 else np.nan,
         "t_gross": nw_t(ex_g), "t_net": nw_t(ex_n), "hit": float((ex_n > 0).mean() * 100),
@@ -253,19 +258,27 @@ def monotonicity(res: dict, cost_bp: float = 125.0) -> dict:
             "pairs": g - 1, "spread_t": nw_t(spread), "spread_ann": ann(spread + 1e-12) if False else float(spread.mean() * 1200)}
 
 
+def t_threshold(trials: int) -> float:
+    """آستانهٔ t استقرار: بیشینهٔ ۳ (Harvey–Liu–Zhu) و t بونفرونی دوطرفهٔ ۵٪ برای N آزمایش (ممیزی ۲۰۲۶-۱۰-۲۰: پیش‌تر ۳ ثابت و trials بی‌اثر؛
+    N = ۱۲۲ ⇒ ۳٫۵۳). N باید همهٔ آزمایش‌ها، از جمله دورهای بازطراحی، را بشمارد."""
+    from scipy.stats import norm
+    return float(max(3.0, norm.ppf(1 - 0.05 / (2 * max(int(trials), 1)))))
+
+
 def verdict(st: dict, mono: dict, ic: dict, trials: int = 60) -> dict:
     """حکم سخت‌گیرانه، با قاعدهٔ از پیش‌تعیین‌شده (نه انتخاب پس از دیدن نتیجه):
     استقرار پیشنهادی فقط اگر |t خالص| ≥ آستانهٔ تعدیل‌شده برای آزمون‌های چندگانه (≈ ۳٫۰، Harvey–Liu–Zhu) [تأیید لازم]، علامت دو نیمه یکسان،
     بوت‌استرپ ۹۵٪ صفر را در بر نگیرد و یکنوایی دهک‌ها Spearman ≥ ۰٫۶ باشد؛ «شاهد ضعیف» اگر t خالص ≥ ۲ و دو نیمه هم‌علامت؛ وگرنه «بدون برتری معنادار»."""
     t, same = st["t_net"], (st["ex_h1"] > 0) == (st["ex_h2"] > 0)
     boot_ok = st["boot_lo"] > 0 if st["excess_net"] > 0 else st["boot_hi"] < 0
-    if abs(t) >= 3 and same and boot_ok and abs(mono["spearman"]) >= 0.6:
-        v, why = ("استقرار", "t خالص ≥ ۳، دو نیمه هم‌علامت، بوت‌استرپ بدون صفر، یکنوایی بالا") if st["excess_net"] > 0 else ("معکوس معنادار", "برتری معنادار ولی منفی؛ فروش استقراضی لازم است")
+    thr = t_threshold(trials)
+    if abs(t) >= thr and same and boot_ok and abs(mono["spearman"]) >= 0.6:
+        v, why = ("استقرار", f"t خالص ≥ {thr:.2f} (بونفرونی برای {trials} آزمایش)، دو نیمه هم‌علامت، بوت‌استرپ بدون صفر، یکنوایی بالا") if st["excess_net"] > 0 else ("معکوس معنادار", "برتری معنادار ولی منفی؛ فروش استقراضی لازم است")
     elif abs(t) >= 2 and same:
         v, why = "شاهد ضعیف", "t خالص ≥ ۲ و دو نیمه هم‌علامت، ولی آستانهٔ آزمون‌های چندگانه رد نشده"
     else:
         v, why = "بدون برتری معنادار", "t خالص < ۲ یا ناپایدار بین دو نیمه"
-    return {"verdict": v, "why": why, "t_net": round(t, 2), "trials": trials}
+    return {"verdict": v, "why": why, "t_net": round(t, 2), "trials": trials, "t_threshold": round(thr, 2)}
 
 
 # ── خودآزمایی ───────────────────────────────────────────────────────────────────

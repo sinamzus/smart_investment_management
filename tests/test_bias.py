@@ -49,9 +49,10 @@ class UntradedNames(unittest.TestCase):
     def test_tradable_uses_execution_day(self):
         mk = tiny_market()
         a = mk.n - 3
-        mk.vol[a + 1, 2] = 0.0                      # روز اجرا (delay = 0)
-        self.assertFalse(mk.tradable(a)[2]); self.assertTrue(mk.tradable(a)[0])
-        self.assertTrue(mk.tradable(a, delay=1)[2])   # با تأخیر یک روز، روز اجرا a+2 است
+        mk.vol[a + 1, 2] = 0.0                      # روز اجرا با delay = 1 (ورود در بستهٔ a+1؛ ممیزی ۲۰۲۶-۱۰-۲۰)
+        self.assertFalse(mk.tradable(a, delay=1)[2]); self.assertTrue(mk.tradable(a, delay=1)[0])
+        self.assertTrue(mk.tradable(a)[2])            # با delay = 0 ورود در بستهٔ روز سیگنال a است که معامله شده
+        self.assertEqual(mk.exec_day(a, 1), a + 1)
 
     def test_freeze_untradable_keeps_held_weight(self):
         prev = np.array([0.5, 0.3, 0.2, 0.0])
@@ -122,10 +123,10 @@ class MarketClosure(unittest.TestCase):
         mk = tiny_market()
         a = mk.n - 10
         mk.vol[a + 1: a + 4, :] = 0.0                # سه روز بازار بسته
-        self.assertEqual(mk.exec_day(a), a + 4)
-        self.assertTrue(mk.tradable(a).all())
+        self.assertEqual(mk.exec_day(a, 1), a + 4)
+        self.assertTrue(mk.tradable(a, 1).all())
         mk.vol[a + 4, 1] = 0.0                       # روز بازگشایی نماد ۱ معامله ندارد
-        self.assertFalse(mk.tradable(a)[1])
+        self.assertFalse(mk.tradable(a, 1)[1])
 
     def test_signal_day_in_closure_uses_last_open_day(self):
         mk = tiny_market()
@@ -159,9 +160,45 @@ class FactorAttribution(unittest.TestCase):
         total = r["alpha_ann"] + sum(x["contrib_ann"] for x in r["factors"])
         self.assertAlmostEqual(total, r["gross_excess_ann"], places=8)
         self.assertAlmostEqual(r["gross_excess_ann"] + r["cost_ann"], r["net_excess_ann"], places=8)
-        self.assertAlmostEqual(r["cost_ann"], -12 * 100 * 0.05 * 0.01, places=8)   # (۰٫۱ − ۰٫۰۵) × ۱٪ × ۱۲
+        self.assertAlmostEqual(r["cost_ann"], -12 * 100 * 0.1 * 0.01, places=8)    # مرجع بدون هزینه: گردش استراتژی ۰٫۱ × ۱٪ × ۱۲
 
     def test_tail_alignment_for_late_start(self):
         import attribution as at
         a, b = at.tail_align(np.arange(10), np.arange(4))
         np.testing.assert_array_equal(a, [6, 7, 8, 9])
+
+
+class AuditFixes20261020(unittest.TestCase):
+    """ممیزی ۲۰۲۶-۱۰-۲۰: صف، خروج کامل، آستانهٔ چندگانه، مرجع بدون هزینه."""
+
+    def test_freeze_locked_respects_queues(self):
+        prev = np.array([0.4, 0.3, 0.3, 0.0])
+        w = np.array([0.2, 0.5, 0.0, 0.3])           # نماد ۱ در صف خرید (بیش‌خرید ممنوع)، نماد ۲ در صف فروش (فروش ممنوع)
+        tr = np.ones(4, bool)
+        lb = np.array([False, True, False, False]); ls = np.array([False, False, True, False])
+        out = cn.freeze_locked(w, prev, tr, lb, ls)
+        self.assertAlmostEqual(out[1], 0.3); self.assertAlmostEqual(out[2], 0.3)
+        self.assertAlmostEqual(out.sum(), 1.0)
+        self.assertTrue((out[[0, 3]] > 0).all())
+
+    def test_locks_detect_one_price_limit_days(self):
+        mk = tiny_market()
+        d = mk.n - 2
+        mk.close = mk.close.copy(); mk.prev = mk.prev.copy()
+        mk.hi = mk.close.copy(); mk.lo = mk.close.copy()
+        mk.hi[d] = mk.lo[d] = mk.close[d] = mk.prev[d] * 1.05      # تمام روز یک قیمت در سقف ⇒ صف خرید
+        lb, ls = mk.locks(d)
+        self.assertTrue(lb.all()); self.assertFalse(ls.any())
+
+    def test_t_threshold_grows_with_trials(self):
+        import factor_engine as fe
+        self.assertAlmostEqual(fe.t_threshold(1), 3.0)
+        self.assertAlmostEqual(fe.t_threshold(122), 3.53, places=2)
+
+    def test_benchmark_pays_no_cost(self):
+        import factor_engine as fe
+        T = 60
+        res = {"ret": {"S": np.full(T, 0.02), "ALL": np.full(T, 0.02)}, "to": {"S": np.full(T, 0.1), "ALL": np.full(T, 0.3)},
+               "end": list(pd.date_range("2020-01-31", periods=T, freq="ME")), "n": {"S": 50}}
+        lo = fe.stats_of(res, "S", 0)["excess_net"]; hi = fe.stats_of(res, "S", 250)["excess_net"]
+        self.assertLessEqual(hi, lo)                  # برتری با بالا رفتن هزینه کم می‌شود، نه زیاد

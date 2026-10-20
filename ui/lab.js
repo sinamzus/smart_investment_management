@@ -298,8 +298,8 @@ function specText(s) {
 }
 function renderKPIs() {
   renderFlow();
-  const st = lab.st, v = E.verdict(st, lab.dec ? lab.dec.spearman : null);
-  const K = [['بازده خالص سالانه', f1(st.ann_net) + '٪', ''], [lab.bench === 'cap' ? 'مرجع (ارزش‌وزن واجدان)' : 'مرجع (هم‌وزن واجدان)', f1(st.ann_all_net) + '٪', ''], ['برتری خالص', sg1(st.excess_net) + '٪', st.excess_net >= 0 ? 'up' : 'down'], ['t خالص (نیوی‌وست)', f1(st.t_net, 2), tcls(st.t_net)],
+  const st = lab.st, v = E.verdict(st, lab.dec ? lab.dec.spearman : null, L.multi.N + lab.trials);
+  const K = [['بازده خالص سالانه', f1(st.ann_net) + '٪', ''], [lab.bench === 'cap' ? 'مرجع (ارزش‌وزن واجدان، بدون هزینه)' : 'مرجع (هم‌وزن واجدان، بدون هزینه)', f1(st.ann_all_net) + '٪', ''], ['برتری خالص', sg1(st.excess_net) + '٪', st.excess_net >= 0 ? 'up' : 'down'], ['t خالص (نیوی‌وست)', f1(st.t_net, 2), tcls(st.t_net)],
     ['IR', f1(st.ir, 2), ''], ['TE سالانه', f1(st.te) + '٪', ''], ['بیشترین افت فعال', f1(st.mdd_active) + '٪', 'down'], ['گردش سالانه', f1(st.turn_ann, 0) + '٪', ''], ['تعداد نماد', f1(st.names, 0), '']];
   $('lb-kpis').innerHTML = K.map(([k, x, c]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${x}</div></div>`).join('');
   $('lb-title').textContent = lab.name || 'نتیجهٔ اجرا'; $('lb-title').dataset.tip = specText(lab.spec);
@@ -369,7 +369,7 @@ function tabStab(host) {
     <div class="lb-note">نیمهٔ اول و دوم نمونه را جدا بخوانید: برتری‌ای که فقط در یک نیمه است معمولاً شاهد رژیم است نه ساختار. بوت‌استرپ ایستای بلوکی (بلوک میانگین ۳ ماه، ۱۰۰۰ تکرار) عدم‌قطعیت میانگین برتری را بدون فرض نرمال‌بودن می‌دهد.</div>`;
 }
 function tabHard(host) {
-  const st = lab.st, N = L.multi.N + lab.trials, bt = Math.abs(E.PhiInv(1 - 0.05 / (2 * N))), d = E.dsr(st.exn, lab.srLib, N), v = E.verdict(st, lab.dec ? lab.dec.spearman : null), M = L.multi;
+  const st = lab.st, N = L.multi.N + lab.trials, bt = Math.abs(E.PhiInv(1 - 0.05 / (2 * N))), d = E.dsr(st.exn, lab.srLib, N), v = E.verdict(st, lab.dec ? lab.dec.spearman : null, N), M = L.multi;
   const pbo = M.pbo || {}, rc = M.rc_spa || {};
   host.innerHTML = `<div class="lb-grid2"><div><table class="dt">${th([['آزمون'], ['نتیجه', 'n']])}<tbody>
     <tr><td>تعداد آزمایش‌ها N (کتابخانه + این نشست)</td><td class="n">${N}</td></tr>
@@ -387,9 +387,13 @@ function tabHard(host) {
     <div class="lb-note"><b>حکم: ${esc(v.v)}</b> — ${esc(v.why)}. هر بار «اجرا» می‌زنید N بزرگ‌تر و آستانه سخت‌تر می‌شود: این همان هزینهٔ جست‌وجوی پارامتر است. PBO بالای ۵۰٪ یعنی بهترین بک‌تست درون‌نمونه به‌طور متوسط بیرون‌نمونه زیر میانه است. Reality Check و SPA می‌پرسند آیا بهترین استراتژی کتابخانه را می‌توان از مرجع بهتر دانست؛ p بزرگ یعنی خیر.</div>`;
 }
 function buildDays(w, aum) {
-  const k = L.k, rl = L.rows - 1; let tw = 0, wd = 0, n = 0, g1 = 0, mx = 0;
-  for (let i = 0; i < k; i++) if (w[i] > 0) { const av = CTX.adv[rl * k + i], adv = av < 0 ? 0 : Math.exp(av) - 1, d = adv > 0 ? Math.ceil(w[i] * aum / adv / 0.1) : 99; tw += w[i]; wd += w[i] * d; n++; if (d > 1) g1++; mx = Math.max(mx, d); }
-  return { wdays: wd / (tw || 1), pct_gt1: n ? g1 / n * 100 : NaN, max_days: mx };
+  const k = L.k, rl = L.rows - 1; let tw = 0, wd = 0, n = 0, g1 = 0, mx = 0, own = 0, n5 = 0; const ds = [];
+  for (let i = 0; i < k; i++) if (w[i] > 0) {
+    const av = CTX.adv[rl * k + i], adv = av < 0 ? 0 : Math.exp(av) - 1, d = adv > 0 ? Math.ceil(w[i] * aum / adv / 0.1) : 99, mc = CTX.mcap[rl * k + i], o = mc > -40 ? w[i] * aum / Math.exp(mc) : NaN;
+    tw += w[i]; wd += w[i] * d; n++; if (d > 1) g1++; mx = Math.max(mx, d); ds.push(d); if (o === o) { own = Math.max(own, o); if (o > 0.05) n5++; }
+  }
+  ds.sort((a, b) => a - b);
+  return { wdays: wd / (tw || 1), pct_gt1: n ? g1 / n * 100 : NaN, max_days: mx, p90_days: ds.length ? ds[Math.floor(0.9 * (ds.length - 1))] : NaN, own_max: own * 100, n_own5: n5 };   // مالکیت از کل سهام شرکت (ممیزی ۲۰۲۶-۱۰-۲۰)
 }
 /* ── تفکیک فاکتوری (LabEngine.attribution؛ همان tools/attribution.py؛ فصل ۱۴ §۱۴٫۷٫۸) ── */
 const FCOL = { MKT: 'var(--tx-3)', SIZE: 'var(--warn)', LOWVOL: 'var(--ch-3)', DIV: 'var(--up)', MOM: 'var(--ch-2)' };
@@ -447,7 +451,7 @@ function tabAttr(host) {
       ${row('آلفا (توضیح‌داده‌نشده)', 'عرض از مبدأ: برتری‌ای که با داشتن همین پنج سبد فاکتوری به دست نمی‌آمد.', null, a.alpha_t, null, a.alpha_ann)}
       ${a.factors.map(f => row(`<span class="fam" style="background:${FCOL[f.code]}"></span>${f.code === 'MKT' ? 'بازار (' + bTxt + ')' : f.fa}`, f.code === 'MKT' ? FTIP.MKT.replace('هم‌وزن واجدان', bTxt) : FTIP[f.code], f.beta, f.t, f.factor_ann, f.contrib_ann, '', mine(f))).join('')}
       ${row('<b>برتری ناخالص</b>', 'جمع آلفا و سهم فاکتورها = میانگین برتری ماهانهٔ ناخالص × ۱۲.', null, null, null, a.gross_excess_ann, 'tot')}
-      ${row('هزینهٔ معامله (نسبت به مرجع)', 'تفاوت هزینهٔ گردش استراتژی و مرجع هم‌وزن (مرجع هم هر ماه ریبالانس و هزینه دارد).', null, null, null, a.cost_ann)}
+      ${row('هزینهٔ معامله', 'هزینهٔ گردش استراتژی (گردش یک‌طرفه × هزینهٔ رفت‌وبرگشت)؛ مرجع شاخص است و هزینه نمی‌پردازد (فصل ۷ §۷٫۴).', null, null, null, a.cost_ann)}
       ${row('<b>برتری خالص</b>', 'برتری ناخالص + اثر هزینه (میانگین ماهانه × ۱۲).', null, null, null, a.net_excess_ann, 'tot')}
     </tbody></table>
     <div class="legend lb-attr-leg" id="lb-attr-leg"></div><div class="lb-attr-ch"><svg class="chart" id="lb-attr-chart" dir="ltr" style="height:260px;flex:none"></svg></div>
@@ -470,7 +474,7 @@ function tabCap(host) {
   const half = rows.find(r => r.ex < st.excess_net / 2), zero = rows.find(r => r.ex < 0);
   host.innerHTML = `<div class="lb-note">اثر بازار هر نماد = <b>Y·σ·√(Δw·سرمایه ÷ ADV)</b> (Y = ${L.y_impact} [تأیید لازم]؛ σ روزانهٔ ۱۲۶ روزه؛ ADV ارزش معاملات روزانهٔ ۶۳ روزه) روی هر معاملهٔ ریبالانس، افزون بر هزینهٔ رفت‌وبرگشت ${lab.cost} bp. ستون آخر: ساخت پرتفوی زندهٔ این استراتژی از نقد با سقف مشارکت ۱۰٪ ADV. این مدل ساده است؛ اثر صف و حد نوسان در فصل ۶ آمده و اینجا نیست.<br>
     <b>خوانش:</b> برتری خالص پایه ${sg1(st.excess_net)}٪ ${half ? `به نصف در ${fmt(half.aum / 1e9, 0)} میلیارد ریال می‌رسد` : 'در سطوح بررسی‌شده از نصف نمی‌افتد'}${zero ? ` و در ${fmt(zero.aum / 1e9, 0)} میلیارد ریال منفی می‌شود` : ''}.</div>
-    <table class="dt">${th([['سرمایه (میلیارد ریال)', 'n'], ['برتری خالص پس از اثر بازار %', 'n'], ['هزینهٔ اثر بازار (واحد درصد در سال)', 'n'], ['روز لازم برای ساخت (وزنی)', 'n'], ['نمادهای نیازمند بیش از یک روز %', 'n'], ['بیشترین روز', 'n']])}<tbody>${rows.map(r => `<tr><td class="n">${fmt(r.aum / 1e9, 0)}</td><td class="n ${r.ex >= 0 ? 'up' : 'down'}">${sg1(r.ex)}</td><td class="n">${f1(r.cost)}</td><td class="n">${f1(r.b.wdays, 1)}</td><td class="n">${f1(r.b.pct_gt1, 0)}</td><td class="n ${r.b.max_days > 5 ? 'down' : ''}">${f1(r.b.max_days, 0)}</td></tr>`).join('')}</tbody></table>`;
+    <table class="dt">${th([['سرمایه (میلیارد ریال)', 'n'], ['برتری خالص پس از اثر بازار %', 'n'], ['هزینهٔ اثر بازار (واحد درصد در سال)', 'n'], ['روز لازم برای ساخت (وزنی)', 'n'], ['نمادهای نیازمند بیش از یک روز %', 'n'], ['روز صدک ۹۰', 'n'], ['بیشترین روز', 'n'], ['بیشترین مالکیت از یک شرکت %', 'n'], ['نماد با مالکیت بالای ۵٪', 'n']])}<tbody>${rows.map(r => `<tr><td class="n">${fmt(r.aum / 1e9, 0)}</td><td class="n ${r.ex >= 0 ? 'up' : 'down'}">${sg1(r.ex)}</td><td class="n">${f1(r.cost)}</td><td class="n">${f1(r.b.wdays, 1)}</td><td class="n">${f1(r.b.pct_gt1, 0)}</td><td class="n ${r.b.p90_days > 5 ? 'down' : ''}">${r.b.p90_days == null ? '—' : f1(r.b.p90_days, 0)}</td><td class="n ${r.b.max_days > 5 ? 'down' : ''}">${f1(r.b.max_days, 0)}</td><td class="n ${r.b.own_max > 5 ? 'down' : ''}">${r.b.own_max == null ? '—' : f1(r.b.own_max, 2)}</td><td class="n ${r.b.n_own5 > 0 ? 'down' : ''}">${r.b.n_own5 == null ? '—' : r.b.n_own5}</td></tr>`).join('')}</tbody></table>`;
 }
 function liveWeights() {
   if (lab.lib && lab.lib.live) { const w = new Float64Array(L.k); lab.lib.live.top.forEach(([s, wt]) => { const i = CTX.sym.indexOf(s); if (i >= 0) w[i] = wt / 100; }); return { w, score: null }; }
@@ -694,7 +698,7 @@ function nextMonthEnds(n) {
 }
 function renderCal(tgt, cur) {
   const ends = nextMonthEnds(4), nextDay = d => { let e = new Date(d.getTime() + MS); while ([4, 5].includes(e.getUTCDay())) e = new Date(e.getTime() + MS); return e; };
-  $('pl-cal').innerHTML = `<p><b>ریبالانس ماهانه (فاکتورها و هم‌وزن فصلی/ماهانه):</b> سیگنال در پایان آخرین روز معاملاتی هر ماه شمسی محاسبه می‌شود؛ سفارش‌ها روز معاملاتی بعد اجرا شوند (فرض بک‌تست: خرید در بستهٔ همان روز؛ تأخیر یک‌روزه حساسیت را در کتابخانه ببینید).</p>
+  $('pl-cal').innerHTML = `<p><b>ریبالانس ماهانه (فاکتورها و هم‌وزن فصلی/ماهانه):</b> سیگنال در پایان آخرین روز معاملاتی هر ماه شمسی محاسبه می‌شود؛ سفارش‌ها روز معاملاتی بعد اجرا شوند؛ بک‌تست Lab و کتابخانه هم همین را فرض می‌کنند (خرید در بستهٔ روز معاملاتی بعد از سیگنال؛ حساسیت بدون تأخیر و با تأخیر دوروزه در کتابخانه).</p>
     <table class="dt">${th([['ماه'], ['روز سیگنال (تقریبی)'], ['روز اجرا (تقریبی)']])}<tbody>${ends.map(e => `<tr><td>${jmf.format(e).split(' ').slice(-2).join(' ')}</td><td class="num">${jmf.format(e)}</td><td class="num">${jmf.format(nextDay(e))}</td></tr>`).join('')}</tbody></table>
     <p class="mute" style="margin-top:6px">تعطیلات رسمی در تقویم لحاظ نشده است [تأیید لازم]؛ روز معاملاتی واقعی را از تقویم بورس تأیید کنید. هم‌وزن «كل»: ریبالانس در نخستین روز معاملاتی هر فصل شمسی (فصل ۳).</p>
     <p><b>سود نقدی:</b> سود تصویب‌شده در مجمع در «روز استحقاق» از قیمت کم می‌شود (شاخص بازده کل آن را همان روز سرمایه‌گذاری مجدد حساب می‌کند)، ولی نقد بعداً می‌رسد. جدول زیر سودهای اعلام‌شدهٔ نمادهای هدف/فعلی را با تاریخ پرداخت نشان می‌دهد؛ در روز پرداخت، نقد را به نسبت وزن هدف سرمایه‌گذاری کنید.</p>`;

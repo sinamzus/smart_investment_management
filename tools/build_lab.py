@@ -27,6 +27,23 @@ import construction as cn  # noqa: E402
 import factor_engine as fe  # noqa: E402
 import research_stats as rs  # noqa: E402
 import signals as sg  # noqa: E402
+import rebuild_ew_index as ew  # noqa: E402
+
+OFF_K = "32097828799138957"   # «شاخص كل» رسمی TSETMC (بازده کل)؛ مرجع سوم برای گزارش (ممیزی ۲۰۲۶-۱۰-۲۰)
+
+
+def official_monthly(mk, res, delay):
+    """بازدهٔ «شاخص كل» رسمی در همان دوره‌های نگهداری اجرا: از بستهٔ روز ورود (سیگنال + تأخیر) تا پایان دوره."""
+    try:
+        lv = (1 + ew.official(OFF_K)).cumprod()
+    except Exception:  # noqa: BLE001
+        return None
+    at = lambda d: float(lv.asof(pd.Timestamp(d))) if pd.Timestamp(d) >= lv.index[0] else np.nan   # noqa: E731
+    out = []
+    for s_, e_ in zip(res["sig_date"], res["end"]):
+        a = int(mk.dates.searchsorted(pd.Timestamp(s_)))
+        out.append(at(e_) / at(mk.dates[min(a + delay, mk.n - 1)]) - 1)
+    return np.array(out, float)
 
 CACHE = ROOT / "data" / "derived" / "cache"
 OUT_JS = ROOT / "ui" / "data" / "lab.js"
@@ -41,7 +58,8 @@ def store_signature(mk: sg.Market) -> str:
     h = hashlib.sha256()
     h.update(f"{mk.n}|{mk.k}|{mk.dates[0].date()}|{mk.dates[-1].date()}|".encode())
     h.update("|".join(map(str, mk.cols)).encode())
-    h.update((ROOT / "tools" / "signals.py").read_bytes())
+    for f in ("signals.py", "rebuild_cw_index.py", "rebuild_ew_index.py"):   # طبقه‌بندی سود و پانل هم در ماتریس‌ها اثر دارند (ممیزی ۲۰۲۶-۱۰-۲۰)
+        h.update((ROOT / "tools" / f).read_bytes())
     fund_files = [ROOT / "data/fundamentals" / x for x in ("rahavard_long.csv", "rahavard_eps.csv", "codal_long.csv", "codal_letters.csv")]
     h.update("|".join(f"{p.name}:{p.stat().st_size}:{int(p.stat().st_mtime)}" if p.exists() else p.name for p in fund_files).encode())
     return h.hexdigest()[:16]
@@ -107,7 +125,8 @@ def grid(S):
                   {"signals": [[n, 1.0] for n in cand], "combine": "topk_icir", "topk": k, "neutral": True, "algo": "topfrac", "params": {"entry": 0.2, "exit": 0.3}}))
     # ج) حساسیت: تأخیر اجرا، جهان، بافر، ریبالانس جزئی، فصلی
     ref = {"signals": c1, "combine": "equal", "neutral": True, "algo": "topfrac", "params": {"entry": 0.2, "exit": 0.3}}
-    G.append(("sens:delay1", "sens", "ترکیب c1 · تأخیر اجرا ۱ روز", {**ref, "delay": 1}))
+    G.append(("sens:delay0", "sens", "ترکیب c1 · بدون تأخیر اجرا (خرید در بستهٔ روز سیگنال)", {**ref, "delay": 0}))
+    G.append(("sens:delay2", "sens", "ترکیب c1 · تأخیر اجرا ۲ روز", {**ref, "delay": 2}))
     G.append(("sens:bourse", "sens", "ترکیب c1 · فقط بورس", {**ref, "universe": {"markets": ["bourse"]}}))
     G.append(("sens:nobuffer", "sens", "ترکیب c1 · بدون بافر", {**ref, "params": {"entry": 0.2, "exit": 0.2}}))
     G.append(("sens:widebuffer", "sens", "ترکیب c1 · بافر پهن (۲۰/۴۰)", {**ref, "params": {"entry": 0.2, "exit": 0.4}}))
@@ -193,18 +212,24 @@ def finalize(lab, S, R):
         res, c = r["res"], cost_of(r)
         r["stats"] = fe.stats_of(res, "S", c)
         sc = fe.stats_of(res, "S", c, bench="CAP")                         # مرجع دوم: ارزش‌وزن واجدان
+        off = official_monthly(lab.mk, res, int(r["spec"].get("delay", 1)))      # مرجع سوم: «شاخص كل» رسمی (فقط بورس؛ جهان استراتژی بورس + فرابورس است)
+        if off is not None and np.isfinite(off).sum() >= 24:
+            ok_ = np.isfinite(off)
+            sub = {"ret": {"S": res["ret"]["S"][ok_], "OFF": off[ok_]}, "to": {"S": res["to"]["S"][ok_], "OFF": np.zeros(ok_.sum())}, "end": [e for e, k in zip(res["end"], ok_) if k], "n": {"S": res["n"]["S"]}}
+            so = fe.stats_of(sub, "S", c, bench="OFF")
+            r["stats"].update({"excess_net_off": so["excess_net"], "t_net_off": so["t_net"], "ann_off": so["ann_all_net"]})
         r["stats"].update({"excess_net_cap": sc["excess_net"], "t_net_cap": sc["t_net"], "ir_cap": sc["ir"], "ann_cap_net": sc["ann_all_net"],
                            "t_h1_cap": sc["t_h1"], "t_h2_cap": sc["t_h2"], "ex_h1_cap": sc["ex_h1"], "ex_h2_cap": sc["ex_h2"],
                            "frozen_w": float(np.nanmean(res["frozen"])) if len(res.get("frozen", [])) else 0.0})   # سهم وزن غیرقابل‌فروش در روز اجرا (A2)
         rn = fe.net(res["ret"]["S"], res["to"]["S"], c)
-        an = fe.net(res["ret"]["ALL"], res["to"]["ALL"], c)
+        an = res["ret"]["ALL"]                                              # مرجع بدون هزینه (فصل ۷ §۷٫۴)
         r["capacity"] = {str(int(a_)): fe.ann(rn - np.nan_to_num(imp)) - fe.ann(an) for a_, imp in res["impact"].items()}   # برتری خالص پس از اثر بازار
         r["ic"] = fe.ic_stats({"ic": res["ic"]})
     # آزمون‌های چندگانه
     sr_list, ids, D = [], [], {}
     for rid, r in runs.items():
         res, c = r["res"], cost_of(r)
-        ex = fe.net(res["ret"]["S"], res["to"]["S"], c) - fe.net(res["ret"]["ALL"], res["to"]["ALL"], c)
+        ex = fe.net(res["ret"]["S"], res["to"]["S"], c) - res["ret"]["ALL"]        # مرجع بدون هزینه
         D[rid] = pd.Series(ex, index=pd.DatetimeIndex(res["sig_date"]))      # کلید = روز سیگنال (در برابر تأخیر اجرا ثابت)
         sr_list.append(float(np.mean(ex) / np.std(ex, ddof=1)) if np.std(ex) > 0 else np.nan)
         ids.append(rid)
@@ -254,7 +279,11 @@ def top_holdings(lab, res, n=400):
     for a_ in cn.AUMS:
         pos = w > 0
         days = np.where(adv[pos] > 0, np.ceil(w[pos] * a_ / np.maximum(adv[pos], 1) / 0.1), 99)
-        build[str(int(a_))] = {"wdays": float((w[pos] * days).sum() / w[pos].sum()), "pct_gt1": float((days > 1).mean() * 100), "max_days": float(days.max())}
+        mc = np.nan_to_num(mk.mcap[mk.n - 1])[pos]
+        own = np.where(mc > 0, w[pos] * a_ / np.maximum(mc, 1), np.nan)      # سهم مالکیت از کل سهام شرکت (ممیزی ۲۰۲۶-۱۰-۲۰: اندازهٔ نهادی)
+        build[str(int(a_))] = {"wdays": float((w[pos] * days).sum() / w[pos].sum()), "pct_gt1": float((days > 1).mean() * 100), "max_days": float(days.max()),
+                               "p90_days": float(np.percentile(days, 90)), "own_max": float(np.nanmax(own) * 100) if np.isfinite(own).any() else None,
+                               "n_own5": int(np.nansum(own > 0.05))}
     return {"build": build, "date": str(L["date"].date()), "n": int((w > 0).sum()), "top": [[nrm(mk.sym[j]), round(float(w[j]) * 100, 3), None if np.isnan(L["score"][j]) else round(float(L["score"][j]), 2),
                                                                            str(mk.sector[j]), str(mk.market[j])] for j in i]}
 
@@ -312,7 +341,8 @@ def export(mk, lab, R):
     ok[rows - 1] = lab.live_ok
     tr = np.ones((rows, k), np.uint8)              # قابل‌معامله در روز اجرا (A2)؛ ردیف زنده: ناشناخته ⇒ همه
     for r in range(rows - 1):
-        tr[r] = mk.tradable(lab.idx[r])
+        lb, ls = mk.locks(mk.exec_day(lab.idx[r], sg.LAB_DELAY))     # بیت ۱ قابل‌معامله، بیت ۲ صف خرید، بیت ۴ صف فروش (ui/labengine.js lkAt)
+        tr[r] = mk.tradable(lab.idx[r], sg.LAB_DELAY).astype(np.uint8) | (lb.astype(np.uint8) << 1) | (ls.astype(np.uint8) << 2)
     fw = np.full((rows, k), np.nan, np.float32)
     for r, f in lab.fw.items():
         fw[r] = f

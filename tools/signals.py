@@ -22,6 +22,7 @@ import rebuild_ew_rebalanced as ewr  # noqa: E402
 REG: dict = {}          # نام ← فراداده + تابع
 EVAL_FROM = pd.Timestamp("2016-03-20")
 WARM = 273              # روز لازم پیش از اولین ریبالانس (۲۵۲ + ۲۱)
+LAB_DELAY = 1                 # قرارداد اجرای Lab، جدول معیارها و کتابخانه: سیگنال در بستهٔ روز a، خرید در بستهٔ روز معاملاتی بعد (همان استراتژی قفل‌شده؛ ممیزی ۲۰۲۶-۱۰-۲۰)
 WEEKEND = (3, 4)        # پنجشنبه و جمعه (weekday پایتون)؛ تعطیلات رسمی مدل نشده [تأیید لازم]
 
 
@@ -29,6 +30,19 @@ def jalali_ym(ts) -> int:
     """سال×۱۰۰+ماه جلالی یک تاریخ میلادی."""
     jy, jm, _ = ewr.g2j(ts.year, ts.month, ts.day)
     return jy * 100 + jm
+
+
+_HOL = None
+
+
+def holidays():
+    """تعطیلات رسمی غیرآخرهفته (data/calendar/holidays.csv، ستون date به‌صورت ISO؛ دستی نگه‌داری می‌شود). بدون آن، پایان ماه فقط از روز هفته
+    تشخیص داده می‌شد و اگر روز کاری باقی‌ماندهٔ ماه تعطیل رسمی بود، روز آخر واقعی «پایان ماه» شناخته نمی‌شد (ممیزی ۲۰۲۶-۱۰-۲۰)."""
+    global _HOL
+    if _HOL is None:
+        f = ROOT / "data" / "calendar" / "holidays.csv"
+        _HOL = set(pd.to_datetime(pd.read_csv(f, comment="#").date).dt.normalize()) if f.exists() else set()
+    return _HOL
 
 
 def is_jalali_month_end(ts, calendar=None) -> bool:
@@ -39,8 +53,9 @@ def is_jalali_month_end(ts, calendar=None) -> bool:
     ts = pd.Timestamp(ts).normalize()
     ym = jalali_ym(ts)
     d = ts + pd.Timedelta(days=1)
+    hol = holidays()
     while jalali_ym(d) == ym:
-        if (calendar is not None and d in calendar) or (calendar is None and d.weekday() not in WEEKEND):
+        if (calendar is not None and d in calendar) or (calendar is None and d.weekday() not in WEEKEND and d not in hol):
             return False
         d += pd.Timedelta(days=1)
     return True
@@ -189,13 +204,26 @@ class Market:
         return d
 
     def exec_day(self, a: int, delay: int = 0) -> int:
-        """روز اجرا: a+1+delay، و اگر بازار آن روز بسته بود نخستین روز بازگشایی (حداکثر ۹۰ روز معاملاتی بعد)."""
-        d = min(a + 1 + delay, self.n - 1)
+        """روز اجرا = روزی که سبد در بستهٔ آن خریده می‌شود: a+delay (بازده از X[a+1+delay] شمرده می‌شود، یعنی ورود در بستهٔ a+delay)؛
+        اگر بازار آن روز بسته بود نخستین روز بازگشایی (حداکثر ۹۰ روز معاملاتی بعد).
+        ممیزی ۲۰۲۶-۱۰-۲۰: پیش‌تر a+1+delay بود، یعنی قابل‌معامله‌بودن یک روز دیرتر از ورود واقعی (با delay = 1 روز a+2) سنجیده می‌شد —
+        هم روز اشتباه و هم نگاه به آینده (فصل ۱۴ §۱۴٫۲٫۱)."""
+        d = min(a + delay, self.n - 1)
         k = 0
         while d < self.n - 1 and not self.market_open(d) and k < 90:
             d += 1
             k += 1
         return d
+
+    def locks(self, d: int):
+        """قفل صف در روز d (فصل ۶ §۶٫۲): نمادی که تمام روز با یک قیمت (بیشینه = کمینه) و با تغییر بیش از ۲٪ از مبنا معامله شده،
+        در صف بوده است: رو به بالا ⇒ خرید ممکن نبود (صف خرید)، رو به پایین ⇒ فروش ممکن نبود (صف فروش). خروجی: (قفل خرید، قفل فروش)."""
+        d = min(max(d, 0), self.n - 1)
+        hi, lo, c, p = self.hi[d], self.lo[d], self.close[d], self.prev[d]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            one = self.traded(d) & (np.abs(hi - lo) <= 1e-9 * np.maximum(np.abs(hi), 1)) & ~np.isnan(hi)
+            ch = c / p - 1
+        return one & (ch > 0.02), one & (ch < -0.02)
 
     def tradable(self, a: int, delay: int = 0):
         """قابل‌معامله در روز اجرا (exec_day): معامله در همان روز. نماد نگه‌داشته‌شده‌ای که آن روز معامله ندارد فروختنی نیست و
@@ -865,8 +893,9 @@ def zoo(mk: Market, idx, S, cost_bp=100.0):
         b = me[r + 1] if r + 1 < rows else None
         if b is None or mk.dates[a + 1] < EVAL_FROM:
             continue
-        fw[r] = mk.fwd(a, b)
-        ok[r] = mk.eligible(a) & ~np.isnan(fw[r])
+        f = mk.fwd(a, b, LAB_DELAY)
+        ok[r] = mk.eligible(a) & mk.tradable(a, LAB_DELAY)          # فقط اطلاعات تا روز اجرا (ممیزی ۲۰۲۶-۱۰-۲۰: شرط «داده در روز بعد» نگاه به آینده بود)
+        fw[r] = np.where(ok[r], np.nan_to_num(f), np.nan)            # روز بی‌داده پس از ورود = موقعیت منجمد، بازده صفر
         use.append(r)
     out = {}
     cum_h = {}
