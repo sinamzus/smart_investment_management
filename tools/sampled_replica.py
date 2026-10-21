@@ -37,6 +37,7 @@ import build_ui_extra as bx  # noqa: E402
 import investable_replica as ir  # noqa: E402
 import construction as cn  # noqa: E402
 import signals as sg  # noqa: E402
+import new_listings as nl  # noqa: E402
 
 NS = (10, 20, 30, 50, 80, 120)
 METHODS = ("top", "strat", "opt")
@@ -101,6 +102,43 @@ def pick_opt(b, idx, N, Sig, pos):
     return sel, w1
 
 
+def ipo_rebalance(V, H, EV, W, a, cost_bp):
+    """ریبالانس ماهانهٔ لایهٔ عرضهٔ اولیه (همان ui/builder.js simulate): نمادی که تا روز a واجد عادی شده رها و به سهام عادی
+    فروخته می‌شود؛ بقیه اگر بالای وزن شاخص روز a+1 باشند تا همان وزن کم می‌شوند. هزینه = حجم معامله × c."""
+    tot = V + sum(H.values())
+    for e in EV:
+        i = e["i"]
+        if i not in H:
+            continue
+        if e["end"] <= a:
+            x = H.pop(i)
+        else:
+            x = max(H[i] - W[i][a + 1] * tot, 0.0)
+            H[i] -= x
+        V += x - x * cost_bp / 1e4
+    return V, H
+
+
+def ipo_day(V, H, EV, W, X, VAL, t, phi, aum_bn, cost_bp):
+    """یک روز لایهٔ عرضهٔ اولیه: بازده روز، سپس خرید در پایانی تا وزن شاخص، حداکثر φ × ارزش معاملات امروز ÷ اندازهٔ صندوق
+    (صف خرید هم: بخشی از صف پر می‌شود). خرید از فروش سهام عادی؛ هزینه = حجم × c."""
+    for i in H:
+        H[i] *= 1 + X[t, i]
+    tot = V + sum(H.values())
+    for e in EV:
+        i = e["i"]
+        if not (e["s"] <= t < e["end"] + nl.HOLD) or (i not in H and t >= e["end"]):
+            continue
+        need = W[i][t] * tot - H.get(i, 0.0)
+        if need <= 0:
+            continue
+        amt = min(need, phi * VAL[t, i] / (aum_bn * 1e9), max(V, 0.0))
+        if amt > 0:
+            H[i] = H.get(i, 0.0) + amt
+            V -= amt + amt * cost_bp / 1e4
+    return V, H
+
+
 def step_day(V, D, rcv, g, divs, paid, sched, bridge, rate, days):
     """یک روز مدل سود نقدی و وام سود (همان ui/builder.js simulate). V سهام، D وام سود، rcv طلب سود؛ g بازده کل روز سبد؛
     divs = [(روز پرداخت، سهم سود از V دیروز)]؛ paid = پرداخت‌های رسیدهٔ امروز (پیش از ثبت سودهای امروز برداشته شده)."""
@@ -127,8 +165,9 @@ def step_day(V, D, rcv, g, divs, paid, sched, bridge, rate, days):
     return V, D, rcv
 
 
-def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None):
-    """lev_mode: none | bridge | beta. pays: dividend_pay.pay_days(mk) (برای سرعت یک بار ساخته و دوباره استفاده شود)."""
+def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None, ipo=None):
+    """lev_mode: none | bridge | beta. pays: dividend_pay.pay_days(mk) (برای سرعت یک بار ساخته و دوباره استفاده شود).
+    ipo: (رویدادها، وزن‌ها، φ، اندازهٔ صندوق میلیارد ریال) از new_listings — لایهٔ نماد تازهٔ بزرگ؛ None یعنی بدون لایه."""
     if pays is None:
         import dividend_pay
         pays = dividend_pay.pay_days(mk)
@@ -139,6 +178,9 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None):
     me.append(None)
     ok_all = np.isin(mk.market, ["bourse"])
     V, D, cash, rcv = 1.0, 0.0, 0.0, 0.0
+    H = {}                                                              # لایهٔ عرضهٔ اولیه: نماد ⇒ ارزش
+    EV, WIPO, PHI, AUM = ipo if ipo else ([], {}, 0.0, 1.0)
+    VAL = np.nan_to_num(mk.val)
     sched = {}                                                          # روز پرداخت ⇒ مبلغ طلب سود
     w_prev = np.zeros(k)
     navs, dates, turn, lev_l = [], [], [], []
@@ -180,6 +222,7 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None):
             ri = np.nan_to_num(K.values[a - 251: a + 1])
             beta = np.cov(rs, ri)[0, 1] / max(np.var(ri, ddof=1), 1e-12)
             L = float(np.clip(1.0 / beta if beta > 0 else 1.0, 0.7, 1.0))   # فقط نقد؛ وام برای اهرم نه
+        V, H = ipo_rebalance(V, H, EV, WIPO, a, cost_bp)
         # ریبالانس: وام سود هرگز بیش از طلب سود نیست (مازاد بهره از دارایی پرداخت می‌شود)؛ سرمایهٔ قابل‌سرمایه‌گذاری = دارایی منهای طلب
         if D > rcv:
             V -= D - rcv
@@ -200,7 +243,8 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None):
             g = wv.sum() / v0 - 1 if v0 > 0 else 0.0
             V, D, rcv = step_day(V, D, rcv, g, [(pays.get((t, int(i)), mk.n), float(yv[i])) for i in np.nonzero(yv > 0)[0]],
                                  sched.pop(t, 0.0), sched, bridge, rate, days)
-            navs.append(V + cash + rcv - D); dates.append(mk.dates[t])
+            V, H = ipo_day(V, H, EV, WIPO, X, VAL, t, PHI, AUM, cost_bp)
+            navs.append(V + cash + rcv - D + sum(H.values())); dates.append(mk.dates[t])
         w_prev = wv / wv.sum() if wv.sum() > 0 else w_prev
     s = pd.Series(navs, index=pd.DatetimeIndex(dates))
     return s, np.mean(turn), np.mean(lev_l)
@@ -225,31 +269,42 @@ def main():
     ap.add_argument("--rate", type=float, default=0.30, help="نرخ وام سالانه")
     ap.add_argument("--cost", type=float, default=125.0, help="هزینهٔ رفت‌وبرگشت (bp؛ پیش‌فرض همهٔ برنامه ۱۲۵)")
     ap.add_argument("--ns", type=str, default=",".join(map(str, NS)))
+    ap.add_argument("--phi", type=float, default=nl.PHI, help="سهم صندوق از ارزش معاملات روزانهٔ نماد تازه (لایهٔ عرضهٔ اولیه)")
+    ap.add_argument("--aum", type=float, default=nl.AUM_BN, help="اندازهٔ صندوق برای سقف خرید نماد تازه (میلیارد ریال)")
     a = ap.parse_args()
     mk, K = load()
     K = K.fillna(0)
     ok = np.isin(mk.market, ["bourse"])
-    # همتای ارزش‌وزن کامل (همهٔ واجدان) برای جدا کردن خطای نمونه‌گیری
-    Cfull = pd.Series(0.0, index=mk.dates)
+    # همتای کامل (هدف): واجدان عادی ∪ نمادهای تازه از روز پس از نخستین معامله (new_listings.full_target)، وزن ارزش بازار روز قبل،
+    # ریبالانس روزانه با اجرای کامل — کران پایین خطای وزن. نسخهٔ پیشین (فقط واجدان عادی، سابقهٔ ۲۵۲ روزه) برای مقایسه چاپ و ذخیره می‌شود.
+    Cfull, Cold = pd.Series(0.0, index=mk.dates), pd.Series(0.0, index=mk.dates)
     X = np.nan_to_num(mk.X)
     mc = np.nan_to_num(mk.mcap)
+    first = nl.first_trade(mk)
     rows = []
-    # همتای کامل: وزن ارزش بازار روز قبل (ریبالانس روزانه) — تقریب کران پایین خطای وزن
     for t in range(1, mk.n):
-        idx = np.where(mk.eligible(t - 1, require_trade=False) & ok & (mc[t - 1] > 0))[0]
+        idx, w = nl.full_target(mk, t, ok, first)
         if len(idx):
-            w = mc[t - 1, idx] / mc[t - 1, idx].sum()
             Cfull.iloc[t] = float(w @ X[t, idx])
+        io = np.where(mk.eligible(t - 1, require_trade=False) & ok & (mc[t - 1] > 0))[0]
+        if len(io):
+            Cold.iloc[t] = float((mc[t - 1, io] / mc[t - 1, io].sum()) @ X[t, io])
     base = evaluate(pd.Series((1 + Cfull[Cfull.index >= START]).cumprod()), K, Cfull)
-    print(f"همتای کامل (وزن بازار، ریبالانس روزانه) در برابر شاخص كل رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}\n")
+    old = evaluate(pd.Series((1 + Cold[Cold.index >= START]).cumprod()), K, Cfull)
+    print(f"همتای کامل (با نمادهای تازه) در برابر شاخص كل رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}")
+    print(f"  (بدون نمادهای تازه، قاعدهٔ پیشین: TE = {old['te_vs_official_pct']:.2f}٪؛ تفاوت {old['gap_pct']:+.2f}٪)\n")
+    EV = nl.events(mk, ok, int(np.searchsorted(mk.dates, START)))
+    WIPO = nl.weights(mk, EV, ok, first)
+    print(f"لایهٔ عرضهٔ اولیه: {len(EV)} نماد تازهٔ بزرگ (وزن روز دوم ≥ {100 * nl.THRESH:.1f}٪)؛ φ = {100 * a.phi:.0f}٪، اندازهٔ صندوق {a.aum:,.0f} میلیارد ریال")
     import json
     json.dump({"rate": a.rate, "cost_bp": a.cost, "from": str(START.date()), "to": str(mk.dates[-1].date()), "n_eligible_last": int((mk.eligible(mk.n - 1, require_trade=False) & ok).sum()),
-               "full_replica": {k: float(v) for k, v in base.items()}}, open(ROOT / "data" / "research" / "sampled_replica_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+               "full_replica": {k: float(v) for k, v in base.items()}, "full_replica_without_new": {k: float(v) for k, v in old.items()},
+               "ipo": {"n_events": len(EV), "thresh": nl.THRESH, "phi": a.phi, "aum_bn": a.aum}}, open(ROOT / "data" / "research" / "sampled_replica_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     for N in [int(x) for x in a.ns.split(",")]:
         for m in METHODS:
             for lev in ("none", "bridge", "beta"):
                 try:
-                    s, to, L = run(mk, K, a.rate, a.cost, N, m, lev)
+                    s, to, L = run(mk, K, a.rate, a.cost, N, m, lev, ipo=(EV, WIPO, a.phi, a.aum))
                 except Exception as e:  # noqa: BLE001
                     print("خطا", N, m, lev, type(e).__name__, e); continue
                 ev = evaluate(s, K, Cfull)

@@ -59,7 +59,7 @@ def main():
         c = os.path.basename(f).split(".")[0]
         if c not in idx:
             continue
-        d = pd.read_csv(f, usecols=["dEven", "pClosing", "zTotTran"])
+        d = pd.read_csv(f, usecols=["dEven", "pClosing", "zTotTran", "priceMax", "priceMin", "priceYesterday"])
         d = d[d.dEven >= int(START.replace("-", ""))]
         d["k"] = idx[c]
         frames.append(d)
@@ -75,7 +75,10 @@ def main():
     Q = P[P.date.isin(di)]
     r = Q.date.map(di).to_numpy()
     px[r, Q.k.to_numpy()] = Q.pClosing.to_numpy(dtype=np.float32)
-    tr[r, Q.k.to_numpy()] = (Q.zTotTran.to_numpy() > 0).astype(np.uint8)
+    # بیت ۰: معامله شده؛ بیت ۱: صف خرید (بالاترین = پایین‌ترین و پایانی بیش از ۲٪ بالای مبنا، همان قاعدهٔ قفل صف Market.locks)
+    traded_ = Q.zTotTran.to_numpy() > 0
+    buyq = traded_ & (Q.priceMax.to_numpy() == Q.priceMin.to_numpy()) & (Q.pClosing.to_numpy() > 1.02 * Q.priceYesterday.to_numpy())
+    tr[r, Q.k.to_numpy()] = (traded_.astype(np.uint8) | (buyq.astype(np.uint8) << 1))
     px = pd.DataFrame(px).ffill().to_numpy(dtype=np.float32)           # روز بی‌ردیف: آخرین قیمت
 
     # سود نقدی

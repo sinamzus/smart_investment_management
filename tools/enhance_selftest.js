@@ -14,9 +14,9 @@ let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('✗', m); } el
     const nm = P.to.length; let dto = 0; for (let j = 1; j < nm; j++) dto = Math.max(dto, Math.abs(E.configs.enh.to[j] - P.to[j]));
     ok(dto < 5e-4, `${method} N=${N} liq=${liq}: گردش ماهانه (بیشینه تفاوت ${dto.toExponential(2)})`);
   }
-  // ۲) opt: TE نزدیک به پایتون
+  // ۲) opt: TE نزدیک به پایتون (لایهٔ عرضهٔ اولیه خاموش: هدف تیلت‌شده آن را ندارد)
   const t0 = Date.now(), Eo = await EN.runEnh(ctx, { tilt: {}, method: 'opt', N: 30, liq: 0, iters: 120 }, null, null);
-  const mo = RB.metrics(Eo, RB.simulate(Eo, 'enh', { mode: 'none', L: 1, rb: .3, rc: 0, cost: 100, j0: 0 })), mp = RB.metrics(R, RB.simulate(R, 'opt|30|0', { mode: 'none', L: 1, rb: .3, rc: 0, cost: 100, j0: 0 }));
+  const mo = RB.metrics(Eo, RB.simulate(Eo, 'enh', { mode: 'none', L: 1, phi: 0, rb: .3, rc: 0, cost: 100, j0: 0 })), mp = RB.metrics(R, RB.simulate(R, 'opt|30|0', { mode: 'none', L: 1, phi: 0, rb: .3, rc: 0, cost: 100, j0: 0 }));
   ok(Math.abs(mo.te - mp.te) < 0.15, `opt N=30: TE مرورگر ${mo.te.toFixed(2)} در برابر پایتون ${mp.te.toFixed(2)} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   // ۳) ویژگی‌های تیلت
   const j = 60;

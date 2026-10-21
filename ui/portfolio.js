@@ -17,7 +17,9 @@ function prep(X) {
 function dayIdx(X, d) { let lo = 0, hi = X.dates.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (X.dates[m] <= d) { r = m; lo = m + 1; } else hi = m - 1; } return r; }
 function pxAt(X, k, d) { const p = prep(X), t = dayIdx(X, d); return t < 0 ? NaN : p.px[t * p.K + k]; }
 /** معامله‌شدن در همان روز معاملاتی (اگر d روز معاملاتی نباشد، آخرین روز پیش از آن) */
-function trAt(X, k, d) { const p = prep(X), t = dayIdx(X, d); return t >= 0 && p.tr[t * p.K + k] === 1; }
+function trAt(X, k, d) { const p = prep(X), t = dayIdx(X, d); return t >= 0 && (p.tr[t * p.K + k] & 1) === 1; }
+/** صف خرید در همان روز (بیت ۱ دادهٔ tools/build_ui_portfolio.py): خرید فقط با سفارش در قیمت سقف و پر شدن بخشی از صف ممکن است */
+function qAt(X, k, d) { const p = prep(X), t = dayIdx(X, d); return t >= 0 && (p.tr[t * p.K + k] & 2) === 2; }
 const evKey = (X, t, k, d) => `${t}:${X.codes[k]}:${d}`;
 
 /** رویدادهای شرکتی میان (d1, d2] برای نمادهای دارای موجودی */
@@ -101,14 +103,14 @@ function orders1(X, st, w, d, o, V, invest) {
   const info = new Map(); let wTr = 0, frozenV = 0;
   for (const c of codes) {
     const k = p.ci.get(String(c)), q = (st.hold || {})[c] || 0, px = k == null ? NaN : pxAt(X, k, d), tr = k != null && px > 0 && trAt(X, k, d);
-    info.set(c, { k, q, px, tr });
+    info.set(c, { k, q, px, tr, bq: tr && qAt(X, k, d) });
     if (tr) wTr += Math.max(w[c] || 0, 0); else if (q > 0 && px > 0) frozenV += q * px;
   }
   const free = Math.max(invest - frozenV, 0);
   const out = [], hold2 = {}, frozen = [], missing = [];
   let buy = 0, sell = 0;
   for (const c of codes) {
-    const { k, q, px, tr } = info.get(c), wt = tr && wTr > 0 ? Math.max(w[c] || 0, 0) / wTr : 0;
+    const { k, q, px, tr, bq } = info.get(c), wt = tr && wTr > 0 ? Math.max(w[c] || 0, 0) / wTr : 0;
     if (k == null || !(px > 0)) { missing.push(c); if (q) hold2[c] = q; continue; }
     if (!tr) { if (q > 0 || (w[c] || 0) > 0) frozen.push(c); if (q) hold2[c] = q; continue; }
     let tq = Math.floor(wt * free / px / lot + 1e-9) * lot;
@@ -119,7 +121,7 @@ function orders1(X, st, w, d, o, V, invest) {
     if (dq === 0) continue;
     const val = Math.abs(dq) * px;
     if (dq > 0) buy += val; else sell += val;
-    out.push({ c, k, side: dq > 0 ? 'buy' : 'sell', qty: Math.abs(dq), px, val, q, tq, w_now: q * px / (V.stock + V.cash || 1), w_tgt: wt });
+    out.push({ c, k, side: dq > 0 ? 'buy' : 'sell', qty: Math.abs(dq), px, val, q, tq, w_now: q * px / (V.stock + V.cash || 1), w_tgt: wt, queue: dq > 0 && bq });
   }
   out.sort((a, b) => (a.side === b.side ? b.val - a.val : a.side === 'sell' ? -1 : 1));
   const fee = buy * cB + sell * cS;
@@ -372,7 +374,7 @@ function renderRebal() {
   const tr = new Set(o.frozen);
   $('rb-ordcap').innerHTML = `<b>سفارش‌ها:</b> ${o.orders.filter(x => x.side === 'sell').length} فروش و ${o.orders.filter(x => x.side === 'buy').length} خرید برای رسیدن به «${esc(b.name)}»؛ فروش‌ها اول اجرا شوند تا نقد خرید فراهم شود.`;
   $('rb-ord').innerHTML = `<thead><tr><th>#</th><th>اقدام</th><th>نماد</th><th class="n"${tip('تعداد سفارش.')}>تعداد</th><th class="n"${tip('قیمت پایانی آخرین روز معاملاتی تا تاریخ ریبالانس؛ پیش از ثبت سفارش، قیمت روز را جایگزین کنید.')}>قیمت مرجع</th><th class="n">ارزش (میلیون ریال)</th><th class="n">موجودی فعلی</th><th class="n">موجودی هدف</th><th class="n">وزن هدف ٪</th><th class="n"${tip('ارزش سفارش ÷ میانهٔ ارزش معاملات روزانهٔ ۶۳ روز اخیر (Lab). بالای ۱۰٪ قرمز.')}>٪ ارزش معاملات روزانه</th></tr></thead><tbody>` +
-    (o.orders.map((x, i) => { const adv = advOf(x.c), part = adv > 0 ? x.val / adv : NaN; return `<tr><td class="rank">${i + 1}</td><td><span class="chip ${x.side === 'buy' ? 'ok' : 'bad'}">${x.side === 'buy' ? 'خرید' : 'فروش'}</span></td><td>${esc(symOf(x.c))}</td><td class="n">${f(x.qty)}</td><td class="n">${f(x.px)}</td><td class="n">${f(x.val / 1e6)}</td><td class="n">${f(x.q)}</td><td class="n">${f(x.tq)}</td><td class="n">${fmt(100 * x.w_tgt, 2)}</td><td class="n ${part > 0.1 ? 'down' : ''}">${part === part ? fmt(100 * part, 1) : '—'}</td></tr>`; }).join('') ||
+    (o.orders.map((x, i) => { const adv = advOf(x.c), part = adv > 0 ? x.val / adv : NaN; return `<tr><td class="rank">${i + 1}</td><td><span class="chip ${x.side === 'buy' ? 'ok' : 'bad'}">${x.side === 'buy' ? 'خرید' : 'فروش'}</span>${x.queue ? ` <span class="chip warn"${tip('این نماد آخرین روز در صف خرید بود (بالاترین = پایین‌ترین، پایانی بالای ۲٪ مبنا). سفارش را در قیمت سقف دامنه بگذارید؛ معمولاً فقط بخشی از صف پر می‌شود. فردا باقی‌مانده را دوباره بگذارید تا صف باز شود (فصل ۳ «تأخیر ورود عرضهٔ اولیه»). نقد پیش‌بینی‌شده با فرض اجرای کامل است.')}>صف خرید</span>` : ''}</td><td>${esc(symOf(x.c))}</td><td class="n">${f(x.qty)}</td><td class="n">${f(x.px)}</td><td class="n">${f(x.val / 1e6)}</td><td class="n">${f(x.q)}</td><td class="n">${f(x.tq)}</td><td class="n">${fmt(100 * x.w_tgt, 2)}</td><td class="n ${part > 0.1 ? 'down' : ''}">${part === part ? fmt(100 * part, 1) : '—'}</td></tr>`; }).join('') ||
       '<tr><td colspan="10" class="mute">موجودی با هدف یکی است؛ سفارشی لازم نیست.</td></tr>') + '</tbody>';
   $('rb-lin2').innerHTML = `<span><b${tip('recomputed: هدف سبد با آخرین سیگنال تا این تاریخ دوباره ساخته شد. snapshot: همان وزن لحظهٔ ذخیره.')}>هدف</b> ${esc(b.name)} · ${t.how === 'recomputed' ? 'بازسازی‌شده با سیگنال ' + jdate(t.asOf) : 'وزن ثابت (' + esc(t.note || '') + ')'}</span><span><b>قیمت</b> پایانی <span class="num">${jdate(X.dates[dayIdx(X, d2)])}</span></span>${o.frozen.length ? `<span><b${tip('این نمادها در روز ریبالانس معامله نشده‌اند؛ موجودی‌شان دست نمی‌خورد.')}>منجمد</b> ${o.frozen.map(symOf).slice(0, 8).join('، ')}</span>` : ''}${o.missing.length ? `<span><b>بدون قیمت</b> ${o.missing.map(symOf).slice(0, 8).join('، ')}</span>` : ''}${st.recv.length ? `<span><b${tip('سودهای دریافت‌نشده پس از تاریخ ریبالانس؛ پس از وصول، با ریبالانس بعدی سرمایه‌گذاری می‌شوند.')}>طلب سود</b> ${f(st.recv.reduce((s, r) => s + r.amt, 0) / 1e6)} میلیون ریال</span>` : ''}`;
   void tr;

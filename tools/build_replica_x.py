@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import sampled_replica as sr  # noqa: E402
 import dividend_pay as dp  # noqa: E402
+import new_listings as nl  # noqa: E402
 
 EPOCH = pd.Timestamp("1970-01-01")
 
@@ -43,11 +44,12 @@ def main():
     used = sorted({int(i) for a in ends for i in elig[a]})
     pos = {i: p for p, i in enumerate(used)}
     d0 = me[0] - 251
-    Cfull = np.zeros(n)
+    Cfull = np.zeros(n)                                     # همتای کامل با نمادهای تازه (new_listings.full_target، همان build_replica_panel)
+    first = nl.first_trade(mk)
     for t in range(1, n):
-        i = np.where(mk.eligible(t - 1, require_trade=False) & ok_all & (mc[t - 1] > 0))[0]
+        i, w_ = nl.full_target(mk, t, ok_all, first)
         if len(i):
-            Cfull[t] = float((mc[t - 1, i] / mc[t - 1, i].sum()) @ X[t, i])
+            Cfull[t] = float(w_ @ X[t, i])
     sectors = sorted({str(mk.sector[i]) for i in used})
     sid = {s: j for j, s in enumerate(sectors)}
     months = []

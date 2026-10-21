@@ -11,7 +11,7 @@ let worst = 0, n = 0;
 for (const line of rows.slice(1)) {
   const c = line.split(','), N = +c[idx('N')], m = c[idx('method')], lev = c[idx('leverage')];
   if (!R.Ns.includes(N)) continue;
-  const sim = E.simulate(R, E.keyOf(m, N, 0), { mode: lev === 'beta' ? 'beta' : 'none', L: 1, loan: lev === 'bridge', q: 0, rb: 0.30, rc: 0, cost: 125, j0: 0 }), r = E.metrics(R, sim);
+  const sim = E.simulate(R, E.keyOf(m, N, 0), { mode: lev === 'beta' ? 'beta' : 'none', L: 1, loan: lev === 'bridge', phi: 0.02, aum: 1000, rb: 0.30, rc: 0, cost: 125, j0: 0 }), r = E.metrics(R, sim);
   const d = { ann: Math.abs(r.ann - +c[idx('ann_pct')]), te: Math.abs(r.te - +c[idx('te_vs_official_pct')]), teC: Math.abs(r.teC - +c[idx('te_vs_fullreplica_pct')]), beta: Math.abs(r.beta - +c[idx('beta')]) };
   const w = Math.max(d.ann, d.te, d.teC, d.beta * 10); worst = Math.max(worst, w); n++;
   if (w > 0.05) console.log('انحراف', N, m, lev, JSON.stringify(d));

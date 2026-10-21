@@ -5,12 +5,27 @@
  "to": "2026-10-19",
  "n_eligible_last": 364,
  "full_replica": {
+  "ann_pct": 64.70526225468056,
+  "ann_index_pct": 68.07583561623338,
+  "gap_pct": -3.37057336155282,
+  "te_vs_official_pct": 0.3687783130400323,
+  "te_vs_fullreplica_pct": 1.0286532609561656e-13,
+  "beta": 1.0002627535578854,
+  "corr": 0.9998605886286539
+ },
+ "full_replica_without_new": {
   "ann_pct": 65.0606296905281,
   "ann_index_pct": 68.07583561623338,
   "gap_pct": -3.0152059257052777,
   "te_vs_official_pct": 1.4334601337908375,
-  "te_vs_fullreplica_pct": 1.0190315171816672e-13,
+  "te_vs_fullreplica_pct": 1.3594020497281385,
   "beta": 1.0338837667170788,
   "corr": 0.9985676062065866
+ },
+ "ipo": {
+  "n_events": 25,
+  "thresh": 0.003,
+  "phi": 0.02,
+  "aum_bn": 1000.0
  }
 }

@@ -22,22 +22,36 @@ function divOf(R, key) {
   if (c && c.dv) { const ys = typeof c.dv[2] === 'string' ? b64f(c.dv[2]) : c.dv[2]; c.dv[0].forEach((t, i) => { if (!m.has(t)) m.set(t, []); m.get(t).push([c.dv[1][i], ys[i]]); }); }
   (p.dv || (p.dv = {}))[key] = m; return m;
 }
-/** شبیهٔ NAV (فصل ۳ §۳٫۵؛ همان tools/sampled_replica.step_day).
+/** رویدادهای لایهٔ عرضهٔ اولیه (tools/new_listings.py ← build_replica_panel، R.ipo.ev): نماد تازهٔ بزرگ با وزن شاخص بیرون از انتخاب. */
+function ipoOf(R) {
+  const p = prep(R); if (p.ipo) return p.ipo;
+  p.ipo = R.ipo && R.ipo.ev ? R.ipo.ev.map(e => ({ ...e, r: b64f(e.r), w: b64f(e.w), v: b64f(e.v) })) : [];
+  return p.ipo;
+}
+const atE = (a, e, t) => (t >= e.a && t - e.a < a.length ? a[t - e.a] : 0);
+/** شبیهٔ NAV (فصل ۳ §۳٫۵؛ همان tools/sampled_replica.step_day، ipo_rebalance و ipo_day).
  *  o = {mode:'none'|'fixed'|'beta', L, loan, rb, rc, cost, j0}
  *  • mode: none تمام سرمایه‌گذاری؛ fixed نقد ثابت (L = ۱ − نقد)؛ beta تراز بتا فقط نقد (L = clip(1/β, 0.7, 1)). وام برای اهرم مجاز نیست.
  *  • سود نقدی: روز استحقاق y·V از سهام جدا و «طلب» می‌شود و در روز پرداخت واقعی برمی‌گردد. بدون وام طلب بی‌بازده است.
  *  • loan = «وام سود نقدی»: در روز استحقاق دقیقاً به اندازهٔ طلب سود وام گرفته و سرمایه‌گذاری می‌شود؛ پرداخت سود وام را تسویه می‌کند؛
- *    بدهی هرگز از طلب بیشتر نمی‌شود (بهرهٔ مازاد از فروش سهام). پل تسویهٔ ابطال ۲۰۲۶-۱۰-۲۱ حذف شد (دادهٔ واقعی نداریم و منبع خطای همتا نیست). */
+ *    بدهی هرگز از طلب بیشتر نمی‌شود (بهرهٔ مازاد از فروش سهام). لایهٔ عرضهٔ اولیه (فصل ۳ «تأخیر ورود عرضهٔ اولیه»): نماد تازهٔ بزرگ از روز پس از
+ *    نخستین معامله با وزن شاخص هدف است؛ هر روز در پایانی حداکثر φ × ارزش معاملات ÷ اندازهٔ صندوق خریده می‌شود (صف خرید هم) تا ماهی که واجد عادی شود.
+ *    o.phi (کسر)، o.aum (میلیارد ریال)؛ سری ipoB = Σ b(r_e − r) و ipoD = Σ (h − b)(r_e − r) برای تجزیهٔ اختلاف. پل تسویهٔ ابطال ۲۰۲۶-۱۰-۲۱ حذف شد (دادهٔ واقعی نداریم و منبع خطای همتا نیست). */
 function simulate(R, key, o) {
   const c = R.configs[key], r = seriesOf(R, key), dv = divOf(R, key), nm = R.mstart.length, n = R.dates.length;
   const nav = new Float64Array(n).fill(NaN), Ls = new Float64Array(nm).fill(NaN), loan = !!o.loan;
   let V = 1, cash = 0, D = 0, rcv = 0, sD = 0, sR = 0, cnt = 0, interest = 0;
   const sched = new Map();
+  const EV = ipoOf(R), phi = o.phi == null ? (R.ipo ? R.ipo.phi : 0) : o.phi, aum = o.aum || (R.ipo ? R.ipo.aum : 1000), H = new Map();
+  const ipoB = new Float64Array(n), ipoD = new Float64Array(n);
+  const sumH = () => { let x = 0; for (const v of H.values()) x += v; return x; };
   for (let j = o.j0; j < nm; j++) {
     const t0 = R.mstart[j], t1 = j + 1 < nm ? R.mstart[j + 1] : n;
     let L = 1;
     if (o.mode === 'fixed') L = Math.min(o.L, 1); else if (o.mode === 'beta') { const be = c.beta[j]; L = be > 0 ? Math.min(1, Math.max(0.7, 1 / be)) : 1; }
     Ls[j] = L;
+    { const tot = V + sumH();                                          // لایهٔ عرضهٔ اولیه: رها کردن نماد واجدشده، کاستن مازاد وزن
+      for (const e of EV) { if (!H.has(e.p)) continue; let x; if (e.j <= j) { x = H.get(e.p); H.delete(e.p); } else { x = Math.max(H.get(e.p) - atE(e.w, e, t0) * tot, 0); H.set(e.p, H.get(e.p) - x); } V += x - x * o.cost / 1e4; } }
     if (D > rcv) { V -= D - rcv; D = rcv; }                            // سقف بدهی = طلب سود
     let E = V + cash;
     const to = j === o.j0 ? 0.5 : c.to[j];
@@ -48,16 +62,29 @@ function simulate(R, key, o) {
       const gap = R.dates[t] - prev; prev = R.dates[t];
       if (D > 0) { const d0 = D; D *= 1 + o.rb * gap / 365; interest += D - d0; }
       cash *= 1 + o.rc * gap / 365;
+      const Vp = V, Hp = EV.length ? sumH() : 0;
       const paid = sched.get(t) || 0; sched.delete(t);
       let ytot = 0; const ev = dv.get(t);
       if (ev) for (const [p, y] of ev) { const A = y * V; sched.set(p, (sched.get(p) || 0) + A); rcv += A; ytot += y; if (loan) D += A; }
       V *= 1 + r[t] - (loan ? 0 : ytot);
       if (paid) { rcv -= paid; if (loan) D -= paid; else V += paid; }
       if (D > rcv) { V -= D - rcv; D = rcv; }                          // سقف روزانه: وام سود ≤ طلب سود (بهرهٔ مازاد از فروش سهام)
-      const nv = V + cash + rcv - D; nav[t] = nv; sD += D / nv; sR += rcv / nv; cnt++;
+      if (EV.length) {
+        const tp = Vp + Hp;
+        for (const e of EV) { const re = atE(e.r, e, t), b = atE(e.w, e, t), h = tp > 0 ? (H.get(e.p) || 0) / tp : 0; if (b || h) { ipoB[t] += b * (re - r[t]); ipoD[t] += (h - b) * (re - r[t]); } }
+        for (const [k, v] of H) { const e = EV.find(x => x.p === k); H.set(k, v * (1 + (e ? atE(e.r, e, t) : 0))); }
+        const tot = V + sumH();
+        for (const e of EV) {
+          if (t < e.a || t - e.a >= e.w.length || (!H.has(e.p) && t >= e.end)) continue;
+          const need = e.w[t - e.a] * tot - (H.get(e.p) || 0); if (need <= 0) continue;
+          const amt = Math.min(need, phi * e.v[t - e.a] / aum, Math.max(V, 0));
+          if (amt > 0) { H.set(e.p, (H.get(e.p) || 0) + amt); V -= amt + amt * o.cost / 1e4; }
+        }
+      }
+      const nv = V + cash + rcv - D + sumH(); nav[t] = nv; sD += D / nv; sR += rcv / nv; cnt++;
     }
   }
-  return { nav, t0: R.mstart[o.j0], Ls, debtAvg: cnt ? sD / cnt : 0, rcvAvg: cnt ? sR / cnt : 0, interest, hasDiv: dv.size > 0 };
+  return { nav, t0: R.mstart[o.j0], Ls, debtAvg: cnt ? sD / cnt : 0, rcvAvg: cnt ? sR / cnt : 0, interest, hasDiv: dv.size > 0, ipoB, ipoD, ipoNow: EV.length ? sumH() / Math.max(V + sumH(), 1e-12) : 0 };
 }
 const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
 function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / (a.length - 1)); }
@@ -97,7 +124,7 @@ const f = (x, d = 1) => x == null || x !== x ? '—' : fmt(x, d);
 const sg = (x, d = 1) => x == null || x !== x ? '—' : sgn(x, d);
 const tip = (t, d) => ` data-tip="${esc(t)}"${d ? ` data-doc="${d}"` : ''}`;    // d: نشانی بند سند (ui/docs.js)
 // بندهای سند این صفحه (فصل ۳ §۳٫۵ و فصل‌های ۶، ۷ و ۱۴)
-const DOC = { samp: '3:3.5/نمونهٔ کوچک و وام', build: '3:3.5/همتاساز', loan: '3:3.5/وام سود نقدی', enh: '3:3.5/شاخص بهبودیافته', te: '3:3.5/خطای ردیابی', act: '7:7.4', ret: '7:7.3', cost: '6:6.1', cap: '14:14.2.6', plan: '5:5.8' };
+const DOC = { samp: '3:3.5/نمونهٔ کوچک و وام', build: '3:3.5/همتاساز', loan: '3:3.5/وام سود نقدی', ipo: '3:3.5/تأخیر ورود عرضهٔ اولیه', enh: '3:3.5/شاخص بهبودیافته', te: '3:3.5/خطای ردیابی', act: '7:7.4', ret: '7:7.3', cost: '6:6.1', cap: '14:14.2.6', plan: '5:5.8' };
 const MTIP = {
   top: 'N بزرگ‌ترین: N سهم با بیشترین ارزش بازار، با وزن ارزش بازارشان (نرمال‌شده). ساده، کم‌گردش و قابل توضیح؛ ولی صنایعی که سهم بزرگ ندارند جا می‌مانند و بتا معمولاً بالای ۱ است.',
   strat: 'طبقه‌ای (صنعت): تعداد سهم هر صنعت از N به نسبت وزن آن صنعت در شاخص، و درون هر صنعت بزرگ‌ترین‌ها؛ وزن‌ها ارزش بازار نرمال‌شده. همهٔ صنایع بزرگ حاضرند، ولی در دادهٔ ما TE آن تقریباً هم‌اندازهٔ «N بزرگ‌ترین» است (فصل ۳ §۳٫۵، جدول).',
@@ -109,7 +136,7 @@ const jyear = d => +dj(d).split('/')[0], jmonth = d => +dj(d).split('/')[1];
 const METHODS = { top: 'N بزرگ‌ترین', strat: 'طبقه‌ای (صنعت)', opt: 'بهینه‌سازی TE' };
 const LIQN = { 0: ['بدون فیلتر', 'همهٔ واجدان بورس نامزد نگهداری‌اند.'], 1: ['ملایم', 'نماد باید دست‌کم ۵۰ روز از ۶۳ روز اخیر معامله شده و میانهٔ ارزش معاملاتش بالاتر از صدک ۲۰ واجدان باشد.'],
   2: ['متوسط', 'دست‌کم ۵۶ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۴۰ واجدان.'], 3: ['سخت', 'دست‌کم ۶۰ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۶۰ واجدان.'] };
-const S = { method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, br: false, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 500 };
+const S = { method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, br: false, phi: 2, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 1000 };
 let R = null, R0 = null, host = null, last = null;
 
 function mount(el) {
@@ -137,6 +164,8 @@ function mount(el) {
           <label${tip('وام فقط برای تأخیر پرداخت سود نقدی، نه اهرم: روز استحقاق دقیقاً به اندازهٔ طلب سود وام گرفته و در سهام می‌ماند؛ روز پرداخت، سود وام را تسویه می‌کند. بدهی هرگز از طلب سود بیشتر نمی‌شود و بهرهٔ اضافه از فروش سهام پرداخت می‌شود. بدون وام، سود تا روز پرداخت بی‌بازده است.', DOC.loan)}>وام سود <span class="seg" id="rb-br"><button data-v="0" aria-pressed="false"${tip('بدون وام: طلب سود تا روز پرداخت بی‌بازده می‌ماند.', DOC.loan)}>بدون</button><button data-v="1" aria-pressed="false"${tip('وام سود نقدی با «نرخ وام»؛ سقف وام = طلب سود.', DOC.loan)}>وام سود نقدی</button></span></label>
           <label id="rb-rb-l"${tip('نرخ سادهٔ سالانهٔ وام سود؛ بهره هر روز به نسبت روزهای تقویمی به بدهی اضافه می‌شود. پیش‌فرض ۳۰٪ فرضی است [تأیید لازم]؛ نرخ اعتبار کارگزاری یا تأمین مالی صندوق را بگذارید. اگر نرخ از بازده بازار بیشتر باشد وام زیان می‌دهد.', DOC.loan)}>نرخ وام ٪ <input type="number" id="rb-rb" value="30" min="0" max="80" step="1"></label>
           <label${tip('بازده سالانهٔ بخش نقد، مثلاً صندوق درآمد ثابت [راستی‌آزمایی نشده]؛ صفر یعنی نقد بی‌بهره. فقط وقتی نقد نگه داشته می‌شود اثر دارد.', DOC.build)}>بازده نقد ٪ <input type="number" id="rb-rc" value="0" min="0" max="80" step="1"></label>
+          <label${tip('نماد تازهٔ بزرگ (وزن روز دوم در شاخص ≥ ۰٫۳٪، مثل «تابان» ۱۴۰۵) از روز پس از عرضهٔ اولیه در «شاخص كل» است ولی معمولاً روزها در صف خرید می‌ماند. همتا هر روز سفارش خرید می‌گذارد و حداکثر این درصد از ارزش معاملات آن روز نماد را می‌گیرد (جای صندوق در صف نامعلوم است [تأیید لازم])، تا به وزن شاخص برسد. صفر یعنی تا واجدیت عادی (حدود ۲۰۰ روز) نخریدن، مثل قاعدهٔ پیشین.', DOC.ipo)}>نماد تازه: سهم از معاملات ٪ <input type="number" id="rb-phi" value="2" min="0" max="50" step="0.5"></label>
+          <label${tip('اندازهٔ صندوق؛ سقف خرید روزانهٔ نماد تازه = سهم بالا × ارزش معاملات روز ÷ این عدد. صندوق بزرگ‌تر کندتر به وزن شاخص می‌رسد. همان عدد زبانهٔ «پرتفوی» است.', DOC.ipo)}>اندازهٔ صندوق (میلیارد ریال) <input type="number" id="rb-aum2" value="1000" min="1" step="100"></label>
         </div>
         <div class="rb-g"><div class="rb-gt"${tip('گام سوم: با چه هزینه‌ای و از چه تاریخی بسنجیم. نتیجه همیشه «از شروع تا امروز» است؛ جدول «اگر از سال‌های گذشته شروع می‌کردیم» در پنل ۳ همین را برای همهٔ سال‌ها نشان می‌دهد.', DOC.build)}>۳ · سنجش</div>
           <label${tip('هزینهٔ رفت‌وبرگشت (خرید + فروش) بر حسب واحد پایه؛ ۱۰۰ bp = ۱٪. هر ماه: هزینه = گردش یک‌طرفه × L × این عدد. کارمزد، مالیات فروش و لغزش قیمت را با هم بگیرید؛ پیش‌فرض همهٔ برنامه ۱۲۵ bp است [تأیید لازم].', DOC.cost)}>هزینه (bp) <input type="number" id="rbx-cost" value="125" min="0" step="5"></label>
@@ -158,7 +187,7 @@ function mount(el) {
     <div id="rb-d-years"><div class="panel-body scroll" style="max-height:340px"><table class="dt" id="rb-years"></table></div></div>
     <div id="rb-d-port" hidden>
       <div class="ctl"><label${tip('تاریخ سیگنال (پایان ماه شمسی). پرتفوی فقط با داده‌ای که آن روز در دسترس بود ساخته می‌شود (بدون نگاه به آینده) و از روز کاری بعد اجرا می‌شود. برای تاریخ‌های گذشته، خطای ۲۵۲ روز بعدش هم نشان داده می‌شود.', DOC.build)}>تاریخ <select id="rb-date">${dateOpts}</select></label>
-        <label${tip('اندازهٔ صندوق یا سبد شما. برای هر نماد: روز لازم = وزن × سرمایه ÷ (۱۰٪ × میانهٔ ارزش معاملات روزانه). بیش از ۵ روز قرمز می‌شود، یعنی خرید آن نماد قیمت را جابه‌جا می‌کند. فقط برای «امروز».', DOC.cap)}>سرمایه (میلیارد ریال) <input type="number" id="rb-aum" value="500" min="1" step="10"></label></div>
+        <label${tip('اندازهٔ صندوق یا سبد شما. برای هر نماد: روز لازم = وزن × سرمایه ÷ (۱۰٪ × میانهٔ ارزش معاملات روزانه). بیش از ۵ روز قرمز می‌شود، یعنی خرید آن نماد قیمت را جابه‌جا می‌کند. فقط برای «امروز».', DOC.cap)}>سرمایه (میلیارد ریال) <input type="number" id="rb-aum" value="1000" min="1" step="10"></label></div>
       <div class="kpis" id="rb-pkpi"></div>
       <div class="panel-body scroll" style="max-height:440px"><table class="dt" id="rb-ptab"></table></div>
       <div class="lineage" id="rb-plin"></div>
@@ -180,13 +209,15 @@ function mount(el) {
   $('rbx-cost').onchange = e => { S.cost = +e.target.value; render(); };
   $('rb-j0').onchange = e => { S.j0 = +e.target.value; render(); };
   $('rb-date').onchange = e => { S.pdate = e.target.value; renderPort(); };
-  $('rb-aum').onchange = e => { S.aum = +e.target.value; renderPort(); };
+  $('rb-aum').onchange = e => { S.aum = +e.target.value; $('rb-aum2').value = S.aum; render(); };
+  $('rb-aum2').onchange = e => { S.aum = Math.max(1, +e.target.value || 1); $('rb-aum').value = S.aum; render(); };
+  $('rb-phi').onchange = e => { S.phi = Math.max(0, +e.target.value || 0); render(); };
   $('rb-n').value = S.N;
   if (root.SIM_ENH_MOUNT) root.SIM_ENH_MOUNT($('rb-enh'), root.SIM_RB_API);
   setChip();
   render();
 }
-const opts = () => ({ mode: S.mode === 'none' ? 'none' : S.mode === 'beta' ? 'beta' : 'fixed', L: S.mode === 'cash' ? 1 - S.cash / 100 : 1, loan: S.br, rb: S.rb / 100, rc: S.rc / 100, cost: S.cost, j0: S.j0 });
+const opts = () => ({ mode: S.mode === 'none' ? 'none' : S.mode === 'beta' ? 'beta' : 'fixed', L: S.mode === 'cash' ? 1 - S.cash / 100 : 1, loan: S.br, phi: S.phi / 100, aum: S.aum, rb: S.rb / 100, rc: S.rc / 100, cost: S.cost, j0: S.j0 });
 const curKey = () => R === R0 ? keyOf(S.method, S.N, S.liq) : 'enh';
 const stale = () => { if (R !== R0) { R = R0; if (root.SIM_ENH_STALE) root.SIM_ENH_STALE(); } };
 root.SIM_RB_API = { set(Rx) { R = Rx || R0; if (host) render(); }, state: () => ({ method: S.method, N: S.N, liq: S.liq }) };
@@ -212,6 +243,8 @@ function render() {
     ['بتا', f(m.beta, 2), 'شیب رگرسیون بازده روزانهٔ همتا روی شاخص: اگر شاخص ۱٪ بالا رود، همتا به‌طور متوسط β٪ بالا می‌رود. بالای ۱ یعنی پرنوسان‌تر از بازار (معمول در نمونهٔ کوچک)؛ نقد آن را پایین و وام بالا می‌برد.', DOC.act],
     ['همبستگی', f(m.corr, 3), 'همبستگی بازده روزانهٔ همتا و شاخص (۱ یعنی هم‌حرکت کامل). بالای ۰٫۹۹ یعنی تقریباً همهٔ حرکت روزانهٔ شاخص را دارید؛ هرچه پایین‌تر، TE بیشتر.', DOC.act]] : [];
   const kp2 = [['میانگین L', f(sL / cnt, 2), 'میانگین سهم سهام از سرمایهٔ قابل‌سرمایه‌گذاری در ماه‌های آزمون: ۱ یعنی همه در سهام، زیر ۱ بخشی نقد (نقد ثابت، تراز بتا یا ذخیرهٔ ابطال). هرگز بالای ۱ نیست.', DOC.build],
+    ...(R.ipo ? [['اثر تأخیر ورود عرضهٔ اولیه', sg(m ? 100 * sim.ipoD.slice(sim.t0 + 1).reduce((a, x) => a + x, 0) / Math.max(m.years, 1e-9) : NaN, 2) + ' در سال', 'واحد درصد در سال: (وزن خریده‌شدهٔ نماد تازه − وزنش در شاخص) × (بازده نماد − بازده بقیهٔ همتا)، جمع روزها ÷ سال. منفی یعنی رشد روزهای صف خرید را نداشتیم. با «سهم از معاملات» بیشتر یا صندوق کوچک‌تر کمتر می‌شود؛ بخشی (روز اول پس از عرضه) اجتناب‌ناپذیر است.', DOC.ipo],
+      ['وزن نماد تازه در همتا (امروز)', f(100 * sim.ipoNow, 2) + '٪', 'سهم نمادهای تازهٔ بزرگ (لایهٔ عرضهٔ اولیه) از سهام همتا در آخرین روز؛ با وزنشان در شاخص مقایسه کنید (زبانهٔ «پرتفوی»).', DOC.ipo]] : []),
     ['طلب سود میانگین', f(100 * sim.rcvAvg, 2) + '٪ NAV', sim.hasDiv ? 'میانگین سود نقدیِ تصویب‌شده و هنوز پرداخت‌نشده نسبت به NAV. بدون وام این مبلغ بی‌بازده است (اصطکاک تأخیر سود)؛ با وام سود همین مبلغ وام گرفته و سرمایه‌گذاری می‌شود.' : 'این هدف برنامهٔ پرداخت سود ندارد (شاخص بهبودیافته)؛ سود نقدی مانند بازده کل همان روز استحقاق سرمایه‌گذاری می‌شود.', DOC.loan],
     ['وام سود میانگین', S.br ? f(100 * sim.debtAvg, 2) + '٪ NAV' : '—', 'میانگین وام سود نقدی نسبت به NAV؛ سقف آن همیشه طلب سود است. بهرهٔ کل پرداختی دورهٔ آزمون: ' + f(100 * sim.interest, 2) + '٪ سرمایهٔ اولیه.', DOC.loan], ['گردش ماهانهٔ یک‌طرفه', f(100 * sT / Math.max(cnt - 1, 1), 0) + '٪', 'گردش یک‌طرفه: نصف مجموع قدرمطلق تغییر وزن‌ها در هر ریبالانس، میانگین ماه‌ها (پیش از ضرب در L). هزینهٔ ماهانه ≈ این عدد × هزینهٔ رفت‌وبرگشت. «بهینه‌سازی TE» معمولاً گردش بیشتری از «N بزرگ‌ترین» دارد.', DOC.cost],
     ['ظرفیت امروز (میلیارد ریال)', f(capNow, 0), 'بزرگ‌ترین سرمایه‌ای که پرتفوی امروز را در یک روز می‌سازد، اگر از هر نماد بیش از ۱۰٪ ارزش معاملات روزانه‌اش (میانهٔ ۶۳ روز) نخرید؛ محدودکننده کم‌نقدشونده‌ترین نماد نسبت به وزنش است. برای سرمایهٔ بزرگ‌تر، فیلتر نقدشوندگی را سخت‌تر کنید یا ساخت را چندروزه ببینید.', DOC.cap],
@@ -287,14 +320,14 @@ function monthParts() {
   const p = prep(R), key = curKey(), r = seriesOf(R, key), c = R.configs[key], sim = last.sim, nm = R.mstart.length, n = R.dates.length, out = [];
   for (let j = S.j0; j < nm; j++) {
     const t0 = R.mstart[j], t1 = j + 1 < nm ? R.mstart[j + 1] : n;
-    let tot = 0, samp = 0, memb = 0, other = 0;
+    let tot = 0, samp = 0, memb = 0, other = 0, ipo = 0;
     for (let t = Math.max(t0, sim.t0 + 1); t < t1; t++) {
-      const navR = sim.nav[t] / sim.nav[t - 1] - 1, d = navR - p.K[t];
-      tot += d; samp += r[t] - p.C[t]; memb += p.C[t] - p.K[t]; other += navR - r[t];
+      const navR = sim.nav[t] / sim.nav[t - 1] - 1, d = navR - p.K[t], rf = r[t] + sim.ipoB[t];   // rf: سبد با نماد تازه در وزن کامل هدف
+      tot += d; samp += rf - p.C[t]; memb += p.C[t] - p.K[t]; ipo += sim.ipoD[t]; other += navR - rf - sim.ipoD[t];
     }
     if (t1 - 1 <= sim.t0) continue;
     const L = sim.Ls[j] === sim.Ls[j] ? sim.Ls[j] : 1, cost = j === S.j0 ? 0 : -c.to[j] * L * S.cost / 1e4;   // هزینهٔ خرید اولیه در روز شروع است که در سنجش نیست
-    out.push({ j, t0, t1, end: R.dates[t1 - 1], tot: 100 * tot, samp: 100 * samp, memb: 100 * memb, cost: 100 * cost, lev: 100 * (other - cost), L });
+    out.push({ j, t0, t1, end: R.dates[t1 - 1], tot: 100 * tot, samp: 100 * samp, memb: 100 * memb, ipo: 100 * ipo, cost: 100 * cost, lev: 100 * (other - cost), L });
   }
   return out;
 }
@@ -327,9 +360,9 @@ function ensureRepx(cb) {
   s.onload = () => { const q = ensureRepx.p; ensureRepx.p = null; q.forEach(f => f()); }; s.onerror = () => { ensureRepx.p = null; };
   document.head.appendChild(s);
 }
-const PART_FA = { samp: 'انتخاب سهام', memb: 'اعضا و داده', lev: 'نقد، تأخیر سود و وام سود', cost: 'هزینهٔ ریبالانس' };
+const PART_FA = { samp: 'انتخاب سهام', memb: 'اعضا و داده', ipo: 'تأخیر ورود عرضهٔ اولیه', lev: 'نقد، تأخیر سود و وام سود', cost: 'هزینهٔ ریبالانس' };
 function explain(m) {
-  const parts = ['samp', 'memb', 'lev', 'cost'].map(k => [k, m[k]]).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const parts = ['samp', 'memb', 'ipo', 'lev', 'cost'].map(k => [k, m[k] || 0]).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   const [mk] = parts[0], dir = m.tot >= 0 ? 'جلو افتاد' : 'عقب ماند', pp = v => `<span dir="ltr" style="unicode-bidi:isolate">${sg(v, 2)}</span>`;
   let why = '';
   if (mk === 'samp') {
@@ -344,7 +377,8 @@ function explain(m) {
     }
     else if (R !== R0) why += ' <span class="mute">(برای هدف تیلت‌شده جزئیات نماد محاسبه نمی‌شود.)</span>';
     else why += ' <span class="mute">(جزئیات نمادها در حال بارگذاری…)</span>';
-  } else if (mk === 'memb') why = 'احتمالاً <b>تفاوت اعضا و داده</b>: حتی خرید همهٔ واجدان هم این ماه با شاخص رسمی فاصله داشت؛ معمولاً نماد تازه‌عرضه یا کم‌سابقه که در شاخص رسمی هست ولی هنوز واجد همتا نیست، بازگشایی پس از توقف، یا تفاوت ثبت سود و افزایش سرمایه.';
+  } else if (mk === 'ipo') { const names = ipoOf(R).filter(e => e.a < m.t1 && e.a + e.w.length > m.t0).map(e => esc(R.names[e.p].s)); why = `احتمالاً <b>تأخیر ورود عرضهٔ اولیه</b>: نماد تازه${names.length ? ' (' + names.join('، ') + ')' : ''} از روز پس از عرضه در شاخص بود ولی همتا به‌دلیل صف خرید و سقف «سهم از معاملات» فقط بخشی از وزنش را داشت.`; }
+  else if (mk === 'memb') why = 'احتمالاً <b>تفاوت اعضا و داده</b>: حتی خرید همهٔ واجدان هم این ماه با شاخص رسمی فاصله داشت؛ «همتای کامل» نمادهای تازه را هم دارد، پس معمولاً بازگشایی پس از توقف، نماد کم‌سابقهٔ غیرتازه‌ای که هنوز واجد نیست، یا تفاوت ثبت سود و افزایش سرمایه.';
   else if (mk === 'lev') why = `احتمالاً <b>${m.L < 1 ? 'نقد' : S.br ? 'وام سود نقدی' : 'تأخیر پرداخت سود'}</b>: L این ماه ${f(m.L, 2)} بود؛ ${m.L < 1 ? 'بخشی از سرمایه بیرون بازار بود و بازار ' + (m.tot < 0 ? 'بالا رفت' : 'پایین آمد') : S.br ? 'طلب سود با وام سرمایه‌گذاری بود و بهرهٔ وام کسر شد' : 'سود تصویب‌شده تا روز پرداخت بی‌بازده ماند در حالی که شاخص رسمی آن را همان روز استحقاق دوباره سرمایه‌گذاری می‌کند'}.`;
   else why = 'احتمالاً <b>هزینهٔ ریبالانس</b>: گردش سبد در ابتدای این دوره زیاد بود.';
   return `<div class="tt">دوره تا ${dj(m.end)}: همتا ${pp(m.tot)} واحد درصد از شاخص ${dir}</div>
@@ -388,7 +422,11 @@ function portOf() {
   const key = curKey(), c = R.configs[key], nm = R.mstart.length, live = S.pdate === 'live', j = live ? nm - 1 : +S.pdate;
   const sel = live ? [c.live[0], c.live[1]] : c.sel[j], bj = live ? R.live_b : R.b[j], bmap = new Map(bj[0].map((i, p) => [i, bj[1][p] / 1e5]));
   const b0j = R.b0 ? (live ? R.live_b0 : R.b0[j]) : null, b0map = b0j ? new Map(b0j[0].map((i, p) => [i, b0j[1][p] / 1e5])) : null;
-  const rows = sel[0].map((i, p) => ({ i, w: sel[1][p] / 1e5, b: bmap.get(i) || 0, b0: b0map ? (b0map.get(i) || 0) : null, nm: R.names[i] })).sort((a, b) => b.w - a.w);
+  let rows = sel[0].map((i, p) => ({ i, w: sel[1][p] / 1e5, b: bmap.get(i) || 0, b0: b0map ? (b0map.get(i) || 0) : null, nm: R.names[i] }));
+  // امروز: نماد تازهٔ بزرگ با وزن شاخص (لایهٔ عرضهٔ اولیه)، بقیه به نسبت کوچک می‌شوند
+  const IL = live && R.ipo && R.ipo.live ? R.ipo.live.filter(([i]) => !rows.some(r => r.i === i)) : [];
+  if (IL.length) { const sb = IL.reduce((a, x) => a + x[1], 0); rows.forEach(r => { r.w *= 1 - sb; }); IL.forEach(([i, b]) => rows.push({ i, w: b, b: bmap.get(i) || b, b0: null, nm: R.names[i], ipo: true })); }
+  rows.sort((a, b) => b.w - a.w);
   return { live, j, rows, bmap, cap: live ? c.live[2] : c.cap[j], key, bj };
 }
 function renderPort() {
@@ -406,7 +444,7 @@ function renderPort() {
     ...(P.live ? [['ارزش معاملات روزانه (میلیارد ریال)', 'n', 'میانهٔ ارزش معاملات روزانه در ۶۳ روز اخیر.'], ['روز لازم', 'n', 'وزن × سرمایه ÷ (۱۰٪ × ارزش معاملات روزانه). بیش از ۵ روز قرمز می‌شود.']] : [])];
   $('rb-ptab').innerHTML = `<thead><tr>${hd.map(([t, c, d]) => `<th class="${c}"${tip(d)}>${t}</th>`).join('')}</tr></thead><tbody>` + P.rows.map((r, p) => {
     const ad = adv[r.i], days = ad ? r.w * aumR / 1e9 / (R.part * ad) : NaN;
-    return `<tr><td class="rank">${p + 1}</td><td>${esc(r.nm.s)}</td><td>${esc(r.nm.sec)}</td><td class="n">${f(100 * r.w, 2)}</td><td class="n">${f(100 * r.b, 2)}</td>${R.b0 ? `<td class="n">${f(100 * r.b0, 2)}</td>` : ''}<td class="n ${r.w >= r.b ? 'up' : 'down'}">${sg(100 * (r.w - r.b), 2)}</td>` + (P.live ? `<td class="n">${f(ad, 1)}</td><td class="n ${days > 5 ? 'down' : ''}">${f(days, 1)}</td>` : '') + '</tr>';
+    return `<tr><td class="rank">${p + 1}</td><td>${esc(r.nm.s)}${r.ipo ? ' <span class="chip warn"' + tip('نماد تازهٔ بزرگ (لایهٔ عرضهٔ اولیه): با وزن شاخص بیرون از روش انتخاب؛ اگر هنوز در صف خرید است، سفارش در قیمت سقف بگذارید و بخشی پر می‌شود.', DOC.ipo) + '>عرضهٔ اولیه</span>' : ''}</td><td>${esc(r.nm.sec)}</td><td class="n">${f(100 * r.w, 2)}</td><td class="n">${f(100 * r.b, 2)}</td>${R.b0 ? `<td class="n">${f(100 * r.b0, 2)}</td>` : ''}<td class="n ${r.w >= r.b ? 'up' : 'down'}">${sg(100 * (r.w - r.b), 2)}</td>` + (P.live ? `<td class="n">${f(ad, 1)}</td><td class="n ${days > 5 ? 'down' : ''}">${f(days, 1)}</td>` : '') + '</tr>';
   }).join('') + '</tbody>';
   $('rb-plin').innerHTML = `<span><b${tip('وزن هدف = ارزش بازار کل (قیمت × همهٔ سهام) نمادهای واجد بورس در روز سیگنال؛ همان روش وزن‌دهی «شاخص كل» رسمی (نه شناور آزاد؛ بازسازی کامل شاخص با این وزن TE حدود ۰٫۳٪ دارد). تفاوت با شاخص از اعضاست، نه روش وزن.', DOC.build)}>وزن شاخص</b> ارزش بازار کل، همان روش «شاخص كل»</span><span><b${tip('نمادهای واجد شاخص که در همتا نیستند و مجموع وزنشان در شاخص؛ منبع اصلی خطای نمونه‌گیری.', DOC.build)}>خارج از نمونه</b> ${P.bj[0].length - nmT} نماد با مجموع وزن ${f(100 * (1 - cov), 0)}٪</span>`;
   $('rb-plan').style.display = P.live ? '' : 'none';

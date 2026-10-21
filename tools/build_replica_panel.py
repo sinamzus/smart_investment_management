@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import construction as cn  # noqa: E402
 import sampled_replica as sr  # noqa: E402
 import dividend_pay as dp  # noqa: E402
+import new_listings as nl  # noqa: E402
 
 NS = (10, 20, 30, 50, 80, 120)
 METHODS = ("top", "strat", "opt")
@@ -110,12 +111,18 @@ def main():
     live_a = n - 1
     days0 = me[0] + 1
     dates = mk.dates[days0:]
-    # همتای کامل (وزن بازار، ریبالانس روزانه) — برای جدا کردن خطای نمونه‌گیری
+    # همتای کامل (هدف): واجدان عادی ∪ نمادهای تازه از روز پس از نخستین معامله (new_listings، همان sampled_replica)
+    first = nl.first_trade(mk)
     Cfull = np.zeros(n)
     for t in range(1, n):
-        i = np.where(mk.eligible(t - 1, require_trade=False) & ok_all & (mc[t - 1] > 0))[0]
+        i, w_ = nl.full_target(mk, t, ok_all, first)
         if len(i):
-            Cfull[t] = float((mc[t - 1, i] / mc[t - 1, i].sum()) @ X[t, i])
+            Cfull[t] = float(w_ @ X[t, i])
+    # لایهٔ عرضهٔ اولیه: نماد تازهٔ بزرگ با وزن شاخص بیرون از انتخاب؛ مرورگر خرید روزانه (φ × ارزش معاملات ÷ اندازهٔ صندوق) را حساب می‌کند
+    EV = nl.events(mk, ok_all, me[0])
+    WIPO = nl.weights(mk, EV, ok_all, first)
+    VAL = np.nan_to_num(mk.val)
+    print(f"لایهٔ عرضهٔ اولیه: {len(EV)} نماد تازهٔ بزرگ")
     keys = [(m, N, q) for q in LIQ for N in ns for m in METHODS]
     W = {key: [] for key in keys}                                          # ماه به ماه: (sel, w)
     LIVE = {}
@@ -196,8 +203,10 @@ def main():
         cfg["|".join(map(str, key))] = {"r": f32(r), "dv": [[a_ for a_, _ in dvk], [b_ for _, b_ in dvk], f32([dv[x] for x in dvk])], "to": [round(x, 4) for x in to], "beta": [round(x, 3) for x in beta], "cap": [round(x / 1e9, 2) for x in cap],
                                        "sel": [[[int(i) for i in s], [int(round(x * 1e5)) for x in w]] for s, w, _ in W[key]],
                                        "live": [[int(i) for i in LIVE[key][0]], [int(round(x * 1e5)) for x in LIVE[key][1]], round(float(np.min(PART * np.nan_to_num(LIVE[key][2]) / np.maximum(LIVE[key][1], 1e-9))) / 1e9, 2)]}
-    idx_live = np.where(mk.eligible(live_a, require_trade=False) & ok_all & (mc[live_a] > 0))[0]
-    used = sorted({int(i) for i in idx_live} | {int(i) for key in keys for s, _, _ in W[key] for i in s} | {int(i) for key in keys for i in LIVE[key][0]} | {int(i) for idx, _ in B_month for i in idx})
+    el_live = mk.eligible(live_a, require_trade=False) & ok_all & (mc[live_a] > 0)
+    idx_live = np.where(el_live | (ok_all & (first >= 0) & (first < live_a) & (mc[live_a] > 0)))[0]   # هدف زنده با نمادهای تازه
+    ev_live = [e for e in EV if e["s"] <= live_a and e["end"] > live_a]
+    used = sorted({int(i) for i in idx_live} | {e["i"] for e in EV} | {int(i) for key in keys for s, _, _ in W[key] for i in s} | {int(i) for key in keys for i in LIVE[key][0]} | {int(i) for idx, _ in B_month for i in idx})
     pos = {i: p for p, i in enumerate(used)}
     names = [{"c": str(mk.cols[i]), "s": str(mk.sym[i]), "sec": str(mk.sector[i])} for i in used]
     # شاخص وزن هدف: برای هر ماه فقط نمادهای واجد (ایندکس فشرده)
@@ -207,6 +216,14 @@ def main():
     # وزن هدف زنده
     idx = idx_live
     bl = mc[live_a, idx] / mc[live_a, idx].sum()
+    # رویدادهای لایهٔ عرضهٔ اولیه برای مرورگر (روزها نسبی به days0؛ پنجره تا end + HOLD یا پایان داده)
+    def evx(e):
+        a0, a1 = max(e["s"], days0), min(e["end"] + nl.HOLD, n)
+        jr = next((j for j, a_ in enumerate(me) if a_ >= e["end"]), len(me))
+        return {"p": pos[e["i"]], "s": e["s"] - days0, "a": a0 - days0, "end": e["end"] - days0, "j": jr,
+                "r": f32(X[a0:a1, e["i"]]), "w": f32(WIPO[e["i"]][a0:a1]), "v": f32(VAL[a0:a1, e["i"]] / 1e9)}
+    ipo = {"thresh": nl.THRESH, "phi": nl.PHI, "aum": nl.AUM_BN, "hold": nl.HOLD, "ev": [evx(e) for e in EV if min(e["end"] + nl.HOLD, n) > days0],
+           "live": [[pos[e["i"]], round(float(mc[live_a, e["i"]] / mc[live_a, idx_live].sum()), 5)] for e in ev_live]}
     # ADV آخرین روز برای نمایش
     advl = {pos[i]: round(float(adv[live_a, i]) / 1e9, 3) for i in idx if i in pos}
     out = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "asof": str(mk.dates[live_a].date()), "start": str(dates[0].date()),
@@ -215,7 +232,7 @@ def main():
            "b": [[[pos[i] for i in idx_], [int(round(x * 1e5)) for x in b_]] for idx_, b_ in B_month],
            "live_b": [[pos[i] for i in idx], [int(round(x * 1e5)) for x in bl]], "adv_live": advl,
            "names": names, "Ns": list(ns), "methods": list(METHODS), "liq": {str(q): {"min_days": v[0], "adv_pct": v[1]} for q, v in LIQ.items()},
-           "part": PART, "configs": cfg}
+           "part": PART, "configs": cfg, "ipo": ipo}
     path = ROOT / "ui" / "data" / "replica.js"
     path.write_text("window.SIM_REP = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
     print(f"ذخیره شد: {path} ({path.stat().st_size / 1e6:.1f} MB)؛ {len(cfg)} ترکیب، {len(me)} ماه، {len(used)} نماد")
