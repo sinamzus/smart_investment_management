@@ -124,7 +124,7 @@ const f = (x, d = 1) => x == null || x !== x ? '—' : fmt(x, d);
 const sg = (x, d = 1) => x == null || x !== x ? '—' : sgn(x, d);
 const tip = (t, d) => ` data-tip="${esc(t)}"${d ? ` data-doc="${d}"` : ''}`;    // d: نشانی بند سند (ui/docs.js)
 // بندهای سند این صفحه (فصل ۳ §۳٫۵ و فصل‌های ۶، ۷ و ۱۴)
-const DOC = { samp: '3:3.5/نمونهٔ کوچک و وام', build: '3:3.5/همتاساز', loan: '3:3.5/وام سود نقدی', ipo: '3:3.5/تأخیر ورود عرضهٔ اولیه', enh: '3:3.5/شاخص بهبودیافته', te: '3:3.5/خطای ردیابی', act: '7:7.4', ret: '7:7.3', cost: '6:6.1', cap: '14:14.2.6', plan: '5:5.8' };
+const DOC = { samp: '3:3.5/نمونهٔ کوچک و وام', build: '3:3.5/همتاساز', loan: '3:3.5/وام سود نقدی', ew: '3:3.5/همتای هم‌وزن', ipo: '3:3.5/تأخیر ورود عرضهٔ اولیه', enh: '3:3.5/شاخص بهبودیافته', te: '3:3.5/خطای ردیابی', act: '7:7.4', ret: '7:7.3', cost: '6:6.1', cap: '14:14.2.6', plan: '5:5.8' };
 const MTIP = {
   top: 'N بزرگ‌ترین: N سهم با بیشترین ارزش بازار، با وزن ارزش بازارشان (نرمال‌شده). ساده، کم‌گردش و قابل توضیح؛ ولی صنایعی که سهم بزرگ ندارند جا می‌مانند و بتا معمولاً بالای ۱ است.',
   strat: 'طبقه‌ای (صنعت): تعداد سهم هر صنعت از N به نسبت وزن آن صنعت در شاخص، و درون هر صنعت بزرگ‌ترین‌ها؛ وزن‌ها ارزش بازار نرمال‌شده. همهٔ صنایع بزرگ حاضرند، ولی در دادهٔ ما TE آن تقریباً هم‌اندازهٔ «N بزرگ‌ترین» است (فصل ۳ §۳٫۵، جدول).',
@@ -136,11 +136,19 @@ const jyear = d => +dj(d).split('/')[0], jmonth = d => +dj(d).split('/')[1];
 const METHODS = { top: 'N بزرگ‌ترین', strat: 'طبقه‌ای (صنعت)', opt: 'بهینه‌سازی TE' };
 const LIQN = { 0: ['بدون فیلتر', 'همهٔ واجدان بورس نامزد نگهداری‌اند.'], 1: ['ملایم', 'نماد باید دست‌کم ۵۰ روز از ۶۳ روز اخیر معامله شده و میانهٔ ارزش معاملاتش بالاتر از صدک ۲۰ واجدان باشد.'],
   2: ['متوسط', 'دست‌کم ۵۶ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۴۰ واجدان.'], 3: ['سخت', 'دست‌کم ۶۰ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۶۰ واجدان.'] };
-const S = { method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, br: false, phi: 2, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 1000 };
+// برچسب‌های وابسته به هدف (فصل ۳ «همتای هم‌وزن»): برای «شاخص كل (هم وزن)» روش اول «N نقدشونده‌ترین» است
+const MLAB = { k: { top: METHODS.top, tip: MTIP.top, opt: MTIP.opt },
+  ew: { top: 'N نقدشونده‌ترین', tip: 'N نقدشونده‌ترین: N سهم با بیشترین میانهٔ ۶۳ روزهٔ ارزش معاملات، با وزن هدف هم‌وزن (رانش‌یافته از آغاز فصل) نرمال‌شده. ساده و قابل‌اجرا؛ ولی سهام کوچک و کم‌معامله را که بخش بزرگ بازده هم‌وزن از آن‌هاست ندارد.',
+    opt: 'بهینه‌سازی TE: روی ۳N نقدشونده‌ترین، وزن‌ها طوری انتخاب می‌شوند که (w − b)ᵀΣ(w − b) نسبت به هدف هم‌وزن کمینه شود (فقط‌خرید، Σ انقباضی Ledoit–Wolf ۲۵۲ روزه)؛ سپس N وزن برتر و حل دوباره.' } };
+let TN = '«شاخص كل»';
+const S = { tgt: 'k', method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, br: false, phi: 2, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 1000 };
 let R = null, R0 = null, host = null, last = null;
 
 function mount(el) {
-  host = el; R = R0 = root.SIM_REP;
+  host = el; R = R0 = S.tgt === 'ew' && root.SIM_REP_EW ? root.SIM_REP_EW : root.SIM_REP;
+  if (R0 !== root.SIM_REP_EW) S.tgt = 'k';
+  const EWT = S.tgt === 'ew', L_ = MLAB[S.tgt]; METHODS.top = L_.top; MTIP.top = L_.tip; MTIP.opt = L_.opt; CONTRIB.clear();
+  TN = EWT ? '«شاخص كل (هم وزن)»' : '«شاخص كل»';
   if (!R) { el.innerHTML = '<section class="panel"><div class="panel-body" style="padding:24px">دادهٔ همتاساز پیدا نشد. اجرا کنید: <code>python tools/build_replica_panel.py</code></div></section>'; return; }
   prep(R);
   if (!R.Ns.includes(S.N)) S.N = R.Ns[Math.floor(R.Ns.length / 2)];
@@ -153,6 +161,7 @@ function mount(el) {
     <div class="rb-grid">
       <div class="rb-ctl">
         <div class="rb-g"><div class="rb-gt"${tip('گام اول: از میان نمادهای واجد بورس، کدام و چند سهم خریده شوند. هرچه N بیشتر، خطای ردیابی کمتر ولی تعداد سفارش و نیاز به نقدشوندگی بیشتر.', DOC.samp)}>۱ · نمونه</div>
+          <label${tip('کدام شاخص رسمی کپی شود. «شاخص كل» ارزش‌وزن است (وزن هر سهم ∝ ارزش بازار). «شاخص كل (هم وزن)» همهٔ سهام بورس را با وزن برابر در آغاز هر فصل شمسی دارد و تا فصل بعد با بازده رانش می‌کند؛ بخش بزرگ بازده آن از سهام کوچک و کم‌معامله است، پس با نمونهٔ کوچک بسیار سخت‌تر کپی می‌شود (فصل ۳ «همتای هم‌وزن»).', DOC.ew)}>هدف <span class="seg" id="rb-tgt"><button data-v="k" aria-pressed="false"${tip('«شاخص كل» ارزش‌وزن (TEDPIX با سود).', DOC.build)}>شاخص كل</button><button data-v="ew" aria-pressed="false"${tip('«شاخص كل (هم وزن)» با سود؛ دادهٔ آن بار اول بارگذاری می‌شود (ui/data/replica_ew.js).', DOC.ew)}>شاخص كل (هم وزن)</button></span></label>
           <label${tip('چطور N سهم انتخاب و وزن‌دهی شوند. «N بزرگ‌ترین» ساده و کم‌گردش است؛ «طبقه‌ای» سهم هر صنعت را حفظ می‌کند؛ «بهینه‌سازی TE» با کوواریانس، نوسان تفاضل با شاخص را کمینه می‌کند (کمترین TE ولی گردش بیشتر).', DOC.samp)}>روش <span class="seg" id="rb-method">${Object.entries(METHODS).map(([k, t]) => `<button data-v="${k}" aria-pressed="false"${tip(MTIP[k], DOC.samp)}>${t}</button>`).join('')}</span></label>
           <label${tip('N: تعداد سهامی که واقعاً خریده می‌شود. خطای ردیابی با N تند پایین می‌آید و بعد به «کف خطا» نزدیک می‌شود (خطای خرید همهٔ واجدان در برابر شاخص رسمی، حدود ۱٫۴٪). برای انتخاب N، پاسخ پنل ۱ بالای صفحه را ببینید؛ توضیح هر گزینه در فهرست آمده است.', DOC.samp)}>تعداد سهام <select id="rb-n">${R.Ns.map(n => `<option data-tip="نمونهٔ ${n} سهمی: ${n < 30 ? 'ردیابی ضعیف (TE بالای ۴٪)؛ فقط برای سرمایهٔ خیلی کوچک.' : n < 80 ? 'سازش خطای ردیابی و هزینه (TE ≈ ۳ تا ۴٪ با بهینه‌سازی).' : 'نزدیک کف خطا (TE ≈ ۲٪ با بهینه‌سازی)؛ نیاز به نقدشوندگی بیشتر.'}">${n}</option>`).join('')}</select></label>
           <label${tip('فیلتر ورود به نمونه بر پایهٔ ۶۳ روز اخیر: چند روز معامله شده و میانهٔ ارزش معاملات روزانه در چه صدکی از واجدان است. هدف (وزن شاخص) عوض نمی‌شود، فقط نامزدها کم می‌شوند؛ پس TE کمی بالا می‌رود ولی همتا با سرمایهٔ بزرگ‌تر و بدون گیرکردن در صف ساخته می‌شود.', DOC.build)}>نقدشوندگی <span class="seg" id="rb-liq">${Object.keys(R.liq).map(q => `<button data-v="${q}" aria-pressed="false"${tip(LIQN[q][1])}>${LIQN[q][0]}</button>`).join('')}</span></label>
@@ -196,6 +205,8 @@ function mount(el) {
   <details class="sam-fold panel" id="rb-enh-box"><summary${tip('پیشرفته: به‌جای کپی دقیق «شاخص كل»، هدف را آگاهانه عوض کنید (کم یا زیاد کردن صنعت، تیلت به یک معیار مثل کم‌نوسان، سقف وزن هر سهم، آمیختن با هم‌وزن) و با همان N سهم و روش بسازید. خروجی: هدف تازه چقدر از شاخص فاصله می‌گیرد و چه بازده اضافه‌ای داشته است.', DOC.enh)}><span class="lg-badge">4</span> شاخص بهبودیافته (پیشرفته): هدف را با تیلت و قید تغییر دهید</summary><div id="rb-enh"></div></details>`;
   const seg = (id, key, cb) => $(id).querySelectorAll('button').forEach(b => { b.onclick = () => { if (key !== 'mode') stale(); S[key] = key === 'liq' ? +b.dataset.v : b.dataset.v; cb && cb(); render(); }; });
   seg('rb-method', 'method'); seg('rb-liq', 'liq'); seg('rb-mode', 'mode');
+  $('rb-tgt').querySelectorAll('button').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.v === S.tgt)); b.onclick = () => switchTgt(b.dataset.v); });
+  $('rb-enh-box').hidden = EWT;                                         // شاخص بهبودیافته فقط روی هدف ارزش‌وزن
   $('rb-br').querySelectorAll('button').forEach(b => { b.onclick = () => { S.br = b.dataset.v === '1'; render(); }; });
 
   $('rb-dtabs').querySelectorAll('button').forEach(b => { b.onclick = () => {                 // زبانه‌های «جزئیات همین همتا»
@@ -222,6 +233,17 @@ const curKey = () => R === R0 ? keyOf(S.method, S.N, S.liq) : 'enh';
 const stale = () => { if (R !== R0) { R = R0; if (root.SIM_ENH_STALE) root.SIM_ENH_STALE(); } };
 root.SIM_RB_API = { set(Rx) { R = Rx || R0; if (host) render(); }, state: () => ({ method: S.method, N: S.N, liq: S.liq }) };
 
+/** تعویض هدف همتا؛ دادهٔ هم‌وزن فقط بار اول بارگذاری می‌شود (tools/build_replica_panel.py --target ew) */
+function switchTgt(v) {
+  if (v === S.tgt) return;
+  if (v === 'ew' && !root.SIM_REP_EW) {
+    const s = document.createElement('script'); s.src = 'data/replica_ew.js';
+    s.onload = () => { S.tgt = 'ew'; mount(host); };
+    s.onerror = () => { if (root.toast) root.toast('دادهٔ همتای هم‌وزن پیدا نشد: python tools/build_replica_panel.py --target ew'); };
+    document.head.appendChild(s); return;
+  }
+  S.tgt = v; mount(host);
+}
 function setChip() { $('rb-chip').textContent = `${dj(R.sig[0])} → ${dj(R.dates[R.dates.length - 1])} · ${R.sig.length} ریبالانس ماهانه${R === R0 ? '' : ' · هدف تیلت‌شده'}`; }
 function render() {
   if (!host) return;
@@ -301,7 +323,7 @@ function placeTip(t, e) {
 }
 function drawCharts(cv, m) {
   const dts = cv.idx.map(t => R.dates[t]);
-  $('rb-ch1-t').innerHTML = 'رشد ۱۰۰ واحد (مقیاس لگاریتمی): <b style="color:var(--ch-1)">━ همتا</b> در برابر <b style="color:var(--warn)">━ «شاخص كل» رسمی (بازده کل)</b>';
+  $('rb-ch1-t').innerHTML = `رشد ۱۰۰ واحد (مقیاس لگاریتمی): <b style="color:var(--ch-1)">━ همتا</b> در برابر <b style="color:var(--warn)">━ ${TN} رسمی (بازده کل)</b>`;
   chart($('rb-ch1'), [{ v: cv.k, c: 'var(--warn)', t: 'شاخص' }, { v: cv.a, c: 'var(--ch-1)', t: 'همتا', w: 1.8 }], { dates: dts, h: 210, d: 0, td: 1, log: true,
     extra: i => cv.k[i] > 0 && cv.a[i] === cv.a[i] ? `<div class="ts">رشد ۱۰۰ واحد از شروع · همتا نسبت به شاخص: <b dir="ltr" class="${cv.a[i] >= cv.k[i] ? 'up' : 'down'}">${sg(100 * (cv.a[i] / cv.k[i] - 1))}٪</b></div>` : '' });
   $('rb-ch2-t').textContent = 'رشد نسبی همتا به شاخص (٪، خط پُر) و TE غلتان تا ۲۵۲ روز (از ۱۲۶ روز به بعد؛ خط‌چین قرمز)';
@@ -334,7 +356,7 @@ function monthParts() {
 const CONTRIB = new Map();
 /** بزرگ‌ترین سهم‌های نمادها در «انتخاب سهام» یک ماه (نیازمند SIM_REPX) */
 function topContrib(m) {
-  const X = root.SIM_REPX; if (!X || !R.b || R !== R0) return null;
+  const X = root.SIM_REPX; if (!X || !R.b || R !== R0 || S.tgt === 'ew') return null;
   const k = `${curKey()}|${m.j}`; if (CONTRIB.has(k)) return CONTRIB.get(k);
   if (!X._ret) { const bin = atob(X.ret), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); X._ret = new Float32Array(u.buffer); X._di = new Map(X.dates.map((d, i) => [d, i])); }
   const K = X.k, c = R.configs[curKey()], sel = c.sel[m.j], bj = R.b[m.j];
@@ -376,6 +398,7 @@ function explain(m) {
       }
     }
     else if (R !== R0) why += ' <span class="mute">(برای هدف تیلت‌شده جزئیات نماد محاسبه نمی‌شود.)</span>';
+    else if (S.tgt === 'ew') why += ' <span class="mute">(برای هدف هم‌وزن جزئیات نماد محاسبه نمی‌شود.)</span>';
     else why += ' <span class="mute">(جزئیات نمادها در حال بارگذاری…)</span>';
   } else if (mk === 'ipo') { const names = ipoOf(R).filter(e => e.a < m.t1 && e.a + e.w.length > m.t0).map(e => esc(R.names[e.p].s)); why = `احتمالاً <b>تأخیر ورود عرضهٔ اولیه</b>: نماد تازه${names.length ? ' (' + names.join('، ') + ')' : ''} از روز پس از عرضه در شاخص بود ولی همتا به‌دلیل صف خرید و سقف «سهم از معاملات» فقط بخشی از وزنش را داشت.`; }
   else if (mk === 'memb') why = 'احتمالاً <b>تفاوت اعضا و داده</b>: حتی خرید همهٔ واجدان هم این ماه با شاخص رسمی فاصله داشت؛ «همتای کامل» نمادهای تازه را هم دارد، پس معمولاً بازگشایی پس از توقف، نماد کم‌سابقهٔ غیرتازه‌ای که هنوز واجد نیست، یا تفاوت ثبت سود و افزایش سرمایه.';
@@ -455,7 +478,7 @@ function renderPort() {
     const LAB = root.SIM_LAB, map = new Map(LAB.codes.map((c, i) => [String(c.c), i])), w = new Float64Array(LAB.k); let miss = 0;
     const L = last && last.sim ? last.sim.Ls[R.mstart.length - 1] : 1, ex = Math.min(1, L > 0 ? L : 1);
     P.rows.forEach(r => { const i = map.get(r.nm.c); if (i == null) miss++; else w[i] = r.w * ex; });
-    root.SIM_SEND_PLAN(`همتاساز · ${METHODS[S.method]} ${S.N} سهم · نقدشوندگی ${LIQN[S.liq][0]}`, w, R === R0 ? { kind: 'replica', key: curKey() } : { kind: 'enh' });
+    root.SIM_SEND_PLAN(`همتاساز${S.tgt === 'ew' ? ' هم‌وزن' : ''} · ${METHODS[S.method]} ${S.N} سهم · نقدشوندگی ${LIQN[S.liq][0]}`, w, R === R0 ? { kind: 'replica', key: curKey() } : { kind: 'enh' });
     if (miss) toast(`${miss} نماد در Lab نبود و کنار ماند`);
     });
   };

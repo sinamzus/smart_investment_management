@@ -38,13 +38,15 @@ import investable_replica as ir  # noqa: E402
 import construction as cn  # noqa: E402
 import signals as sg  # noqa: E402
 import new_listings as nl  # noqa: E402
+import ew_target as et  # noqa: E402
 
 NS = (10, 20, 30, 50, 80, 120)
 METHODS = ("top", "strat", "opt")
 START = pd.Timestamp("2018-03-21")
 
 
-def load():
+def load(target="k"):
+    """(Market، سری رسمی هدف): target = k («شاخص كل») یا ew («شاخص كل (هم وزن)»)؛ پانل تا آخرین روز سری رسمی «شاخص كل» بریده می‌شود."""
     _, info, Ra = bx.base_panel(("bourse",))
     Ra = bx.operating_view(Ra)
     # پانل تا آخرین روزی که سری رسمی «شاخص كل» داده دارد بریده می‌شود (۲۰۲۶-۱۰-۲۰): پیش‌تر روزهای پس از آخرین دادهٔ رسمی با بازده
@@ -56,7 +58,7 @@ def load():
               f"(python tools/fetch_official_indices.py --fetch)")
         Ra = Ra[Ra.date <= last]
     mk = sg.Market(Ra, info)
-    K = K0.reindex(mk.dates)
+    K = (ir.load_pair("EW").tr if target == "ew" else K0).reindex(mk.dates)
     return mk, K
 
 
@@ -66,12 +68,14 @@ def lw_cov(R):
     return LedoitWolf().fit(R).covariance_
 
 
-def pick_top(b, idx, N):
-    o = idx[np.argsort(-b[idx])]
+def pick_top(b, idx, N, rk=None):
+    """N نامزد برتر بر پایهٔ rk (پیش‌فرض وزن هدف b؛ برای هدف هم‌وزن ارزش معاملات، «N نقدشونده‌ترین»)."""
+    rk = b if rk is None else rk
+    o = idx[np.argsort(-rk[idx])]
     return o[:N]
 
 
-def pick_strat(b, idx, N, sector):
+def pick_strat(b, idx, N, sector, rk=None):
     sec = pd.Series(sector[idx], index=idx)
     wsec = pd.Series(b[idx], index=idx).groupby(sec).sum().sort_values(ascending=False)
     quota = np.floor(wsec / wsec.sum() * N).astype(int)
@@ -82,13 +86,13 @@ def pick_strat(b, idx, N, sector):
         if q <= 0:
             continue
         members = sec[sec == s].index.values
-        sel += list(members[np.argsort(-b[members])][:q])
+        sel += list(members[np.argsort(-(b if rk is None else rk)[members])][:q])
     return np.array(sel[:N])
 
 
-def pick_opt(b, idx, N, Sig, pos):
+def pick_opt(b, idx, N, Sig, pos, rk=None):
     from cvxpy import Minimize, Problem, Variable, quad_form, psd_wrap
-    pool = pick_top(b, idx, 3 * N)
+    pool = pick_top(b, idx, 3 * N, rk)
 
     def solve(sub):
         P = Sig[np.ix_([pos[i] for i in sub], [pos[i] for i in sub])]
@@ -165,9 +169,11 @@ def step_day(V, D, rcv, g, divs, paid, sched, bridge, rate, days):
     return V, D, rcv
 
 
-def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None, ipo=None):
+def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None, ipo=None, tgt=None):
     """lev_mode: none | bridge | beta. pays: dividend_pay.pay_days(mk) (برای سرعت یک بار ساخته و دوباره استفاده شود).
-    ipo: (رویدادها، وزن‌ها، φ، اندازهٔ صندوق میلیارد ریال) از new_listings — لایهٔ نماد تازهٔ بزرگ؛ None یعنی بدون لایه."""
+    ipo: (رویدادها، وزن‌ها، φ، اندازهٔ صندوق میلیارد ریال) از new_listings — لایهٔ نماد تازهٔ بزرگ؛ None یعنی بدون لایه.
+    tgt: None = «شاخص كل» (وزن هدف ارزش بازار، رتبه = وزن)؛ {"B": وزن‌های هم‌وزن پایان روز a، "adv": ارزش معاملات} = هدف هم‌وزن
+    (وزن هدف = وزن رانش‌یافتهٔ هم‌وزن روی واجدان، بازنرمال؛ رتبه = میانهٔ ۶۳ روزهٔ ارزش معاملات)."""
     if pays is None:
         import dividend_pay
         pays = dividend_pay.pay_days(mk)
@@ -195,7 +201,16 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None, ipo=None):
             continue
         b = np.zeros(k)
         mc = np.nan_to_num(mk.mcap[a])
-        b[idx] = mc[idx] / mc[idx].sum()
+        rk = None
+        if tgt is not None:
+            bw = tgt["B"][a]
+            b[idx] = bw[idx]
+            if b.sum() <= 0:
+                b[idx] = 1.0
+            b /= b.sum()
+            rk = np.nan_to_num(tgt["adv"][a])
+        else:
+            b[idx] = mc[idx] / mc[idx].sum()
         pos = {i: p for p, i in enumerate(idx)}
         Sig = None
         if method == "opt":
@@ -203,14 +218,14 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None, ipo=None):
             Sfull = np.zeros((k, k))
             Sfull[np.ix_(idx, idx)] = Sig
             pos = {i: i for i in idx}
-            sel, wsel = pick_opt(b, idx, N, Sfull, pos)
+            sel, wsel = pick_opt(b, idx, N, Sfull, pos, rk)
             w = np.zeros(k)
             w[sel] = wsel
         elif method == "strat":
-            sel = pick_strat(b, idx, N, mk.sector)
+            sel = pick_strat(b, idx, N, mk.sector, rk)
             w = np.zeros(k); w[sel] = b[sel] / b[sel].sum()
         else:
-            sel = pick_top(b, idx, N)
+            sel = pick_top(b, idx, N, rk)
             w = np.zeros(k); w[sel] = b[sel] / b[sel].sum()
         w[~tr & (w_prev <= 0)] = 0.0                                    # نماد جدید بی‌معامله خریدنی نیست
         if w.sum() > 0:
@@ -271,8 +286,10 @@ def main():
     ap.add_argument("--ns", type=str, default=",".join(map(str, NS)))
     ap.add_argument("--phi", type=float, default=nl.PHI, help="سهم صندوق از ارزش معاملات روزانهٔ نماد تازه (لایهٔ عرضهٔ اولیه)")
     ap.add_argument("--aum", type=float, default=nl.AUM_BN, help="اندازهٔ صندوق برای سقف خرید نماد تازه (میلیارد ریال)")
+    ap.add_argument("--target", choices=["k", "ew"], default="k", help="k = «شاخص كل»؛ ew = «شاخص كل (هم وزن)» (خروجی با پسوند _ew)")
     a = ap.parse_args()
-    mk, K = load()
+    mk, K = load(a.target)
+    sfx = "_ew" if a.target == "ew" else ""
     K = K.fillna(0)
     ok = np.isin(mk.market, ["bourse"])
     # همتای کامل (هدف): واجدان عادی ∪ نمادهای تازه از روز پس از نخستین معامله (new_listings.full_target)، وزن ارزش بازار روز قبل،
@@ -289,30 +306,38 @@ def main():
         io = np.where(mk.eligible(t - 1, require_trade=False) & ok & (mc[t - 1] > 0))[0]
         if len(io):
             Cold.iloc[t] = float((mc[t - 1, io] / mc[t - 1, io].sum()) @ X[t, io])
+    tgt = None
+    if a.target == "ew":                                           # هدف هم‌وزن: همتای کامل = هم‌وزن فصلی همهٔ بورس (ew_target)
+        me_all = [int(x) for x in mk.month_end if mk.dates[x] >= START and x >= 252 and x + 1 < mk.n]
+        Cew, Bew = et.ew_path(mk, ok, me_all)
+        Cfull = pd.Series(Cew, index=mk.dates)
+        tgt = {"B": Bew, "adv": pd.DataFrame(mk.val).rolling(63, min_periods=30).median().values}
     base = evaluate(pd.Series((1 + Cfull[Cfull.index >= START]).cumprod()), K, Cfull)
     old = evaluate(pd.Series((1 + Cold[Cold.index >= START]).cumprod()), K, Cfull)
-    print(f"همتای کامل (با نمادهای تازه) در برابر شاخص كل رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}")
+    if a.target == "ew":
+        old = base                                                  # «بدون نمادهای تازه» فقط برای هدف ارزش‌وزن معنا دارد
+    print(f"[{'هم‌وزن' if a.target == 'ew' else 'ارزش‌وزن'}] همتای کامل (با نمادهای تازه) در برابر شاخص رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}")
     print(f"  (بدون نمادهای تازه، قاعدهٔ پیشین: TE = {old['te_vs_official_pct']:.2f}٪؛ تفاوت {old['gap_pct']:+.2f}٪)\n")
-    EV = nl.events(mk, ok, int(np.searchsorted(mk.dates, START)))
+    EV = nl.events(mk, ok, int(np.searchsorted(mk.dates, START))) if a.target == "k" else []
     WIPO = nl.weights(mk, EV, ok, first)
     print(f"لایهٔ عرضهٔ اولیه: {len(EV)} نماد تازهٔ بزرگ (وزن روز دوم ≥ {100 * nl.THRESH:.1f}٪)؛ φ = {100 * a.phi:.0f}٪، اندازهٔ صندوق {a.aum:,.0f} میلیارد ریال")
     import json
-    json.dump({"rate": a.rate, "cost_bp": a.cost, "from": str(START.date()), "to": str(mk.dates[-1].date()), "n_eligible_last": int((mk.eligible(mk.n - 1, require_trade=False) & ok).sum()),
+    json.dump({"target": a.target, "rate": a.rate, "cost_bp": a.cost, "from": str(START.date()), "to": str(mk.dates[-1].date()), "n_eligible_last": int((mk.eligible(mk.n - 1, require_trade=False) & ok).sum()),
                "full_replica": {k: float(v) for k, v in base.items()}, "full_replica_without_new": {k: float(v) for k, v in old.items()},
-               "ipo": {"n_events": len(EV), "thresh": nl.THRESH, "phi": a.phi, "aum_bn": a.aum}}, open(ROOT / "data" / "research" / "sampled_replica_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+               "ipo": {"n_events": len(EV), "thresh": nl.THRESH, "phi": a.phi, "aum_bn": a.aum}}, open(ROOT / "data" / "research" / f"sampled_replica_meta{sfx}.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     for N in [int(x) for x in a.ns.split(",")]:
         for m in METHODS:
             for lev in ("none", "bridge", "beta"):
                 try:
-                    s, to, L = run(mk, K, a.rate, a.cost, N, m, lev, ipo=(EV, WIPO, a.phi, a.aum))
+                    s, to, L = run(mk, K, a.rate, a.cost, N, m, lev, ipo=(EV, WIPO, a.phi, a.aum), tgt=tgt)
                 except Exception as e:  # noqa: BLE001
                     print("خطا", N, m, lev, type(e).__name__, e); continue
                 ev = evaluate(s, K, Cfull)
                 rows.append({"N": N, "method": m, "leverage": lev, "mean_L": L, "turnover_oneway_pct": 100 * to, **ev})
                 print(f"N={N:3d} {m:5s} L={ {'none': '1', 'bridge': 'وام سود'}.get(lev, 'β') } (L̄={L:.2f}) بازده {ev['ann_pct']:6.1f}٪ شاخص {ev['ann_index_pct']:6.1f}٪ فاصله {ev['gap_pct']:+6.1f} TE_رسمی {ev['te_vs_official_pct']:5.2f} TE_همتا {ev['te_vs_fullreplica_pct']:5.2f} β={ev['beta']:.2f} ρ={ev['corr']:.3f} گردش {100 * to:4.0f}٪", flush=True)
     out = pd.DataFrame(rows)
-    out.to_csv(ROOT / "data" / "research" / "sampled_replica.csv", index=False, encoding="utf-8-sig")
-    print("\nذخیره شد: data/research/sampled_replica.csv")
+    out.to_csv(ROOT / "data" / "research" / f"sampled_replica{sfx}.csv", index=False, encoding="utf-8-sig")
+    print(f"\nذخیره شد: data/research/sampled_replica{sfx}.csv")
 
 
 if __name__ == "__main__":

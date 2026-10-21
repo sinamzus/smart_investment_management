@@ -29,6 +29,7 @@ import construction as cn  # noqa: E402
 import sampled_replica as sr  # noqa: E402
 import dividend_pay as dp  # noqa: E402
 import new_listings as nl  # noqa: E402
+import ew_target as et  # noqa: E402
 
 NS = (10, 20, 30, 50, 80, 120)
 METHODS = ("top", "strat", "opt")
@@ -42,12 +43,13 @@ def f32(a):
     return b64encode(np.asarray(a, dtype="<f4").tobytes()).decode()
 
 
-def choose(method, N, b, idx, cand, sector, g):
-    """-> (sel, w) ؛ g = Σ[:, idx] @ b[idx] (فقط برای opt)."""
+def choose(method, N, b, idx, cand, sector, g, rk=None):
+    """-> (sel, w) ؛ g = Σ[:, idx] @ b[idx] (فقط برای opt)؛ rk رتبه (پیش‌فرض b؛ هدف هم‌وزن: ارزش معاملات)."""
+    rk = b if rk is None else rk
     if len(cand) <= N:
         sel = cand
     elif method == "top":
-        sel = cand[np.argsort(-b[cand])][:N]
+        sel = cand[np.argsort(-rk[cand])][:N]
     elif method == "strat":
         sec = pd.Series(sector[idx], index=idx)
         wsec = pd.Series(b[idx], index=idx).groupby(sec).sum().sort_values(ascending=False)
@@ -58,8 +60,8 @@ def choose(method, N, b, idx, cand, sector, g):
         for s, q in quota.items():
             if q > 0:
                 m = cs[cs == s].index.values
-                sel += list(m[np.argsort(-b[m])][:q])
-        sel = np.array(sel[:N]) if sel else cand[np.argsort(-b[cand])][:N]
+                sel += list(m[np.argsort(-rk[m])][:q])
+        sel = np.array(sel[:N]) if sel else cand[np.argsort(-rk[cand])][:N]
     else:
         return None
     sel = np.asarray(sel)
@@ -76,11 +78,12 @@ def solve_opt(sub, Sig, g):
     return np.maximum(np.asarray(w.value).ravel(), 0)
 
 
-def opt_pick(N, b, cand, Sig, g):
+def opt_pick(N, b, cand, Sig, g, rk=None):
+    rk = b if rk is None else rk
     if len(cand) <= N:
         sel = cand
     else:
-        pool = cand[np.argsort(-b[cand])][:3 * N]
+        pool = cand[np.argsort(-rk[cand])][:3 * N]
         w0 = solve_opt(pool, Sig, g)
         sel = pool[np.argsort(-w0)][:N]
     w1 = solve_opt(sel, Sig, g)
@@ -92,9 +95,11 @@ def opt_pick(N, b, cand, Sig, g):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--target", choices=["k", "ew"], default="k", help="k = «شاخص كل» (ui/data/replica.js)؛ ew = «شاخص كل (هم وزن)» (ui/data/replica_ew.js)")
     a = ap.parse_args()
     ns = (30, 50) if a.quick else NS
-    mk, K = sr.load()
+    EWT = a.target == "ew"
+    mk, K = sr.load(a.target)
     K = K.fillna(0)
     n, k = mk.n, mk.k
     X = np.nan_to_num(mk.X)
@@ -113,13 +118,16 @@ def main():
     dates = mk.dates[days0:]
     # همتای کامل (هدف): واجدان عادی ∪ نمادهای تازه از روز پس از نخستین معامله (new_listings، همان sampled_replica)
     first = nl.first_trade(mk)
-    Cfull = np.zeros(n)
-    for t in range(1, n):
-        i, w_ = nl.full_target(mk, t, ok_all, first)
-        if len(i):
-            Cfull[t] = float(w_ @ X[t, i])
+    if EWT:                                                     # هدف هم‌وزن: همتای کامل و وزن هدف ماه‌ها از ew_target (هم‌وزن فصلی همهٔ بورس)
+        Cfull, BEW = et.ew_path(mk, ok_all, me + [live_a])
+    else:
+        Cfull = np.zeros(n)
+        for t in range(1, n):
+            i, w_ = nl.full_target(mk, t, ok_all, first)
+            if len(i):
+                Cfull[t] = float(w_ @ X[t, i])
     # لایهٔ عرضهٔ اولیه: نماد تازهٔ بزرگ با وزن شاخص بیرون از انتخاب؛ مرورگر خرید روزانه (φ × ارزش معاملات ÷ اندازهٔ صندوق) را حساب می‌کند
-    EV = nl.events(mk, ok_all, me[0])
+    EV = [] if EWT else nl.events(mk, ok_all, me[0])
     WIPO = nl.weights(mk, EV, ok_all, first)
     VAL = np.nan_to_num(mk.val)
     print(f"لایهٔ عرضهٔ اولیه: {len(EV)} نماد تازهٔ بزرگ")
@@ -131,7 +139,15 @@ def main():
     def month(aidx, store, record):
         idx = np.where(mk.eligible(aidx, require_trade=False) & ok_all & (mc[aidx] > 0))[0]
         b = np.zeros(k)
-        b[idx] = mc[aidx, idx] / mc[aidx, idx].sum()
+        rk = None
+        if EWT:                                                 # وزن هدف هم‌وزن رانش‌یافته روی واجدان؛ رتبه = ارزش معاملات
+            b[idx] = BEW[aidx][idx]
+            if b.sum() <= 0:
+                b[idx] = 1.0
+            b /= b.sum()
+            rk = np.nan_to_num(adv[aidx])
+        else:
+            b[idx] = mc[aidx, idx] / mc[aidx, idx].sum()
         Sig = g = None
         Sig_needed = any(m == "opt" for m, _, _ in keys)
         if Sig_needed:
@@ -150,9 +166,9 @@ def main():
             m, N, q = key
             cand = cands[q] if len(cands[q]) >= 3 else idx
             if m == "opt":
-                sel, w = opt_pick(N, b, cand, Sig, g)
+                sel, w = opt_pick(N, b, cand, Sig, g, rk)
             else:
-                sel, w = choose(m, N, b, idx, cand, mk.sector, g)
+                sel, w = choose(m, N, b, idx, cand, mk.sector, g, rk)
             store[key] = (sel, w, adv[aidx, sel])
         if record:
             B_month.append((idx, b[idx])); nelig.append(len(idx)); sigdate.append(int((mk.dates[aidx] - EPOCH).days))
@@ -206,7 +222,7 @@ def main():
     el_live = mk.eligible(live_a, require_trade=False) & ok_all & (mc[live_a] > 0)
     idx_live = np.where(el_live | (ok_all & (first >= 0) & (first < live_a) & (mc[live_a] > 0)))[0]   # هدف زنده با نمادهای تازه
     ev_live = [e for e in EV if e["s"] <= live_a and e["end"] > live_a]
-    used = sorted({int(i) for i in idx_live} | {e["i"] for e in EV} | {int(i) for key in keys for s, _, _ in W[key] for i in s} | {int(i) for key in keys for i in LIVE[key][0]} | {int(i) for idx, _ in B_month for i in idx})
+    used = sorted({int(i) for i in idx_live} | ({int(i) for i in np.where(BEW[live_a] > 0)[0]} if EWT else set()) | {e["i"] for e in EV} | {int(i) for key in keys for s, _, _ in W[key] for i in s} | {int(i) for key in keys for i in LIVE[key][0]} | {int(i) for idx, _ in B_month for i in idx})
     pos = {i: p for p, i in enumerate(used)}
     names = [{"c": str(mk.cols[i]), "s": str(mk.sym[i]), "sec": str(mk.sector[i])} for i in used]
     # شاخص وزن هدف: برای هر ماه فقط نمادهای واجد (ایندکس فشرده)
@@ -215,7 +231,11 @@ def main():
         c["live"][0] = [pos[i] for i in c["live"][0]]
     # وزن هدف زنده
     idx = idx_live
-    bl = mc[live_a, idx] / mc[live_a, idx].sum()
+    if EWT:                                                     # هدف هم‌وزن زنده
+        idx = np.where(BEW[live_a] > 0)[0]
+        bl = BEW[live_a][idx] / BEW[live_a][idx].sum()
+    else:
+        bl = mc[live_a, idx] / mc[live_a, idx].sum()
     # رویدادهای لایهٔ عرضهٔ اولیه برای مرورگر (روزها نسبی به days0؛ پنجره تا end + HOLD یا پایان داده)
     def evx(e):
         a0, a1 = max(e["s"], days0), min(e["end"] + nl.HOLD, n)
@@ -232,9 +252,9 @@ def main():
            "b": [[[pos[i] for i in idx_], [int(round(x * 1e5)) for x in b_]] for idx_, b_ in B_month],
            "live_b": [[pos[i] for i in idx], [int(round(x * 1e5)) for x in bl]], "adv_live": advl,
            "names": names, "Ns": list(ns), "methods": list(METHODS), "liq": {str(q): {"min_days": v[0], "adv_pct": v[1]} for q, v in LIQ.items()},
-           "part": PART, "configs": cfg, "ipo": ipo}
-    path = ROOT / "ui" / "data" / "replica.js"
-    path.write_text("window.SIM_REP = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
+           "part": PART, "configs": cfg, "ipo": ipo, "target": a.target}
+    path = ROOT / "ui" / "data" / ("replica_ew.js" if EWT else "replica.js")
+    path.write_text(("window.SIM_REP_EW = " if EWT else "window.SIM_REP = ") + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
     print(f"ذخیره شد: {path} ({path.stat().st_size / 1e6:.1f} MB)؛ {len(cfg)} ترکیب، {len(me)} ماه، {len(used)} نماد")
 
 
