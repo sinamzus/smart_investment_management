@@ -31,7 +31,7 @@ import dividend_pay as dp  # noqa: E402
 import new_listings as nl  # noqa: E402
 import ew_target as et  # noqa: E402
 
-NS = (10, 20, 30, 50, 80, 120)
+NS = (10, 20, 30, 50, 80, 120, 150, 180)                               # ۱۵۰ و ۱۸۰ به درخواست مالک ۲۰۲۶-۱۰-۲۱
 METHODS = ("top", "strat", "opt")
 LIQ = {0: (0, 0.0), 1: (50, 0.20), 2: (56, 0.40), 3: (60, 0.60)}          # (حداقل روز معامله از ۶۳، صدک ADV)
 PART = 0.10                                                               # سقف مشارکت در ارزش معاملات روزانه

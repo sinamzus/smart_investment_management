@@ -16,6 +16,8 @@ THRESH = 0.003          # وزن روز دوم در «شاخص كل» برای �
 PHI = 0.02              # سهم پیش‌فرض صندوق از ارزش معاملات روزانهٔ نماد [تأیید لازم: جای صندوق در صف نامعلوم است]
 AUM_BN = 1000.0         # اندازهٔ مرجع صندوق در جدول پایتون (میلیارد ریال)
 HOLD = 40              # روزهای پس از واجدیت عادی که وزن هدف لایه هنوز ساخته می‌شود (تا ریبالانس ماهانهٔ بعد رها شود)
+MAX_LAYER = 252        # بیشینهٔ ماندن در لایه (روز از نخستین معامله). نمادی که تا یک سال واجد عادی نشد (معمولاً کم‌معامله) دیگر «تازه» نیست و
+                       # مثل هر نماد ناواجد دیگری با نمونه نگه داشته نمی‌شود. پیش از ۲۰۲۶-۱۰-۲۱ بی‌سقف بود و پنج شرکت «وس…» آذر ۱۳۹۹ تا امروز در لایه ماندند
 
 
 def first_trade(mk) -> np.ndarray:
@@ -39,7 +41,7 @@ def full_target(mk, t, ok, first=None):
 
 
 def events(mk, ok, start_idx: int, thresh: float = THRESH):
-    """رویدادهای نماد تازهٔ بزرگ: [{i, s (نخستین روز خرید = روز پس از نخستین معامله), end (نخستین روز واجدیت عادی یا n)}]."""
+    """رویدادهای نماد تازهٔ بزرگ: [{i, s (نخستین روز خرید = روز پس از نخستین معامله), end (نخستین روز واجدیت عادی، حداکثر MAX_LAYER روز پس از نخستین معامله، یا n)}]."""
     first = first_trade(mk)
     out = []
     for i in np.where(ok & (first >= start_idx - 260))[0]:
@@ -50,7 +52,7 @@ def events(mk, ok, start_idx: int, thresh: float = THRESH):
         pos = np.where(idx == i)[0]
         if not len(pos) or w[pos[0]] < thresh:
             continue
-        end = next((t for t in range(t1, mk.n) if mk.eligible(t, require_trade=False)[i]), mk.n)
+        end = next((t for t in range(t1, min(t1 + MAX_LAYER, mk.n)) if mk.eligible(t, require_trade=False)[i]), min(t1 + MAX_LAYER, mk.n))
         out.append({"i": int(i), "s": t1 + 1, "end": int(end)})
     return out
 
