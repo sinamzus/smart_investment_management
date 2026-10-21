@@ -671,3 +671,23 @@ def live_target(lab, spec, algo_, params, prev_w, held, ok_univ):
     if spec.get("max_w") and w.sum() > 0:
         w = _cap(w, spec["max_w"])
     return {"date": mk.dates[a], "target": w, "current_drift": drift, "score": sc}
+
+
+OPEN_FRAC = 0.2                                   # روز باز بازار: دست‌کم این سهم از نمادهای جهان در آن روز معامله شده‌اند
+
+
+def open_days(mk, ok):
+    """روزهای باز بازار (بولی، طول mk.n). تعطیلی سراسری ردیف دارد ولی روز باز نیست؛ مثلاً ۵۰ روز ۲۰۲۶-۰۲-۲۸ تا ۲۰۲۶-۰۵-۱۸
+    (اسفند ۱۴۰۴ تا اردیبهشت ۱۴۰۵) که هیچ نماد بورسی معامله نشد و «شاخص كل» رسمی ثابت ماند (ممیزی ۲۰۲۶-۱۰-۲۱)."""
+    return (np.nan_to_num(mk.vol)[:, ok] > 0).mean(1) > OPEN_FRAC
+
+
+def liq_windows(mk, ok, w=63, min_periods=30):
+    """(adv، td): میانهٔ ارزش معاملات روزانه و شمار روزهای معامله در w روز **باز** اخیر بازار؛ روز تعطیل مقدار آخرین روز باز را دارد.
+    پیش از ۲۰۲۶-۱۰-۲۱ پنجره روی همهٔ ردیف‌ها بود و تعطیلی ۵۰ روزه فیلتر نقدشوندگی همتاساز را ۴ ماه کامل از کار انداخت (همهٔ نمادها رد می‌شدند)."""
+    op = open_days(mk, ok)
+    val = pd.DataFrame(mk.val)
+    vo = val[op]
+    adv = vo.rolling(w, min_periods=min_periods).median().reindex(val.index).ffill().values
+    td = (vo.fillna(0) > 0).astype(float).rolling(w, min_periods=min_periods).sum().reindex(val.index).ffill().values
+    return adv, td

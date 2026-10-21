@@ -45,6 +45,7 @@ POLICIES = {
     "t10": ("آستانه‌ای ۱۰٪ (بررسی هفتگی)", "week", 0.10),
 }
 EPOCH = pd.Timestamp("1970-01-01")
+CACHE_V = 2                                                             # ۲: پنجرهٔ نقدشوندگی روی روزهای باز بازار (۲۰۲۶-۱۰-۲۱)
 
 
 def b16(a):
@@ -110,7 +111,7 @@ def main():
     if cache.exists():
         try:
             c = pickle.loads(cache.read_bytes())
-            if c.get("fp") == fp and c.get("keys") == keys:
+            if c.get("fp") == fp and c.get("keys") == keys and c.get("v") == CACHE_V:
                 TG = c["tg"]
         except Exception:  # noqa: BLE001
             TG = {}
@@ -120,7 +121,7 @@ def main():
     for i, x in enumerate(todo):
         TG[x] = bp.targets_at(cx, x, keys)[0]
         if (i + 1) % 25 == 0 or i + 1 == len(todo):
-            cache.write_bytes(pickle.dumps({"fp": fp, "keys": keys, "tg": TG}))
+            cache.write_bytes(pickle.dumps({"fp": fp, "keys": keys, "tg": TG, "v": CACHE_V}))
             print(f"  {i + 1}/{len(todo)} {mk.dates[x].date()}", flush=True)
     # هم‌ارزی با سیاست پایهٔ ماهانه (همان شبیه‌سازی build_replica_panel)
     b64f = lambda z: np.frombuffer(__import__("base64").b64decode(z), dtype="<f4")  # noqa: E731

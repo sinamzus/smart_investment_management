@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import sampled_replica as sr  # noqa: E402
 import dividend_pay as dp  # noqa: E402
 import new_listings as nl  # noqa: E402
+import construction as cn  # noqa: E402
 
 EPOCH = pd.Timestamp("1970-01-01")
 
@@ -35,9 +36,7 @@ def main():
     X = np.nan_to_num(mk.X)
     mc = np.nan_to_num(mk.mcap)
     ok_all = np.isin(mk.market, ["bourse"])
-    val = pd.DataFrame(mk.val)
-    adv = val.rolling(63, min_periods=30).median().values
-    td = (val.fillna(0) > 0).astype(float).rolling(63, min_periods=30).sum().values
+    adv, td = cn.liq_windows(mk, ok_all)                    # پنجرهٔ ۶۳ روز باز بازار (همان build_replica_panel)
     me = [int(x) for x in mk.month_end if mk.dates[x] >= sr.START and x >= 252 and x + 1 < n]
     ends = me + [n - 1]
     elig = {a: np.where(mk.eligible(a, require_trade=False) & ok_all & (mc[a] > 0))[0] for a in ends}   # هدف شاخص از همهٔ واجدان (همان build_replica_panel)

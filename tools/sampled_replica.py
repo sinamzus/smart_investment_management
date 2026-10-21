@@ -311,7 +311,7 @@ def main():
         me_all = [int(x) for x in mk.month_end if mk.dates[x] >= START and x >= 252 and x + 1 < mk.n]
         Cew, Bew = et.ew_path(mk, ok, me_all)
         Cfull = pd.Series(Cew, index=mk.dates)
-        tgt = {"B": Bew, "adv": pd.DataFrame(mk.val).rolling(63, min_periods=30).median().values}
+        tgt = {"B": Bew, "adv": cn.liq_windows(mk, ok)[0]}       # رتبهٔ «نقدشونده‌ترین»: ۶۳ روز باز بازار
     base = evaluate(pd.Series((1 + Cfull[Cfull.index >= START]).cumprod()), K, Cfull)
     old = evaluate(pd.Series((1 + Cold[Cold.index >= START]).cumprod()), K, Cfull)
     if a.target == "ew":

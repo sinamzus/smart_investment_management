@@ -96,10 +96,10 @@ def context(mk, K, target, keep):
     """ورودی‌های مشترک ساخت هدف و شبیه‌سازی؛ keep = روزهایی که وزن هدف هم‌وزن آن‌ها لازم است (روزهای بررسی + روز زنده)."""
     from types import SimpleNamespace
     EWT = target == "ew"
-    val = pd.DataFrame(mk.val)
+    ok_all = np.isin(mk.market, ["bourse"])
+    adv, td = cn.liq_windows(mk, ok_all)                         # پنجرهٔ ۶۳ روز باز بازار (تعطیلی سراسری شمرده نمی‌شود)
     cx = SimpleNamespace(mk=mk, K=K, EWT=EWT, n=mk.n, k=mk.k, X=np.nan_to_num(mk.X), Y=np.nan_to_num(mk.Y), mc=np.nan_to_num(mk.mcap),
-                         ok_all=np.isin(mk.market, ["bourse"]), adv=val.rolling(63, min_periods=30).median().values,
-                         td=(val.fillna(0) > 0).astype(float).rolling(63, min_periods=30).sum().values, Cfull=None, BEW=None)
+                         ok_all=ok_all, adv=adv, td=td, Cfull=None, BEW=None)
     if EWT:                                                     # هدف هم‌وزن: همتای کامل و وزن هدف روزها از ew_target (هم‌وزن فصلی همهٔ بورس)
         cx.Cfull, cx.BEW = et.ew_path(mk, cx.ok_all, list(keep))
     return cx
