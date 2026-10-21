@@ -297,4 +297,6 @@ a.doclink { color: var(--accent-tx, var(--accent)); cursor: pointer; text-decora
 .upd-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0; font-size: var(--fs-sm); }
 .upd-file { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; font-size: var(--fs-xs); }
 .upd-file code { background: var(--bg-app); padding: 2px 6px; border-radius: 4px; }
+.upd-go { text-decoration: none; font-weight: 600; background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.upd-go:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 .upd-steps { margin: 6px 0 0; padding-inline-start: 18px; font-size: var(--fs-xs); line-height: 1.8; }
