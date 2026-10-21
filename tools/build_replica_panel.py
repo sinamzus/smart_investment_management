@@ -92,6 +92,114 @@ def opt_pick(N, b, cand, Sig, g, rk=None):
     return sel[keep], w1[keep] / w1[keep].sum()
 
 
+def context(mk, K, target, keep):
+    """ورودی‌های مشترک ساخت هدف و شبیه‌سازی؛ keep = روزهایی که وزن هدف هم‌وزن آن‌ها لازم است (روزهای بررسی + روز زنده)."""
+    from types import SimpleNamespace
+    EWT = target == "ew"
+    val = pd.DataFrame(mk.val)
+    cx = SimpleNamespace(mk=mk, K=K, EWT=EWT, n=mk.n, k=mk.k, X=np.nan_to_num(mk.X), Y=np.nan_to_num(mk.Y), mc=np.nan_to_num(mk.mcap),
+                         ok_all=np.isin(mk.market, ["bourse"]), adv=val.rolling(63, min_periods=30).median().values,
+                         td=(val.fillna(0) > 0).astype(float).rolling(63, min_periods=30).sum().values, Cfull=None, BEW=None)
+    if EWT:                                                     # هدف هم‌وزن: همتای کامل و وزن هدف روزها از ew_target (هم‌وزن فصلی همهٔ بورس)
+        cx.Cfull, cx.BEW = et.ew_path(mk, cx.ok_all, list(keep))
+    return cx
+
+
+def targets_at(cx, aidx, keys):
+    """وزن هدف و انتخاب همهٔ ترکیب‌ها با دادهٔ پایان روز aidx (اجرا از روز بعد) -> ({key: (sel, w, adv)}، idx، b)."""
+    mk, k, adv, td = cx.mk, cx.k, cx.adv, cx.td
+    idx = np.where(mk.eligible(aidx, require_trade=False) & cx.ok_all & (cx.mc[aidx] > 0))[0]
+    b = np.zeros(k)
+    rk = None
+    if cx.EWT:                                                  # وزن هدف هم‌وزن رانش‌یافته روی واجدان؛ رتبه = ارزش معاملات
+        b[idx] = cx.BEW[aidx][idx]
+        if b.sum() <= 0:
+            b[idx] = 1.0
+        b /= b.sum()
+        rk = np.nan_to_num(adv[aidx])
+    else:
+        b[idx] = cx.mc[aidx, idx] / cx.mc[aidx, idx].sum()
+    Sig = g = None
+    if any(m == "opt" for m, _, _ in keys):
+        S = sr.lw_cov(mk.X[aidx - 251: aidx + 1][:, idx])
+        Sig = np.zeros((k, k))
+        Sig[np.ix_(idx, idx)] = S
+        g = Sig[:, idx] @ b[idx]
+    cands = {}
+    for q, (dmin, pct) in LIQ.items():
+        c = idx
+        if q > 0:
+            thr = np.nanpercentile(adv[aidx, idx], pct * 100)
+            c = idx[(td[aidx, idx] >= dmin) & (adv[aidx, idx] >= thr)]
+        cands[q] = c
+    store = {}
+    for key in keys:
+        m, N, q = key
+        cand = cands[q] if len(cands[q]) >= 3 else idx
+        if m == "opt":
+            sel, w = opt_pick(N, b, cand, Sig, g, rk)
+        else:
+            sel, w = choose(m, N, b, idx, cand, mk.sector, g, rk)
+        store[key] = (sel, w, adv[aidx, sel])
+    return store, idx, b
+
+
+def sim_policy(cx, key, me, checks, TG, pays, days0, thr=None):
+    """بازده روزانهٔ ناخالص سبد سهام یک ترکیب زیر یک سیاست ریبالانس (فصل ۳ «سیاست ریبالانس»).
+    checks: روزهای بررسی (پایان روز a؛ اجرا a+1)؛ هدف همان روز از TG[a][key]. thr: None = همیشه ریبالانس؛ عدد = فقط اگر گردش
+    یک‌طرفهٔ لازم ½Σ|w − w_رانش| ≥ thr (ریبالانس آستانه‌ای). روز اول (me[0]) همیشه خرید است.
+    خروجی: r، dv، و برای هر ماه: to (گردش اجراشده در آغاز ماه؛ ۰ اگر ریبالانس نشد)، beta و sel (ترکیب واقعی آغاز ماه)، rbm (۱ = ریبالانس)؛
+    tod = [(روز اجرا نسبی به days0، گردش)] برای ریبالانس‌های میان‌ماه."""
+    mk, n, k, X, Y, K = cx.mk, cx.n, cx.k, cx.X, cx.Y, cx.K
+    r = np.zeros(n - days0)
+    dv = {}                                                             # (روز استحقاق، روز پرداخت) ⇒ سهم سود از ارزش دیروز سبد
+    chk, mj = set(int(x) for x in checks), {a_: j for j, a_ in enumerate(me)}
+    nm = len(me)
+    to, beta, sel_m, rbm, tod = [0.0] * nm, [0.0] * nm, [None] * nm, [0] * nm, []
+    w_prev = np.zeros(k)
+    wv = np.zeros(k)
+    for a_ in range(me[0], n - 1):
+        if a_ in chk:
+            sel, w, _ = TG[a_][key]
+            wf = np.zeros(k); wf[sel] = w
+            # قاعدهٔ A2 (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹؛ همان tools/sampled_replica.py): نماد جدیدِ بی‌معامله در روز اجرا خریده نمی‌شود و
+            # نماد نگه‌داشتهٔ بی‌معامله با وزن رانش‌یافته می‌ماند. وزن نسبی سهام مستقل از اهرم/نقد است، پس مرورگر همین وزن را بازپخش می‌کند.
+            tr = mk.tradable(a_)
+            wf[~tr & (w_prev <= 0)] = 0.0
+            if wf.sum() > 0:
+                wf = wf / wf.sum()
+            wf = cn.freeze_untradable(wf, w_prev, tr)
+            need = 0.5 * float(np.abs(wf - w_prev).sum())
+            if a_ == me[0] or thr is None or need >= thr:
+                wv = wf.copy()
+                if a_ in mj:
+                    to[mj[a_]] = need; rbm[mj[a_]] = 1
+                else:
+                    tod.append((a_ + 1 - days0, need))
+        if a_ in mj:                                                    # ترکیب واقعی آغاز ماه (پس از ریبالانس یا رانش‌یافته)
+            j = mj[a_]
+            cur = wv / wv.sum()
+            s_ = np.where(cur > 0)[0]
+            sel_m[j] = (s_, cur[s_])
+            rs = X[a_ - 251: a_ + 1] @ cur
+            ri = np.nan_to_num(K.values[a_ - 251: a_ + 1])
+            beta[j] = float(np.cov(rs, ri)[0, 1] / max(np.var(ri, ddof=1), 1e-12))
+        t = a_ + 1
+        v0 = wv.sum()
+        for i in np.nonzero((Y[t] > 0) & (wv > 0))[0]:
+            kk = (t - days0, pays.get((t, int(i)), n) - days0)
+            dv[kk] = dv.get(kk, 0.0) + float(wv[i] * Y[t, i] / v0)
+        wv = wv * (1 + X[t])
+        r[t - days0] = wv.sum() / v0 - 1
+        w_prev = wv / wv.sum()
+    return {"r": r, "dv": dv, "to": to, "beta": beta, "sel": sel_m, "rbm": rbm, "tod": tod}
+
+
+def pack_dv(dv):
+    dvk = sorted(dv)
+    return [[a_ for a_, _ in dvk], [b_ for _, b_ in dvk], f32([dv[x] for x in dvk])]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
@@ -102,24 +210,19 @@ def main():
     mk, K = sr.load(a.target)
     K = K.fillna(0)
     n, k = mk.n, mk.k
-    X = np.nan_to_num(mk.X)
-    Y = np.nan_to_num(mk.Y)                                                 # بازده سود نقدی روز استحقاق
     pays = dp.pay_days(mk)                                                  # روز پرداخت واقعی هر سود (فصل ۳ §۳٫۵)
     print("سود نقدی:", dp.lag_summary(mk, pays))
-    mc = np.nan_to_num(mk.mcap)
-    ok_all = np.isin(mk.market, ["bourse"])
-    val = pd.DataFrame(mk.val)
-    adv = val.rolling(63, min_periods=30).median().values
-    td = (val.fillna(0) > 0).astype(float).rolling(63, min_periods=30).sum().values
     me = [int(x) for x in mk.month_end if mk.dates[x] >= sr.START and x >= 252 and x + 1 < n]
-    ends = me[1:] + [n - 1]
     live_a = n - 1
     days0 = me[0] + 1
     dates = mk.dates[days0:]
+    cx = context(mk, K, a.target, me + [live_a])
+    X, mc, ok_all, adv = cx.X, cx.mc, cx.ok_all, cx.adv
+    BEW = cx.BEW
     # همتای کامل (هدف): واجدان عادی ∪ نمادهای تازه از روز پس از نخستین معامله (new_listings، همان sampled_replica)
     first = nl.first_trade(mk)
-    if EWT:                                                     # هدف هم‌وزن: همتای کامل و وزن هدف ماه‌ها از ew_target (هم‌وزن فصلی همهٔ بورس)
-        Cfull, BEW = et.ew_path(mk, ok_all, me + [live_a])
+    if EWT:
+        Cfull = cx.Cfull
     else:
         Cfull = np.zeros(n)
         for t in range(1, n):
@@ -132,92 +235,26 @@ def main():
     VAL = np.nan_to_num(mk.val)
     print(f"لایهٔ عرضهٔ اولیه: {len(EV)} نماد تازهٔ بزرگ")
     keys = [(m, N, q) for q in LIQ for N in ns for m in METHODS]
-    W = {key: [] for key in keys}                                          # ماه به ماه: (sel, w)
-    LIVE = {}
+    W = {}                                                                 # ماه به ماه: (sel, w, adv) ترکیب واقعی آغاز ماه
     B_month, nelig, sigdate = [], [], []
 
-    def month(aidx, store, record):
-        idx = np.where(mk.eligible(aidx, require_trade=False) & ok_all & (mc[aidx] > 0))[0]
-        b = np.zeros(k)
-        rk = None
-        if EWT:                                                 # وزن هدف هم‌وزن رانش‌یافته روی واجدان؛ رتبه = ارزش معاملات
-            b[idx] = BEW[aidx][idx]
-            if b.sum() <= 0:
-                b[idx] = 1.0
-            b /= b.sum()
-            rk = np.nan_to_num(adv[aidx])
-        else:
-            b[idx] = mc[aidx, idx] / mc[aidx, idx].sum()
-        Sig = g = None
-        Sig_needed = any(m == "opt" for m, _, _ in keys)
-        if Sig_needed:
-            S = sr.lw_cov(mk.X[aidx - 251: aidx + 1][:, idx])
-            Sig = np.zeros((k, k))
-            Sig[np.ix_(idx, idx)] = S
-            g = Sig[:, idx] @ b[idx]
-        cands = {}
-        for q, (dmin, pct) in LIQ.items():
-            c = idx
-            if q > 0:
-                thr = np.nanpercentile(adv[aidx, idx], pct * 100)
-                c = idx[(td[aidx, idx] >= dmin) & (adv[aidx, idx] >= thr)]
-            cands[q] = c
-        for key in keys:
-            m, N, q = key
-            cand = cands[q] if len(cands[q]) >= 3 else idx
-            if m == "opt":
-                sel, w = opt_pick(N, b, cand, Sig, g, rk)
-            else:
-                sel, w = choose(m, N, b, idx, cand, mk.sector, g, rk)
-            store[key] = (sel, w, adv[aidx, sel])
-        if record:
-            B_month.append((idx, b[idx])); nelig.append(len(idx)); sigdate.append(int((mk.dates[aidx] - EPOCH).days))
-
+    TG = {}
     for j, aidx in enumerate(me):
-        st = {}
-        month(aidx, st, True)
-        for key in keys:
-            W[key].append(st[key])
+        TG[aidx], idx, b = targets_at(cx, aidx, keys)
+        B_month.append((idx, b[idx])); nelig.append(len(idx)); sigdate.append(int((mk.dates[aidx] - EPOCH).days))
         print(f"ماه {j + 1}/{len(me)} {mk.dates[aidx].date()}", flush=True) if j % 10 == 0 else None
-    st = {}
-    month(live_a, st, False)
-    LIVE = st
-    # شبیه‌سازی روزانهٔ ناخالص هر ترکیب
+    LIVE = targets_at(cx, live_a, keys)[0]
+    # شبیه‌سازی روزانهٔ ناخالص هر ترکیب با ریبالانس ماهانه (سیاست پایه؛ سیاست‌های دیگر: tools/build_replica_rebal.py)
     cfg = {}
     for key in keys:
-        r = np.zeros(len(dates)); to, beta, cap = [], [], []
-        dv = {}                                                             # (روز استحقاق، روز پرداخت) ⇒ سهم سود از ارزش دیروز سبد
-        w_prev = np.zeros(k)
-        for j, aidx in enumerate(me):
-            sel, w, ad = W[key][j]
-            cap_t = float(np.min(PART * np.nan_to_num(ad) / np.maximum(w, 1e-9))) if len(sel) else 0.0   # ظرفیت ساخت هدف از نقد (پیش از انجماد)
-            wf = np.zeros(k); wf[sel] = w
-            # قاعدهٔ A2 (ممیزی سوگیری ۲۰۲۶-۱۰-۱۹؛ همان tools/sampled_replica.py): نماد جدیدِ بی‌معامله در روز اجرا خریده نمی‌شود و
-            # نماد نگه‌داشتهٔ بی‌معامله با وزن رانش‌یافته می‌ماند. وزن نسبی سهام مستقل از اهرم/نقد است، پس مرورگر همین وزن را بازپخش می‌کند.
-            tr = mk.tradable(aidx)
-            wf[~tr & (w_prev <= 0)] = 0.0
-            if wf.sum() > 0:
-                wf = wf / wf.sum()
-            wf = cn.freeze_untradable(wf, w_prev, tr)
-            sel = np.where(wf > 0)[0]; w = wf[sel]; ad = adv[aidx, sel]
-            W[key][j] = (sel, w, ad)
-            to.append(0.5 * float(np.abs(wf - w_prev).sum()))
-            rs = X[aidx - 251: aidx + 1] @ wf
-            ri = np.nan_to_num(K.values[aidx - 251: aidx + 1])
-            beta.append(float(np.cov(rs, ri)[0, 1] / max(np.var(ri, ddof=1), 1e-12)))
-            cap.append(cap_t)
-            wv = wf.copy()
-            for t in range(aidx + 1, ends[j] + 1):
-                v0 = wv.sum()
-                for i in np.nonzero((Y[t] > 0) & (wv > 0))[0]:
-                    kk = (t - days0, pays.get((t, int(i)), n) - days0)
-                    dv[kk] = dv.get(kk, 0.0) + float(wv[i] * Y[t, i] / v0)
-                wv = wv * (1 + X[t])
-                r[t - days0] = wv.sum() / v0 - 1
-            w_prev = wv / wv.sum()
-        dvk = sorted(dv)
-        cfg["|".join(map(str, key))] = {"r": f32(r), "dv": [[a_ for a_, _ in dvk], [b_ for _, b_ in dvk], f32([dv[x] for x in dvk])], "to": [round(x, 4) for x in to], "beta": [round(x, 3) for x in beta], "cap": [round(x / 1e9, 2) for x in cap],
-                                       "sel": [[[int(i) for i in s], [int(round(x * 1e5)) for x in w]] for s, w, _ in W[key]],
+        cap = []
+        for aidx in me:
+            sel, w, ad = TG[aidx][key]
+            cap.append(float(np.min(PART * np.nan_to_num(ad) / np.maximum(w, 1e-9))) if len(sel) else 0.0)   # ظرفیت ساخت هدف از نقد (پیش از انجماد)
+        P = sim_policy(cx, key, me, me, TG, pays, days0)
+        W[key] = [(s_, w_, adv[aidx, s_]) for (s_, w_), aidx in zip(P["sel"], me)]
+        cfg["|".join(map(str, key))] = {"r": f32(P["r"]), "dv": pack_dv(P["dv"]), "to": [round(x, 4) for x in P["to"]], "beta": [round(x, 3) for x in P["beta"]], "cap": [round(x / 1e9, 2) for x in cap],
+                                       "sel": [[[int(i) for i in s_], [int(round(x * 1e5)) for x in w_]] for s_, w_, _ in W[key]],
                                        "live": [[int(i) for i in LIVE[key][0]], [int(round(x * 1e5)) for x in LIVE[key][1]], round(float(np.min(PART * np.nan_to_num(LIVE[key][2]) / np.maximum(LIVE[key][1], 1e-9))) / 1e9, 2)]}
     el_live = mk.eligible(live_a, require_trade=False) & ok_all & (mc[live_a] > 0)
     idx_live = np.where(el_live | (ok_all & (first >= 0) & (first < live_a) & (mc[live_a] > 0)))[0]   # هدف زنده با نمادهای تازه

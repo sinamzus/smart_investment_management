@@ -173,7 +173,7 @@ function initRep() {
       return [n + ' (خالص ۱۲۵ bp)', `پنجک ۵ نسبت به همه ${sgn(a, 1)}٪ در سال · t نیوی‌وست ${fmt(s.t, 2)} · ${Math.abs(s.t) >= 1.96 ? 'معنادار' : 'غیرمعنادار'} در سطح ۵٪`, 'فصل ۵']; })];
   $('rp-sum').innerHTML = th([['نتیجه'], ['مقدار'], ['مرجع']]) + '<tbody>' + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="mute">${r[2]}</td></tr>`).join('') + '</tbody>';
   $('rp-text').innerHTML = `<b>وضعیت.</b> داده تا <span class="num">${D.meta.asof}</span>؛ ${fmt(D.meta.n_price_rows, 0)} ردیف قیمت. مرجع‌ها: «شاخص كل» و «كل (هم وزن)» رسمی. همتای سرمایه‌پذیر با بازتولید کامل و بدون سقف سرمایه/وزن؛ تنها شکاف ساختاری، تأخیر پرداخت سود است و با تأخیر یکسان L مدل می‌شود. فاکتورها با بک‌تست ماهانهٔ خالص هزینه و آزمون نیوی‌وست سنجیده می‌شوند؛ بازده‌ها با سال تقویمی سالانه شده‌اند. «چاپ» ← PDF.`;
-  $('rp-lin-a').innerHTML = `<span><b>ساخت</b> <span class="num">${X.built}</span></span><span><b>داده</b> <span class="num">${D.meta.built}</span></span><span><b>قاعدهٔ سند</b> هر تغییر روش‌شناسی ← فصل + CHANGELOG (<code>CLAUDE.md</code>)</span>`;
+  $('rp-lin-a').innerHTML = `<span><b>ساخت</b> <span class="num">${X.built}</span></span><span><b>داده</b> <span class="num">${D.meta.built}</span></span><span><b>قاعدهٔ سند</b> هر تغییر روش‌شناسی ← فصل + تاریخچهٔ تغییرات</span>`;
   const log = X.reports.changelog; $('rp-chip').textContent = log.length + ' ردیف';
   $('rp-log').innerHTML = th([['تاریخ'], ['تغییر'], ['فصل‌ها']]) + '<tbody>' + log.slice().reverse().map(r => `<tr><td class="num">${r.date}</td><td title="${r.text.replace(/"/g, '&quot;')}" style="white-space:normal;min-width:260px">${r.title}</td><td class="mute" style="white-space:normal">${r.chapters}</td></tr>`).join('') + '</tbody>';
   $('rp-docs').innerHTML = th([['فایل'], ['عنوان'], ['KB', 'n']]) + '<tbody>' + X.reports.docs.map(d => `<tr><td class="num">${d.file}</td><td>${d.title}</td><td class="n">${d.kb}</td></tr>`).join('') + '</tbody>';
@@ -382,7 +382,7 @@ function fnEmpty() {
 function fnMethod(has) {
   const F = window.SIM_FUNDS;
   return `<p><b>داده:</b> قیمت بازار و بازده روزانهٔ NAV هر صندوق از TSETMC و فیپیران با <code>tools/fetch_index_funds.py</code> روی سیستم شما گرفته می‌شود؛ سپس <code>python tools/build_ui_funds.py</code> این نما را می‌سازد.</p>
-  ${has ? '' : `<div class="cmdline">python tools/fetch_index_funds.py --log funds_log.txt\npython tools/build_ui_funds.py\ngit add -A; git commit -m "index funds"; git push -u origin claude/charming-ptolemy-cyehmc</div>`}
+  ${has ? '' : `<div class="cmdline">python tools/fetch_index_funds.py --log funds_log.txt\npython tools/build_ui_funds.py\ngit add -A; git commit -m "index funds"; git push</div>`}
   <p><b>روش:</b></p><ol>
   <li>بازده روزانهٔ NAV صندوق روی روزهای معاملاتی شاخص؛ دو ماه اول عمر صندوق (تشکیل سبد) کنار می‌رود.</li>
   <li><b>TE هفتگی</b> = انحراف معیار بازده فعال ۵ روزهٔ غیرهم‌پوشان × √۵۲ (در بازه‌های کوتاه‌تر از ۸ هفته محاسبه نمی‌شود). چون NAV و شاخص در بورس تهران هم‌زمان منتشر نمی‌شوند، معیار اصلی است. <b>TE روزانه</b> برای مقایسه با ادبیات هم آمده است. <b>TE مقاوم</b> = ۱٫۴۸۲۶ × MAD بازده فعال ۵ روزه × √۵۲، که به چند هفتهٔ پرت حساس نیست.</li>

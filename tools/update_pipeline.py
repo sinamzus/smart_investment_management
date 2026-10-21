@@ -47,6 +47,8 @@ REBUILD = [
     ("همتاهای نمونهٔ هم‌وزن", ["tools/sampled_replica.py", "--target", "ew"]),
     ("همتاساز", ["tools/build_replica_panel.py"]),
     ("همتاساز هم‌وزن", ["tools/build_replica_panel.py", "--target", "ew"]),
+    ("سیاست‌های ریبالانس همتاساز", ["tools/build_replica_rebal.py"]),
+    ("سیاست‌های ریبالانس همتاساز هم‌وزن", ["tools/build_replica_rebal.py", "--target", "ew"]),
     ("شاخص بهبودیافته", ["tools/build_replica_x.py"]),
     ("Factor Lab، کیفیت داده، ریسک", ["tools/build_ui_extra.py"]),
     ("صندوق‌های شاخصی", ["tools/build_ui_funds.py"]),

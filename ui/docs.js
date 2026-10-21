@@ -43,7 +43,11 @@ function ensure(cb) {
   if (pend) return pend.push(cb);
   pend = [cb];
   const s = document.createElement('script'); s.src = 'data/docs.js';
-  s.onload = () => { const q = pend; pend = null; q.forEach(f => f()); };
+  s.onload = () => {
+    const M = window.SIM_MASK;                                         // نام منبع‌های داده (جز کدال) در سند درون‌برنامه دیده نمی‌شود (ui/mask.js)
+    if (M && window.SIM_DOCS) window.SIM_DOCS.files.forEach(f => { f.md = M.md(f.md); f.title = M.text(f.title); });
+    const q = pend; pend = null; q.forEach(f => f());
+  };
   s.onerror = () => { pend = null; toastSafe('سند پیدا نشد: python tools/build_ui_docs.py'); };
   document.head.appendChild(s);
 }
@@ -300,7 +304,7 @@ function addButtons(root) {
   });
 }
 let tm = 0;
-const run = () => { tm = 0; const m = document.querySelector('.app') || document.body; linkText(m); addButtons(m); };
+const run = () => { tm = 0; const m = document.querySelector('.app') || document.body; if (window.SIM_MASK) window.SIM_MASK.dom(m); linkText(m); addButtons(m); };
 new MutationObserver(ms => { if (ms.every(m => m.target.closest && m.target.closest('#docv,#tip'))) return; if (!tm) tm = setTimeout(run, 60); })
   .observe(document.body, { childList: true, subtree: true, characterData: true });
 document.addEventListener('click', e => {

@@ -72,6 +72,7 @@
     const A = window.SIM_DOCS_API; curDocs = el.matches('.doclink, .doc-btn') ? [] : docRefs(r, el);
     const dl = curDocs.length ? `<div class="tdoc">توضیح فنی در سند: ${curDocs.map(x => `<a data-doc="${esc(A.refStr(x))}">${esc(A.labelOf(x))}</a>`).join('، ')} <span class="k">F1</span></div>` : '';
     tip.innerHTML = `${r.t ? `<div class="tt">${esc(r.t)}</div>` : ''}${r.d ? `<div class="td">${esc(r.d)}</div>` : ''}${r.o ? `<div class="to">${esc(r.o)}</div>` : ''}${r.f ? `<div class="tf">${esc(r.f)}</div>` : ''}${r.s ? `<div class="ts">${esc(r.s)}</div>` : ''}${dl}`;
+    if (window.SIM_MASK) window.SIM_MASK.dom(tip);                       // نام منبع داده در راهنما دیده نمی‌شود (ui/mask.js)
     tip.classList.toggle('live', !!dl);
     tip.hidden = false; tip.style.left = '0px'; tip.style.top = '0px';
     const b = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, W = innerWidth, H = innerHeight, g = 8;

@@ -37,8 +37,9 @@ function initSam() {
   if (!D.replica) { missing('v-sam', 'نتیجهٔ بازسازی', 'python tools/sampled_replica.py ; python tools/build_ui_live.py'); return; }
   const M = D.replica_meta, FR = M.full_replica;
   m.innerHTML = `
+  <div id="rb-host"></div>
   <section class="panel sam-answer" style="--lg:var(--lg-b)">
-    <div class="panel-head"><span class="lg-badge">1</span><span class="panel-title"${dtip('پاسخ پرسش اصلی صندوق شاخصی کوچک: اگر نتوانیم همهٔ سهام «شاخص كل» را بخریم، با چند سهم و کدام روش چقدر به آن نزدیک می‌شویم؟ هر نقطه یک بک‌تست کامل پایتون (tools/sampled_replica.py) است: ریبالانس پایان هر ماه شمسی از ۱۳۹۷ تا امروز، اجرا روز بعد، با هزینه و بهرهٔ وام.')}>چند سهم برای دنبال‌کردن «شاخص كل» لازم است؟</span><span class="chip" id="sm-chip"${dtip('بازهٔ بک‌تست، نرخ وام فرضی و هزینهٔ رفت‌وبرگشتی که همهٔ اعداد این پنل با آن حساب شده‌اند. برای عدد دیگر، پنل ۲ را با همان تنظیم ببینید.')}></span></div>
+    <div class="panel-head"><span class="lg-badge">3</span><span class="panel-title"${dtip('پاسخ پرسش اصلی صندوق شاخصی کوچک: اگر نتوانیم همهٔ سهام «شاخص كل» را بخریم، با چند سهم و کدام روش چقدر به آن نزدیک می‌شویم؟ هر نقطه یک بک‌تست کامل پایتون (tools/sampled_replica.py) است: ریبالانس پایان هر ماه شمسی از ۱۳۹۷ تا امروز، اجرا روز بعد، با هزینه و بهرهٔ وام.')}>چند سهم برای دنبال‌کردن «شاخص كل» لازم است؟</span><span class="chip" id="sm-chip"${dtip('بازهٔ بک‌تست، نرخ وام فرضی و هزینهٔ رفت‌وبرگشتی که همهٔ اعداد این پنل با آن حساب شده‌اند. برای عدد دیگر، پنل ۱ را با همان تنظیم ببینید.')}></span></div>
     <div class="lineage sam-lead" id="sm-read"></div>
     <div class="kpis" id="sm-kpis"></div>
     <div class="ctl">
@@ -49,7 +50,7 @@ function initSam() {
     <div class="panel-body" id="sm-chart" style="padding:var(--s-3)"></div>
     <details class="sam-fold sm"><summary${dtip('هر ردیف یک بک‌تست: تعداد سهام × روش × حالت اهرم، با بازده، فاصله از شاخص، دو نوع خطای ردیابی، بتا، همبستگی و گردش. فیلتر روش و اهرم بالا روی این جدول هم اعمال می‌شود.')}>جدول کامل همهٔ حالت‌ها</summary><div class="panel-body scroll" style="max-height:340px"><table class="dt" id="sm-table"></table></div></details>
   </section>
-  <div id="rb-host"></div>
+  <div id="rb-enh-slot"></div>
   <details class="sam-fold panel"><summary${dtip('همهٔ اعداد این صفحه از همین هفت گام می‌آیند که پایان هر ماه شمسی به ترتیب اجرا می‌شوند. روی هر کارت مکث کنید تا توضیحش را ببینید؛ متن کامل و جدول نتایج در سند است.')}>روش کار: هفت گام هر ماه</summary>
     <div class="lb-flow">${STEPS.map(([t, d], i) => `<div class="lb-step static"${dtip(d)}><span class="no">${i + 1}</span><b>${t}</b><small>${esc(d)}</small></div>`).join('')}</div>
   </details>`;

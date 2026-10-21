@@ -29,6 +29,11 @@ function ipoOf(R) {
   return p.ipo;
 }
 const atE = (a, e, t) => (t >= e.a && t - e.a < a.length ? a[t - e.a] : 0);
+/** ریبالانس‌های میان‌ماه سیاست انتخابی (tools/build_replica_rebal.py): روز اجرا ⇒ گردش یک‌طرفه؛ null برای سیاست ماهانه. */
+function todOf(R, key) {
+  const p = prep(R), c = R.configs[key]; if (!c.tod || !c.tod[0].length) return null;
+  const t = p.tod || (p.tod = {}); return t[key] || (t[key] = new Map(c.tod[0].map((d, i) => [d, c.tod[1][i]])));
+}
 /** شبیهٔ NAV (فصل ۳ §۳٫۵؛ همان tools/sampled_replica.step_day، ipo_rebalance و ipo_day).
  *  o = {mode:'none'|'fixed'|'beta', L, loan, rb, rc, cost, j0}
  *  • mode: none تمام سرمایه‌گذاری؛ fixed نقد ثابت (L = ۱ − نقد)؛ beta تراز بتا فقط نقد (L = clip(1/β, 0.7, 1)). وام برای اهرم مجاز نیست.
@@ -36,29 +41,40 @@ const atE = (a, e, t) => (t >= e.a && t - e.a < a.length ? a[t - e.a] : 0);
  *  • loan = «وام سود نقدی»: در روز استحقاق دقیقاً به اندازهٔ طلب سود وام گرفته و سرمایه‌گذاری می‌شود؛ پرداخت سود وام را تسویه می‌کند؛
  *    بدهی هرگز از طلب بیشتر نمی‌شود (بهرهٔ مازاد از فروش سهام). لایهٔ عرضهٔ اولیه (فصل ۳ «تأخیر ورود عرضهٔ اولیه»): نماد تازهٔ بزرگ از روز پس از
  *    نخستین معامله با وزن شاخص هدف است؛ هر روز در پایانی حداکثر φ × ارزش معاملات ÷ اندازهٔ صندوق خریده می‌شود (صف خرید هم) تا ماهی که واجد عادی شود.
- *    o.phi (کسر)، o.aum (میلیارد ریال)؛ سری ipoB = Σ b(r_e − r) و ipoD = Σ (h − b)(r_e − r) برای تجزیهٔ اختلاف. پل تسویهٔ ابطال ۲۰۲۶-۱۰-۲۱ حذف شد (دادهٔ واقعی نداریم و منبع خطای همتا نیست). */
+ *    o.phi (کسر)، o.aum (میلیارد ریال)؛ سری ipoB = Σ b(r_e − r) و ipoD = Σ (h − b)(r_e − r) برای تجزیهٔ اختلاف. پل تسویهٔ ابطال ۲۰۲۶-۱۰-۲۱ حذف شد (دادهٔ واقعی نداریم و منبع خطای همتا نیست).
+ *  • سیاست ریبالانس (فصل ۳ «سیاست ریبالانس»): c.rbm[j] = ۰ یعنی آغاز ماه j ریبالانس نشد (نه هزینه، نه تنظیم دوبارهٔ L)؛ c.tod ریبالانس‌های میان‌ماه
+ *    با گردش‌شان؛ در روز اجرا E −= گردش × L × هزینه × E و نسبت سهام/نقد دوباره L می‌شود. نبود rbm و tod یعنی ریبالانس ماهانه (سیاست پایه). */
 function simulate(R, key, o) {
   const c = R.configs[key], r = seriesOf(R, key), dv = divOf(R, key), nm = R.mstart.length, n = R.dates.length;
-  const nav = new Float64Array(n).fill(NaN), Ls = new Float64Array(nm).fill(NaN), loan = !!o.loan;
-  let V = 1, cash = 0, D = 0, rcv = 0, sD = 0, sR = 0, cnt = 0, interest = 0;
+  const nav = new Float64Array(n).fill(NaN), Ls = new Float64Array(nm).fill(NaN), cm = new Float64Array(nm), loan = !!o.loan, todm = todOf(R, key);
+  let V = 1, cash = 0, D = 0, rcv = 0, sD = 0, sR = 0, cnt = 0, interest = 0, L = 1, nReb = 0, toSum = 0;
+  const Lof = j => { if (o.mode === 'fixed') return Math.min(o.L, 1); if (o.mode === 'beta') { const be = c.beta[j]; return be > 0 ? Math.min(1, Math.max(0.7, 1 / be)) : 1; } return 1; };
   const sched = new Map();
   const EV = ipoOf(R), phi = o.phi == null ? (R.ipo ? R.ipo.phi : 0) : o.phi, aum = o.aum || (R.ipo ? R.ipo.aum : 1000), H = new Map();
-  const ipoB = new Float64Array(n), ipoD = new Float64Array(n);
+  const ipoB = new Float64Array(n), ipoD = new Float64Array(n), mstate = [];
   const sumH = () => { let x = 0; for (const v of H.values()) x += v; return x; };
   for (let j = o.j0; j < nm; j++) {
     const t0 = R.mstart[j], t1 = j + 1 < nm ? R.mstart[j + 1] : n;
-    let L = 1;
-    if (o.mode === 'fixed') L = Math.min(o.L, 1); else if (o.mode === 'beta') { const be = c.beta[j]; L = be > 0 ? Math.min(1, Math.max(0.7, 1 / be)) : 1; }
+    const reb = j === o.j0 || !c.rbm || c.rbm[j];                        // آغاز این ماه ریبالانس می‌شود؟
+    if (reb) L = Lof(j);
     Ls[j] = L;
     { const tot = V + sumH();                                          // لایهٔ عرضهٔ اولیه: رها کردن نماد واجدشده، کاستن مازاد وزن
       for (const e of EV) { if (!H.has(e.p)) continue; let x; if (e.j <= j) { x = H.get(e.p); H.delete(e.p); } else { x = Math.max(H.get(e.p) - atE(e.w, e, t0) * tot, 0); H.set(e.p, H.get(e.p) - x); } V += x - x * o.cost / 1e4; } }
     if (D > rcv) { V -= D - rcv; D = rcv; }                            // سقف بدهی = طلب سود
-    let E = V + cash;
-    const to = j === o.j0 ? 0.5 : c.to[j];
-    E -= to * L * E * o.cost / 1e4;
-    V = L * E; cash = E - V;
+    if (reb) {
+      let E = V + cash;
+      const to = j === o.j0 ? 0.5 : c.to[j], x = to * L * o.cost / 1e4;
+      E -= x * E; if (j > o.j0) { cm[j] += x; nReb++; toSum += to; }
+      V = L * E; cash = E - V;
+    }
+    { const hs = sumH(), nv = V + cash + rcv - D + hs || 1;              // ترکیب واقعی آغاز ماه به نسبت NAV (پنل «جزئیات همین همتا»)
+      mstate[j] = { L, rest: V / nv, cash: cash / nv, rcv: rcv / nv, debt: D / nv, ipo: [...H].map(([k, v]) => [k, v / nv]) }; }
     let prev = R.sig[j];
     for (let t = t0; t < t1; t++) {
+      if (todm && todm.has(t)) {                                       // ریبالانس میان‌ماه سیاست انتخابی (اجرا در آغاز روز t)
+        const to = todm.get(t); L = Lof(j); let E = V + cash; const x = to * L * o.cost / 1e4;
+        E -= x * E; cm[j] += x; nReb++; toSum += to; V = L * E; cash = E - V;
+      }
       const gap = R.dates[t] - prev; prev = R.dates[t];
       if (D > 0) { const d0 = D; D *= 1 + o.rb * gap / 365; interest += D - d0; }
       cash *= 1 + o.rc * gap / 365;
@@ -84,7 +100,7 @@ function simulate(R, key, o) {
       const nv = V + cash + rcv - D + sumH(); nav[t] = nv; sD += D / nv; sR += rcv / nv; cnt++;
     }
   }
-  return { nav, t0: R.mstart[o.j0], Ls, debtAvg: cnt ? sD / cnt : 0, rcvAvg: cnt ? sR / cnt : 0, interest, hasDiv: dv.size > 0, ipoB, ipoD, ipoNow: EV.length ? sumH() / Math.max(V + sumH(), 1e-12) : 0 };
+  return { nav, t0: R.mstart[o.j0], Ls, debtAvg: cnt ? sD / cnt : 0, rcvAvg: cnt ? sR / cnt : 0, interest, hasDiv: dv.size > 0, ipoB, ipoD, mstate, cm, nReb, toSum, ipoNow: EV.length ? sumH() / Math.max(V + sumH(), 1e-12) : 0 };
 }
 const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
 function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / (a.length - 1)); }
@@ -114,7 +130,19 @@ function curves(R, sim) {
   }
   return { idx, a, k, td, te };
 }
-const E = { simulate, metrics, curves, keyOf, prep, seriesOf };
+const u16 = s => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Uint16Array(u.buffer); };
+/** دادهٔ پایه (ماهانه) + فایل سیاست (tools/build_replica_rebal.py) ⇒ دادهٔ همتاساز همان سیاست؛ وزن‌های آغاز ماه (sel) فشرده‌اند: تعداد، اندیس نماد و وزن × ۶۵۵۳۵. */
+function mergePol(B, P) {
+  const cfg = {};
+  for (const k in B.configs) {
+    const q = P.configs[k]; if (!q) { cfg[k] = B.configs[k]; continue; }
+    const cnt = u16(q.sel[0]), ids = u16(q.sel[1]), ws = u16(q.sel[2]), sel = []; let o = 0;
+    for (const m of cnt) { sel.push([Array.from(ids.subarray(o, o + m)), Array.from(ws.subarray(o, o + m), x => Math.round(x / 65535 * 1e5))]); o += m; }
+    cfg[k] = { ...B.configs[k], ...q, sel };
+  }
+  return { ...B, _p: null, configs: cfg, names: B.names.concat(P.names_extra), pol: P.pol };
+}
+const E = { simulate, metrics, curves, keyOf, prep, seriesOf, mergePol };
 if (typeof module !== 'undefined' && module.exports) { module.exports = E; return; }
 root.SIM_RB = E;
 
@@ -124,7 +152,7 @@ const f = (x, d = 1) => x == null || x !== x ? '—' : fmt(x, d);
 const sg = (x, d = 1) => x == null || x !== x ? '—' : sgn(x, d);
 const tip = (t, d) => ` data-tip="${esc(t)}"${d ? ` data-doc="${d}"` : ''}`;    // d: نشانی بند سند (ui/docs.js)
 // بندهای سند این صفحه (فصل ۳ §۳٫۵ و فصل‌های ۶، ۷ و ۱۴)
-const DOC = { samp: '3:3.5/نمونهٔ کوچک و وام', build: '3:3.5/همتاساز', loan: '3:3.5/وام سود نقدی', ew: '3:3.5/همتای هم‌وزن', ipo: '3:3.5/تأخیر ورود عرضهٔ اولیه', enh: '3:3.5/شاخص بهبودیافته', te: '3:3.5/خطای ردیابی', act: '7:7.4', ret: '7:7.3', cost: '6:6.1', cap: '14:14.2.6', plan: '5:5.8' };
+const DOC = { rebal: '3:3.5/سیاست ریبالانس', samp: '3:3.5/نمونهٔ کوچک و وام', build: '3:3.5/همتاساز', loan: '3:3.5/وام سود نقدی', ew: '3:3.5/همتای هم‌وزن', ipo: '3:3.5/تأخیر ورود عرضهٔ اولیه', enh: '3:3.5/شاخص بهبودیافته', te: '3:3.5/خطای ردیابی', act: '7:7.4', ret: '7:7.3', cost: '6:6.1', cap: '14:14.2.6', plan: '5:5.8' };
 const MTIP = {
   top: 'N بزرگ‌ترین: N سهم با بیشترین ارزش بازار، با وزن ارزش بازارشان (نرمال‌شده). ساده، کم‌گردش و قابل توضیح؛ ولی صنایعی که سهم بزرگ ندارند جا می‌مانند و بتا معمولاً بالای ۱ است.',
   strat: 'طبقه‌ای (صنعت): تعداد سهم هر صنعت از N به نسبت وزن آن صنعت در شاخص، و درون هر صنعت بزرگ‌ترین‌ها؛ وزن‌ها ارزش بازار نرمال‌شده. همهٔ صنایع بزرگ حاضرند، ولی در دادهٔ ما TE آن تقریباً هم‌اندازهٔ «N بزرگ‌ترین» است (فصل ۳ §۳٫۵، جدول).',
@@ -134,6 +162,65 @@ const jf = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year: 'numeri
 const dj = d => jf.format(new Date(d * 864e5));
 const jyear = d => +dj(d).split('/')[0], jmonth = d => +dj(d).split('/')[1];
 const METHODS = { top: 'N بزرگ‌ترین', strat: 'طبقه‌ای (صنعت)', opt: 'بهینه‌سازی TE' };
+// سیاست‌های ریبالانس (tools/build_replica_rebal.py؛ فصل ۳ «سیاست ریبالانس»): ریبالانس = ساخت دوبارهٔ کامل (انتخاب و وزن) با دادهٔ روز بررسی، اجرا روز بعد
+const POLS = { w1: 'هفتگی', w2: 'دوهفتگی', m: 'ماهانه', q: 'فصلی', h: 'شش‌ماهه', y: 'سالانه', t5: 'آستانه‌ای ۵٪', t10: 'آستانه‌ای ۱۰٪' };
+const PTIP = { w1: 'پایان هر هفتهٔ معاملاتی (آخرین روز معامله پیش از شنبه) سبد دوباره ساخته و روز بعد اجرا می‌شود. نزدیک‌ترین دنبال‌کردن، بیشترین گردش و هزینه.',
+  w2: 'یک هفته در میان، پایان هفتهٔ معاملاتی.', m: 'پایان هر ماه شمسی (سیاست پایه).', q: 'فقط پایان خرداد، شهریور، آذر و اسفند؛ بین آن‌ها وزن‌ها با بازده رانش می‌کنند.',
+  h: 'فقط پایان شهریور و اسفند.', y: 'فقط پایان اسفند.', t5: 'هر هفته هدف تازه حساب می‌شود، ولی فقط اگر گردش یک‌طرفهٔ لازم (نصف مجموع قدرمطلق تفاوت وزن هدف و وزن رانش‌یافته) دست‌کم ۵٪ باشد معامله می‌شود.',
+  t10: 'مانند آستانه‌ای ۵٪ با آستانهٔ ۱۰٪: معاملهٔ کمتر، رانش بیشتر.' };
+/** دادهٔ همتاساز سیاست انتخابی (پایه برای ماهانه)؛ ادغام با mergePol. */
+const polFile = v => `data/replica${S.tgt === 'ew' ? '_ew' : ''}_rb_${v}.js`;
+/** دادهٔ سیاست v برای پایهٔ B: B برای ماهانه، ادغام‌شده اگر فایلش بارگذاری شده و هم‌خوان است، null اگر بارگذاری نشده، false اگر ناهم‌خوان است. */
+function polData(B, v) {
+  if (v === 'm') return B;
+  const P = (root.SIM_REP_RB || {})[`${S.tgt}|${v}`];
+  if (!P) return null;
+  if (P.asof !== B.asof || P.n_dates !== B.dates.length || P.n_names !== B.names.length) return false;
+  return P._R || (P._R = mergePol(B, P));
+}
+function withPol(B) {
+  const d = polData(B, S.pol);
+  if (d) return d;
+  if (d === null) { const v = S.pol; S.pol = 'm'; setTimeout(() => switchPol(v)); return B; }   // فایل این هدف هنوز بارگذاری نشده (مثلاً پس از تعویض هدف)
+  if (root.toast) root.toast(`دادهٔ سیاست «${POLS[S.pol]}» با دادهٔ پایه هم‌خوان نیست؛ ماهانه نشان داده می‌شود. python tools/build_replica_rebal.py${S.tgt === 'ew' ? ' --target ew' : ''}`);
+  S.pol = 'm'; return B;
+}
+/** جدول «مقایسهٔ سیاست‌های ریبالانس» با همین تنظیمات پنل ۱؛ فایل‌های سیاست بار اول بارگذاری می‌شوند. */
+function renderCmp() {
+  const box = $('rb-cmp-box'); if (!box || !box.open) return;
+  const B = S.tgt === 'ew' && root.SIM_REP_EW ? root.SIM_REP_EW : root.SIM_REP, need = Object.keys(POLS).filter(v => polData(B, v) === null && !renderCmp.miss.has(polFile(v)));
+  if (need.length) {
+    $('rb-cmp').innerHTML = `<div class="mute" style="padding:8px">بارگذاری دادهٔ ${need.length} سیاست…</div>`;
+    let left = need.length;
+    need.forEach(v => { const sc = document.createElement('script'); sc.src = polFile(v); sc.onload = () => { if (--left === 0) renderCmp(); }; sc.onerror = () => { renderCmp.miss.add(polFile(v)); if (--left === 0) renderCmp(); }; document.head.appendChild(sc); });
+    return;
+  }
+  const key = keyOf(S.method, S.N, S.liq), o = opts();
+  const hd = [['سیاست', '', 'سیاست ریبالانس؛ روی ردیف کلیک کنید تا انتخاب شود.'], ['ریبالانس', 'n', 'تعداد ریبالانس اجراشده پس از خرید اولیه، از تاریخ شروع تا امروز.'], ['گردش ماهانه ٪', 'n', 'جمع گردش یک‌طرفهٔ همهٔ اجراها ÷ تعداد ماه‌ها.'],
+    ['هزینه در سال', 'n', 'هزینهٔ معامله (گردش × L × هزینهٔ رفت‌وبرگشت) به درصد NAV در سال؛ واحد درصد.'], ['TE رسمی ٪', 'n', 'خطای ردیابی سالانه در برابر شاخص رسمی.'], ['فاصلهٔ بازده', 'n', 'بازده سالانهٔ همتا (پس از هزینه) منهای شاخص؛ واحد درصد در سال.'], ['رشد نسبی ٪', 'n', '(رشد همتا ÷ رشد شاخص) − ۱ از شروع تا امروز.']];
+  const rows = Object.keys(POLS).map(v => {
+    const Rv = polData(B, v);
+    if (!Rv) return `<tr class="weak"><td>${POLS[v]}</td><td colspan="6" class="mute">${Rv === false ? 'داده با پایه هم‌خوان نیست' : 'داده ساخته نشده'} (python tools/build_replica_rebal.py${S.tgt === 'ew' ? ' --target ew' : ''})</td></tr>`;
+    const sim = simulate(Rv, key, o), m = metrics(Rv, sim); if (!m) return '';
+    const nm = Rv.mstart.length - S.j0, tcy = 100 * sim.cm.reduce((a, x) => a + x, 0) / Math.max(m.years, 1e-9);
+    return `<tr data-v="${v}" style="cursor:pointer"${v === S.pol ? ' aria-current="true"' : ''}${tip(PTIP[v], DOC.rebal)}><td>${POLS[v]}</td><td class="n">${sim.nReb}</td><td class="n">${f(100 * sim.toSum / Math.max(nm - 1, 1), 1)}</td><td class="n">${f(tcy, 2)}</td><td class="n">${f(m.te, 2)}</td><td class="n ${m.gap >= 0 ? 'up' : 'down'}">${sg(m.gap)}</td><td class="n ${m.td >= 0 ? 'up' : 'down'}">${sg(m.td)}</td></tr>`;
+  }).join('');
+  $('rb-cmp').innerHTML = `<table class="dt" id="rb-cmpt"><thead><tr>${hd.map(([t, c, d]) => `<th class="${c}"${tip(d, DOC.rebal)}>${t}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+  $('rb-cmpt').querySelectorAll('tr[data-v]').forEach(tr => { tr.onclick = () => { stale(); $('rb-rpol').value = tr.dataset.v; switchPol(tr.dataset.v); }; });
+}
+renderCmp.miss = new Set();
+/** تعویض سیاست؛ فایل هر سیاست فقط بار اول بارگذاری می‌شود. */
+function switchPol(v) {
+  if (v === S.pol) return;
+  const k = `${S.tgt}|${v}`;
+  if (v !== 'm' && !(root.SIM_REP_RB && root.SIM_REP_RB[k])) {
+    const s = document.createElement('script'); s.src = polFile(v);
+    s.onload = () => { S.pol = v; mount(host); };
+    s.onerror = () => { $('rb-rpol').value = S.pol; if (root.toast) root.toast(`دادهٔ سیاست «${POLS[v]}» پیدا نشد: python tools/build_replica_rebal.py${S.tgt === 'ew' ? ' --target ew' : ''}`); };
+    document.head.appendChild(s); return;
+  }
+  S.pol = v; mount(host);
+}
 const LIQN = { 0: ['بدون فیلتر', 'همهٔ واجدان بورس نامزد نگهداری‌اند.'], 1: ['ملایم', 'نماد باید دست‌کم ۵۰ روز از ۶۳ روز اخیر معامله شده و میانهٔ ارزش معاملاتش بالاتر از صدک ۲۰ واجدان باشد.'],
   2: ['متوسط', 'دست‌کم ۵۶ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۴۰ واجدان.'], 3: ['سخت', 'دست‌کم ۶۰ روز از ۶۳ روز معامله و میانهٔ ارزش معاملات بالاتر از صدک ۶۰ واجدان.'] };
 // برچسب‌های وابسته به هدف (فصل ۳ «همتای هم‌وزن»): برای «شاخص كل (هم وزن)» روش اول «N نقدشونده‌ترین» است
@@ -141,12 +228,13 @@ const MLAB = { k: { top: METHODS.top, tip: MTIP.top, opt: MTIP.opt },
   ew: { top: 'N نقدشونده‌ترین', tip: 'N نقدشونده‌ترین: N سهم با بیشترین میانهٔ ۶۳ روزهٔ ارزش معاملات، با وزن هدف هم‌وزن (رانش‌یافته از آغاز فصل) نرمال‌شده. ساده و قابل‌اجرا؛ ولی سهام کوچک و کم‌معامله را که بخش بزرگ بازده هم‌وزن از آن‌هاست ندارد.',
     opt: 'بهینه‌سازی TE: روی ۳N نقدشونده‌ترین، وزن‌ها طوری انتخاب می‌شوند که (w − b)ᵀΣ(w − b) نسبت به هدف هم‌وزن کمینه شود (فقط‌خرید، Σ انقباضی Ledoit–Wolf ۲۵۲ روزه)؛ سپس N وزن برتر و حل دوباره.' } };
 let TN = '«شاخص كل»';
-const S = { tgt: 'k', method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, br: false, phi: 2, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 1000 };
+const S = { tgt: 'k', pol: 'm', cmpOpen: false, method: 'opt', N: 30, liq: 0, mode: 'none', cash: 10, br: false, phi: 2, rb: 30, rc: 0, cost: 125, j0: 0, pdate: 'live', aum: 1000 };
 let R = null, R0 = null, host = null, last = null;
 
 function mount(el) {
-  host = el; R = R0 = S.tgt === 'ew' && root.SIM_REP_EW ? root.SIM_REP_EW : root.SIM_REP;
-  if (R0 !== root.SIM_REP_EW) S.tgt = 'k';
+  host = el; const B = S.tgt === 'ew' && root.SIM_REP_EW ? root.SIM_REP_EW : root.SIM_REP;
+  if (B !== root.SIM_REP_EW) S.tgt = 'k';
+  R = R0 = B ? withPol(B) : B;
   const EWT = S.tgt === 'ew', L_ = MLAB[S.tgt]; METHODS.top = L_.top; MTIP.top = L_.tip; MTIP.opt = L_.opt; CONTRIB.clear();
   TN = EWT ? '«شاخص كل (هم وزن)»' : '«شاخص كل»';
   if (!R) { el.innerHTML = '<section class="panel"><div class="panel-body" style="padding:24px">دادهٔ همتاساز پیدا نشد. اجرا کنید: <code>python tools/build_replica_panel.py</code></div></section>'; return; }
@@ -157,13 +245,13 @@ function mount(el) {
   const dateOpts = `<option value="live">امروز (زنده) · ${esc(R.asof)}</option>` + R.sig.map((d, j) => `<option value="${j}">${dj(d)}</option>`).reverse().join('');
   el.innerHTML = `
   <section class="panel rb-panel" style="--lg:var(--lg-a)">
-    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('آزمایشگاه همتا: «شاخص كل» را با N سهم بسازید، فقط نمادهای نقدشونده را راه بدهید، بخشی را نقد نگه دارید یا برای تأخیر پرداخت سود نقدی وام بگیرید، و ببینید اگر از هر ماه گذشته شروع کرده بودید تا امروز چقدر از شاخص فاصله می‌گرفتید. همه‌چیز در مرورگر از سری‌های ازپیش‌ساختهٔ پایتون (tools/build_replica_panel.py) حساب می‌شود: هر ماه ریبالانس، اجرا از روز بعد، بازده کل.', DOC.build)}>همتای خودتان را بسازید و بسنجید</span><span class="chip" id="rb-chip"${tip('نخستین ماه سیگنال تا آخرین روز داده، و تعداد ریبالانس‌های ماهانه‌ای که در این بازه شبیه‌سازی شده است.', DOC.build)}></span></div>
+    <div class="panel-head"><span class="lg-badge">1</span><span class="panel-title"${tip('آزمایشگاه همتا: «شاخص كل» را با N سهم بسازید، فقط نمادهای نقدشونده را راه بدهید، بخشی را نقد نگه دارید یا برای تأخیر پرداخت سود نقدی وام بگیرید، و ببینید اگر از هر ماه گذشته شروع کرده بودید تا امروز چقدر از شاخص فاصله می‌گرفتید. همه‌چیز در مرورگر از سری‌های ازپیش‌ساختهٔ پایتون (tools/build_replica_panel.py و build_replica_rebal.py) حساب می‌شود: ریبالانس طبق سیاست انتخابی (پیش‌فرض ماهانه)، اجرا از روز بعد، بازده کل.', DOC.build)}>همتای خودتان را بسازید و بسنجید</span><span class="chip" id="rb-chip"${tip('نخستین ماه سیگنال تا آخرین روز داده، سیاست ریبالانس و تعداد ریبالانس‌هایی که از تاریخ شروع تا امروز اجرا شده است.', DOC.rebal)}></span></div>
     <div class="rb-grid">
       <div class="rb-ctl">
         <div class="rb-g"><div class="rb-gt"${tip('گام اول: از میان نمادهای واجد بورس، کدام و چند سهم خریده شوند. هرچه N بیشتر، خطای ردیابی کمتر ولی تعداد سفارش و نیاز به نقدشوندگی بیشتر.', DOC.samp)}>۱ · نمونه</div>
           <label${tip('کدام شاخص رسمی کپی شود. «شاخص كل» ارزش‌وزن است (وزن هر سهم ∝ ارزش بازار). «شاخص كل (هم وزن)» همهٔ سهام بورس را با وزن برابر در آغاز هر فصل شمسی دارد و تا فصل بعد با بازده رانش می‌کند؛ بخش بزرگ بازده آن از سهام کوچک و کم‌معامله است، پس با نمونهٔ کوچک بسیار سخت‌تر کپی می‌شود (فصل ۳ «همتای هم‌وزن»).', DOC.ew)}>هدف <span class="seg" id="rb-tgt"><button data-v="k" aria-pressed="false"${tip('«شاخص كل» ارزش‌وزن (TEDPIX با سود).', DOC.build)}>شاخص كل</button><button data-v="ew" aria-pressed="false"${tip('«شاخص كل (هم وزن)» با سود؛ دادهٔ آن بار اول بارگذاری می‌شود (ui/data/replica_ew.js).', DOC.ew)}>شاخص كل (هم وزن)</button></span></label>
           <label${tip('چطور N سهم انتخاب و وزن‌دهی شوند. «N بزرگ‌ترین» ساده و کم‌گردش است؛ «طبقه‌ای» سهم هر صنعت را حفظ می‌کند؛ «بهینه‌سازی TE» با کوواریانس، نوسان تفاضل با شاخص را کمینه می‌کند (کمترین TE ولی گردش بیشتر).', DOC.samp)}>روش <span class="seg" id="rb-method">${Object.entries(METHODS).map(([k, t]) => `<button data-v="${k}" aria-pressed="false"${tip(MTIP[k], DOC.samp)}>${t}</button>`).join('')}</span></label>
-          <label${tip('N: تعداد سهامی که واقعاً خریده می‌شود. خطای ردیابی با N تند پایین می‌آید و بعد به «کف خطا» نزدیک می‌شود (خطای خرید همهٔ واجدان در برابر شاخص رسمی، حدود ۱٫۴٪). برای انتخاب N، پاسخ پنل ۱ بالای صفحه را ببینید؛ توضیح هر گزینه در فهرست آمده است.', DOC.samp)}>تعداد سهام <select id="rb-n">${R.Ns.map(n => `<option data-tip="نمونهٔ ${n} سهمی: ${n < 30 ? 'ردیابی ضعیف (TE بالای ۴٪)؛ فقط برای سرمایهٔ خیلی کوچک.' : n < 80 ? 'سازش خطای ردیابی و هزینه (TE ≈ ۳ تا ۴٪ با بهینه‌سازی).' : 'نزدیک کف خطا (TE ≈ ۲٪ با بهینه‌سازی)؛ نیاز به نقدشوندگی بیشتر.'}">${n}</option>`).join('')}</select></label>
+          <label${tip('N: تعداد سهامی که واقعاً خریده می‌شود. خطای ردیابی با N تند پایین می‌آید و بعد به «کف خطا» نزدیک می‌شود (خطای خرید همهٔ واجدان در برابر شاخص رسمی، حدود ۱٫۴٪). برای انتخاب N، پاسخ پنل ۳ پایین صفحه را ببینید؛ توضیح هر گزینه در فهرست آمده است.', DOC.samp)}>تعداد سهام <select id="rb-n">${R.Ns.map(n => `<option data-tip="نمونهٔ ${n} سهمی: ${n < 30 ? 'ردیابی ضعیف (TE بالای ۴٪)؛ فقط برای سرمایهٔ خیلی کوچک.' : n < 80 ? 'سازش خطای ردیابی و هزینه (TE ≈ ۳ تا ۴٪ با بهینه‌سازی).' : 'نزدیک کف خطا (TE ≈ ۲٪ با بهینه‌سازی)؛ نیاز به نقدشوندگی بیشتر.'}">${n}</option>`).join('')}</select></label>
           <label${tip('فیلتر ورود به نمونه بر پایهٔ ۶۳ روز اخیر: چند روز معامله شده و میانهٔ ارزش معاملات روزانه در چه صدکی از واجدان است. هدف (وزن شاخص) عوض نمی‌شود، فقط نامزدها کم می‌شوند؛ پس TE کمی بالا می‌رود ولی همتا با سرمایهٔ بزرگ‌تر و بدون گیرکردن در صف ساخته می‌شود.', DOC.build)}>نقدشوندگی <span class="seg" id="rb-liq">${Object.keys(R.liq).map(q => `<button data-v="${q}" aria-pressed="false"${tip(LIQN[q][1])}>${LIQN[q][0]}</button>`).join('')}</span></label>
         </div>
         <div class="rb-g"><div class="rb-gt"${tip('گام دوم: چه سهمی از سرمایه در سهام باشد (L ≤ ۱؛ وام برای اهرم مجاز نیست) و آیا برای تأخیر پرداخت سود نقدی وام گرفته شود. سود نقدی همیشه با تأخیر واقعی پرداخت حساب می‌شود: روز استحقاق از سهام جدا و «طلب» می‌شود و تا روز پرداخت (فارابی/fundai، وگرنه ۹۶ روز) بی‌بازده می‌ماند.', DOC.loan)}>۲ · نقد و وام سود</div>
@@ -176,7 +264,8 @@ function mount(el) {
           <label${tip('نماد تازهٔ بزرگ (وزن روز دوم در شاخص ≥ ۰٫۳٪، مثل «تابان» ۱۴۰۵) از روز پس از عرضهٔ اولیه در «شاخص كل» است ولی معمولاً روزها در صف خرید می‌ماند. همتا هر روز سفارش خرید می‌گذارد و حداکثر این درصد از ارزش معاملات آن روز نماد را می‌گیرد (جای صندوق در صف نامعلوم است [تأیید لازم])، تا به وزن شاخص برسد. صفر یعنی تا واجدیت عادی (حدود ۲۰۰ روز) نخریدن، مثل قاعدهٔ پیشین.', DOC.ipo)}>نماد تازه: سهم از معاملات ٪ <input type="number" id="rb-phi" value="2" min="0" max="50" step="0.5"></label>
           <label${tip('اندازهٔ صندوق؛ سقف خرید روزانهٔ نماد تازه = سهم بالا × ارزش معاملات روز ÷ این عدد. صندوق بزرگ‌تر کندتر به وزن شاخص می‌رسد. همان عدد زبانهٔ «پرتفوی» است.', DOC.ipo)}>اندازهٔ صندوق (میلیارد ریال) <input type="number" id="rb-aum2" value="1000" min="1" step="100"></label>
         </div>
-        <div class="rb-g"><div class="rb-gt"${tip('گام سوم: با چه هزینه‌ای و از چه تاریخی بسنجیم. نتیجه همیشه «از شروع تا امروز» است؛ جدول «اگر از سال‌های گذشته شروع می‌کردیم» در پنل ۳ همین را برای همهٔ سال‌ها نشان می‌دهد.', DOC.build)}>۳ · سنجش</div>
+        <div class="rb-g"><div class="rb-gt"${tip('گام سوم: هر چند وقت سبد دوباره ساخته شود، با چه هزینه‌ای و از چه تاریخی بسنجیم. نتیجه همیشه «از شروع تا امروز» است؛ جدول «اگر از سال‌های گذشته شروع می‌کردیم» در پنل ۲ همین را برای همهٔ سال‌ها نشان می‌دهد.', DOC.build)}>۳ · ریبالانس و سنجش</div>
+          <label${tip('سیاست ریبالانس: هر ریبالانس انتخاب N سهم و وزن‌ها را با دادهٔ همان روز از نو می‌سازد و روز بعد اجرا می‌کند؛ بین دو ریبالانس وزن‌ها با بازده رانش می‌کنند. ریبالانس بیشتر ⇒ دنبال‌کردن نزدیک‌تر ولی گردش و هزینهٔ معامله بیشتر؛ هزینهٔ هر اجرا = گردش × L × هزینهٔ رفت‌وبرگشت و در خود اعداد کسر شده است. «آستانه‌ای» هر هفته بررسی می‌کند ولی فقط وقتی فاصله از هدف زیاد شده معامله می‌کند. شاخص بهبودیافته (پنل ۴) همیشه ماهانه است.', DOC.rebal)}>سیاست ریبالانس <select id="rb-rpol">${Object.entries(POLS).map(([k, t]) => `<option value="${k}" data-tip="${esc(PTIP[k])}"${k === S.pol ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
           <label${tip('هزینهٔ رفت‌وبرگشت (خرید + فروش) بر حسب واحد پایه؛ ۱۰۰ bp = ۱٪. هر ماه: هزینه = گردش یک‌طرفه × L × این عدد. کارمزد، مالیات فروش و لغزش قیمت را با هم بگیرید؛ پیش‌فرض همهٔ برنامه ۱۲۵ bp است [تأیید لازم].', DOC.cost)}>هزینه (bp) <input type="number" id="rbx-cost" value="125" min="0" step="5"></label>
           <label${tip('فرض کنید همتا را در پایان این ماه شمسی خریده بودید. همهٔ اعداد (TE، فاصله، تفاوت تجمعی) از همین ماه تا آخرین روز داده حساب می‌شود. شروع‌های دیرتر کوتاه‌اند و نویز بیشتری دارند.', DOC.build)}>شروع از <select id="rb-j0">${startOpts}</select></label>
         </div>
@@ -185,16 +274,17 @@ function mount(el) {
         <div class="lineage rb-lead" id="rbx-read"></div>
         <div class="kpis" id="rb-kpi"></div>
         <details class="sam-fold sm"><summary${tip('عددهای تکمیلی: TE فقط از نمونه‌گیری (در برابر خرید همهٔ واجدان)، بتا و همبستگی با شاخص، میانگین L، گردش ماهانه و پوشش وزن شاخص.', DOC.build)}>شاخص‌های بیشتر</summary><div class="kpis" id="rb-kpi2"></div></details>
+        <details class="sam-fold sm" id="rb-cmp-box"${S.cmpOpen ? ' open' : ''}><summary${tip('همین همتا (هدف، روش، N، نقدشوندگی، نقد، وام، هزینه و تاریخ شروع) با هر هشت سیاست ریبالانس، کنار هم: تعداد ریبالانس، گردش، هزینهٔ معامله در سال، TE و فاصلهٔ بازده. ریبالانس بیشتر TE را کم می‌کند ولی هزینه را بالا می‌برد؛ ستون «فاصلهٔ بازده» هر دو را با هم دارد.', DOC.rebal)}>مقایسهٔ سیاست‌های ریبالانس با همین تنظیمات</summary><div class="panel-body scroll" id="rb-cmp"></div></details>
     <div class="panel-body" style="padding:var(--s-3)"><div class="mute" style="font-size:var(--fs-xs)" id="rb-ch1-t"></div><div id="rb-ch1"></div><div class="mute" style="font-size:var(--fs-xs);margin-top:8px" id="rb-ch2-t"></div><div id="rb-ch2"></div><div class="mute" style="font-size:var(--fs-xs);margin-top:8px" id="rb-ch3-t" data-tip="هر ستون یک دورهٔ نگهداری (ریبالانس تا ریبالانس بعد): سبز یعنی همتا جلوتر از «شاخص كل» رسمی، قرمز یعنی عقب‌تر. با نگه‌داشتن نشانگر روی هر ستون، اختلاف به چهار جزء (انتخاب سهام، اعضا و داده، نقد/وام، هزینه) تقسیم و محتمل‌ترین علت با نمادهای مؤثر نشان داده می‌شود." data-doc="3:3.5/همتاساز">اختلاف هر دوره بین همتا و شاخص (واحد درصد؛ سبز جلوتر، قرمز عقب‌تر) — نشانگر را روی هر ستون نگه دارید تا علت تحلیل شود</div><div id="rb-ch3"></div><div class="mute" id="rb-hov" style="font-size:var(--fs-2xs);min-height:1.4em"></div></div>
       </div>
     </div>
   </section>
   <section class="panel" style="--lg:var(--lg-b)">
-    <div class="panel-head"><span class="lg-badge">3</span><span class="panel-title"${tip('همان تنظیمات پنل ۲ از دو زاویهٔ دیگر: (۱) حساسیت به زمان شروع: اگر ابتدای هر سال شمسی شروع کرده بودید؛ (۲) خود پرتفوی: کدام سهم‌ها با چه وزنی در هر تاریخ، در برابر وزن شاخص.', DOC.build)}>جزئیات همین همتا</span>
-      <div class="seg" id="rb-dtabs"><button data-t="years" aria-pressed="true"${tip('هر ردیف: همین همتا اگر از پایان اسفند آن سال شروع شده بود، تا امروز. نشان می‌دهد نتیجهٔ پنل ۲ به تاریخ شروع حساس است یا نه. ردیف تاریخ شروع فعلی برجسته است.', DOC.build)}>اگر از سال‌های گذشته شروع می‌کردیم</button><button data-t="port" aria-pressed="false"${tip('فهرست سهام و وزن‌هایی که در تاریخ سیگنال انتخاب‌شده می‌خریدید، کنار وزن همان سهم در شاخص. «امروز (زنده)» پرتفوی قابل اجرای روز کاری بعد است و می‌توان آن را به «دستور اجرا» فرستاد.', DOC.build)}>پرتفوی در یک تاریخ</button></div>
-      <div class="panel-tools" id="rb-ptools" hidden><button class="tool" id="rbx-csv"${tip('دریافت فهرست نماد، صنعت، وزن همتا و وزن شاخص همین تاریخ به‌صورت CSV.')}>CSV</button><button class="tool" id="rb-plan"${tip('فقط برای «امروز»: وزن‌ها (ضرب در L اگر نقد دارید) به «اجرا ← دستور اجرا» می‌رود تا با پرتفوی فعلی مقایسه و سفارش خرید و فروش با تعداد و قیمت مرجع ساخته شود.', DOC.plan)}>ارسال به برنامهٔ اقدام ←</button></div></div>
-    <div id="rb-d-years"><div class="panel-body scroll" style="max-height:340px"><table class="dt" id="rb-years"></table></div></div>
-    <div id="rb-d-port" hidden>
+    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('همان تنظیمات پنل ۱ از دو زاویهٔ دیگر: (۱) حساسیت به زمان شروع: اگر ابتدای هر سال شمسی شروع کرده بودید؛ (۲) خود پرتفوی: کدام سهم‌ها با چه وزنی در هر تاریخ، در برابر وزن شاخص.', DOC.build)}>جزئیات همین همتا</span>
+      <div class="seg" id="rb-dtabs"><button data-t="port" aria-pressed="true"${tip('فهرست سهام و وزن‌هایی که در تاریخ سیگنال انتخاب‌شده می‌خریدید، کنار وزن همان سهم در شاخص. «امروز (زنده)» پرتفوی قابل اجرای روز کاری بعد است و می‌توان آن را به «دستور اجرا» فرستاد.', DOC.build)}>پرتفوی در یک تاریخ</button><button data-t="years" aria-pressed="false"${tip('هر ردیف: همین همتا اگر از پایان اسفند آن سال شروع شده بود، تا امروز. نشان می‌دهد نتیجهٔ پنل ۱ به تاریخ شروع حساس است یا نه. ردیف تاریخ شروع فعلی برجسته است.', DOC.build)}>اگر از سال‌های گذشته شروع می‌کردیم</button></div>
+      <div class="panel-tools" id="rb-ptools"><button class="tool" id="rbx-csv"${tip('دریافت فهرست نماد، صنعت، وزن همتا و وزن شاخص همین تاریخ به‌صورت CSV.')}>CSV</button><button class="tool" id="rb-plan"${tip('فقط برای «امروز»: وزن‌ها (ضرب در L اگر نقد دارید) به «اجرا ← دستور اجرا» می‌رود تا با پرتفوی فعلی مقایسه و سفارش خرید و فروش با تعداد و قیمت مرجع ساخته شود.', DOC.plan)}>ارسال به برنامهٔ اقدام ←</button></div></div>
+    <div id="rb-d-years" hidden><div class="panel-body scroll" style="max-height:340px"><table class="dt" id="rb-years"></table></div></div>
+    <div id="rb-d-port">
       <div class="ctl"><label${tip('تاریخ سیگنال (پایان ماه شمسی). پرتفوی فقط با داده‌ای که آن روز در دسترس بود ساخته می‌شود (بدون نگاه به آینده) و از روز کاری بعد اجرا می‌شود. برای تاریخ‌های گذشته، خطای ۲۵۲ روز بعدش هم نشان داده می‌شود.', DOC.build)}>تاریخ <select id="rb-date">${dateOpts}</select></label>
         <label${tip('اندازهٔ صندوق یا سبد شما. برای هر نماد: روز لازم = وزن × سرمایه ÷ (۱۰٪ × میانهٔ ارزش معاملات روزانه). بیش از ۵ روز قرمز می‌شود، یعنی خرید آن نماد قیمت را جابه‌جا می‌کند. فقط برای «امروز».', DOC.cap)}>سرمایه (میلیارد ریال) <input type="number" id="rb-aum" value="1000" min="1" step="10"></label></div>
       <div class="kpis" id="rb-pkpi"></div>
@@ -207,6 +297,7 @@ function mount(el) {
   seg('rb-method', 'method'); seg('rb-liq', 'liq'); seg('rb-mode', 'mode');
   $('rb-tgt').querySelectorAll('button').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.v === S.tgt)); b.onclick = () => switchTgt(b.dataset.v); });
   $('rb-enh-box').hidden = EWT;                                         // شاخص بهبودیافته فقط روی هدف ارزش‌وزن
+  { const slot = document.getElementById('rb-enh-slot'); if (slot) { slot.innerHTML = ''; slot.appendChild($('rb-enh-box')); } }   // پنل ۴ پس از پنل ۳ صفحه
   $('rb-br').querySelectorAll('button').forEach(b => { b.onclick = () => { S.br = b.dataset.v === '1'; render(); }; });
 
   $('rb-dtabs').querySelectorAll('button').forEach(b => { b.onclick = () => {                 // زبانه‌های «جزئیات همین همتا»
@@ -219,6 +310,8 @@ function mount(el) {
   $('rb-rb').onchange = e => { S.rb = +e.target.value; render(); }; $('rb-rc').onchange = e => { S.rc = +e.target.value; render(); };
   $('rbx-cost').onchange = e => { S.cost = +e.target.value; render(); };
   $('rb-j0').onchange = e => { S.j0 = +e.target.value; render(); };
+  $('rb-rpol').onchange = e => { stale(); switchPol(e.target.value); };
+  $('rb-cmp-box').ontoggle = () => { S.cmpOpen = $('rb-cmp-box').open; renderCmp(); };
   $('rb-date').onchange = e => { S.pdate = e.target.value; renderPort(); };
   $('rb-aum').onchange = e => { S.aum = +e.target.value; $('rb-aum2').value = S.aum; render(); };
   $('rb-aum2').onchange = e => { S.aum = Math.max(1, +e.target.value || 1); $('rb-aum').value = S.aum; render(); };
@@ -244,7 +337,7 @@ function switchTgt(v) {
   }
   S.tgt = v; mount(host);
 }
-function setChip() { $('rb-chip').textContent = `${dj(R.sig[0])} → ${dj(R.dates[R.dates.length - 1])} · ${R.sig.length} ریبالانس ماهانه${R === R0 ? '' : ' · هدف تیلت‌شده'}`; }
+function setChip() { $('rb-chip').textContent = `${dj(R.sig[0])} → ${dj(R.dates[R.dates.length - 1])} · ریبالانس ${R === R0 ? POLS[S.pol] : 'ماهانه'}${last && last.sim ? ` (${last.sim.nReb + 1} بار)` : ''}${R === R0 ? '' : ' · هدف تیلت‌شده'}`; }
 function render() {
   if (!host) return;
   setChip();
@@ -253,14 +346,16 @@ function render() {
   $('rb-br').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.v === '1') === S.br)));
   $('rb-rb-l').style.display = S.br ? '' : 'none';
   const o = opts(), key = curKey(), sim = simulate(R, key, o), m = metrics(R, sim), cv = curves(R, sim), c = R.configs[key], nm = R.mstart.length;
-  last = { sim, m, cv };
-  let sL = 0, sT = 0, cnt = 0; for (let j = S.j0; j < nm; j++) { sL += sim.Ls[j]; sT += j === S.j0 ? 0 : c.to[j]; cnt++; }
+  last = { sim, m, cv }; setChip();
+  let sL = 0, cnt = 0; for (let j = S.j0; j < nm; j++) { sL += sim.Ls[j]; cnt++; }
+  const sT = sim.toSum, tcy = m ? 100 * sim.cm.reduce((a, x) => a + x, 0) / Math.max(m.years, 1e-9) : NaN;
   const capNow = c.live[2];
   const bj = R.b[nm - 1], bmap = new Map(bj[0].map((i, p) => [i, bj[1][p]])), covB = c.sel[nm - 1][0].reduce((a, i) => a + (bmap.get(i) || 0), 0) / 1e5;
   const yrs = m ? m.years : 0;
   const kp = m ? [['TE در برابر شاخص رسمی', f(m.te, 2) + '٪', 'خطای ردیابی (Tracking Error) سالانه: انحراف معیار «بازده روزانهٔ همتا منهای شاخص» × √۲۵۲؛ یعنی در یک سال معمولی، بازده همتا حدوداً این‌قدر بالا یا پایین شاخص می‌افتد. زیر ۲٪ خوب، ۳ تا ۵٪ متوسط، بالای ۶٪ ضعیف. کف آن با خرید همهٔ واجدان حدود ۱٫۴٪ است.', DOC.te],
     ['TE در برابر همتای کامل', f(m.teC, 2) + '٪', 'همان TE ولی در برابر «همتای کامل» (خرید همهٔ واجدان با وزن بازار) نه شاخص رسمی؛ پس فقط هزینهٔ «کم‌خریدن» را می‌سنجد و خطای ناشی از تفاوت اعضا (شرط واجدیت همتا (سابقهٔ ۲۵۲ روزه؛ نماد تازه‌عرضه یا کم‌تحرک در همتا نیست ولی در شاخص هست) و به‌روزرسانی ماهانهٔ اعضا) و داده را ندارد. فاصلهٔ این با TE رسمی، سهم خطایی است که با N بیشتر حل نمی‌شود.', DOC.te],
     ['فاصلهٔ بازده سالانه (واحد درصد)', sg(m.gap), 'بازده مرکب سالانهٔ همتا (پس از هزینه و بهره) منهای بازده سالانهٔ «شاخص كل» رسمی با سود نقدی. منفی یعنی همتا هر سال به‌طور متوسط این‌قدر عقب ماند. TE نوسانِ این فاصله است؛ خود فاصله ممکن است سیستماتیک باشد، مثلاً چون نمونهٔ بزرگ‌ها دم سهام کوچک بازار را ندارد.', DOC.ret],
+    ['هزینهٔ معامله در سال', f(tcy, 2), 'جمع هزینهٔ همهٔ ریبالانس‌ها (گردش × L × هزینهٔ رفت‌وبرگشت، بدون خرید اولیه) به درصد NAV، تقسیم بر سال‌ها؛ واحد درصد در سال. همین مقدار در «فاصلهٔ بازده سالانه» کسر شده است و اثرش بر بازده سالانه ≈ این عدد × (۱ + بازده سالانه) است، چون هزینه کسری از NAV است. برای مقایسهٔ سیاست‌ها کنار TE ببینید.', DOC.rebal],
     ['تفاوت تجمعی تا امروز', sg(m.td) + '٪', `به زبان پول: اگر از ${dj(R.sig[S.j0])} تا امروز (${f(yrs, 1)} سال) ۱۰۰ ریال در همتا و ۱۰۰ ریال در شاخص بود، همتا این‌قدر درصد بیشتر یا کمتر داشت: (رشد همتا ÷ رشد شاخص) − ۱. مثبت یعنی جلوتر از شاخص.`, DOC.build],
     ['بتا', f(m.beta, 2), 'شیب رگرسیون بازده روزانهٔ همتا روی شاخص: اگر شاخص ۱٪ بالا رود، همتا به‌طور متوسط β٪ بالا می‌رود. بالای ۱ یعنی پرنوسان‌تر از بازار (معمول در نمونهٔ کوچک)؛ نقد آن را پایین و وام بالا می‌برد.', DOC.act],
     ['همبستگی', f(m.corr, 3), 'همبستگی بازده روزانهٔ همتا و شاخص (۱ یعنی هم‌حرکت کامل). بالای ۰٫۹۹ یعنی تقریباً همهٔ حرکت روزانهٔ شاخص را دارید؛ هرچه پایین‌تر، TE بیشتر.', DOC.act]] : [];
@@ -268,18 +363,20 @@ function render() {
     ...(R.ipo ? [['اثر تأخیر ورود عرضهٔ اولیه', sg(m ? 100 * sim.ipoD.slice(sim.t0 + 1).reduce((a, x) => a + x, 0) / Math.max(m.years, 1e-9) : NaN, 2) + ' در سال', 'واحد درصد در سال: (وزن خریده‌شدهٔ نماد تازه − وزنش در شاخص) × (بازده نماد − بازده بقیهٔ همتا)، جمع روزها ÷ سال. منفی یعنی رشد روزهای صف خرید را نداشتیم. با «سهم از معاملات» بیشتر یا صندوق کوچک‌تر کمتر می‌شود؛ بخشی (روز اول پس از عرضه) اجتناب‌ناپذیر است.', DOC.ipo],
       ['وزن نماد تازه در همتا (امروز)', f(100 * sim.ipoNow, 2) + '٪', 'سهم نمادهای تازهٔ بزرگ (لایهٔ عرضهٔ اولیه) از سهام همتا در آخرین روز؛ با وزنشان در شاخص مقایسه کنید (زبانهٔ «پرتفوی»).', DOC.ipo]] : []),
     ['طلب سود میانگین', f(100 * sim.rcvAvg, 2) + '٪ NAV', sim.hasDiv ? 'میانگین سود نقدیِ تصویب‌شده و هنوز پرداخت‌نشده نسبت به NAV. بدون وام این مبلغ بی‌بازده است (اصطکاک تأخیر سود)؛ با وام سود همین مبلغ وام گرفته و سرمایه‌گذاری می‌شود.' : 'این هدف برنامهٔ پرداخت سود ندارد (شاخص بهبودیافته)؛ سود نقدی مانند بازده کل همان روز استحقاق سرمایه‌گذاری می‌شود.', DOC.loan],
-    ['وام سود میانگین', S.br ? f(100 * sim.debtAvg, 2) + '٪ NAV' : '—', 'میانگین وام سود نقدی نسبت به NAV؛ سقف آن همیشه طلب سود است. بهرهٔ کل پرداختی دورهٔ آزمون: ' + f(100 * sim.interest, 2) + '٪ سرمایهٔ اولیه.', DOC.loan], ['گردش ماهانهٔ یک‌طرفه', f(100 * sT / Math.max(cnt - 1, 1), 0) + '٪', 'گردش یک‌طرفه: نصف مجموع قدرمطلق تغییر وزن‌ها در هر ریبالانس، میانگین ماه‌ها (پیش از ضرب در L). هزینهٔ ماهانه ≈ این عدد × هزینهٔ رفت‌وبرگشت. «بهینه‌سازی TE» معمولاً گردش بیشتری از «N بزرگ‌ترین» دارد.', DOC.cost],
+    ['وام سود میانگین', S.br ? f(100 * sim.debtAvg, 2) + '٪ NAV' : '—', 'میانگین وام سود نقدی نسبت به NAV؛ سقف آن همیشه طلب سود است. بهرهٔ کل پرداختی دورهٔ آزمون: ' + f(100 * sim.interest, 2) + '٪ سرمایهٔ اولیه.', DOC.loan], ['گردش ماهانهٔ یک‌طرفه', f(100 * sT / Math.max(cnt - 1, 1), 0) + '٪', 'گردش یک‌طرفه: نصف مجموع قدرمطلق تغییر وزن‌ها در هر ریبالانس؛ جمع همهٔ ریبالانس‌های اجراشده ÷ تعداد ماه‌ها (پیش از ضرب در L). هزینهٔ ماهانه ≈ این عدد × هزینهٔ رفت‌وبرگشت. «بهینه‌سازی TE» و ریبالانس پرتکرار گردش بیشتری دارند.', DOC.cost],
+    ['ریبالانس اجراشده', `${sim.nReb}`, `تعداد ریبالانس‌های اجراشده پس از خرید اولیه با سیاست «${R === R0 ? POLS[S.pol] : 'ماهانه'}». در سیاست آستانه‌ای فقط بررسی‌هایی شمرده می‌شوند که به معامله رسیدند.`, DOC.rebal],
     ['ظرفیت امروز (میلیارد ریال)', f(capNow, 0), 'بزرگ‌ترین سرمایه‌ای که پرتفوی امروز را در یک روز می‌سازد، اگر از هر نماد بیش از ۱۰٪ ارزش معاملات روزانه‌اش (میانهٔ ۶۳ روز) نخرید؛ محدودکننده کم‌نقدشونده‌ترین نماد نسبت به وزنش است. برای سرمایهٔ بزرگ‌تر، فیلتر نقدشوندگی را سخت‌تر کنید یا ساخت را چندروزه ببینید.', DOC.cap],
     ['پوشش وزن شاخص (آخرین ماه)', f(100 * covB, 0) + '٪', 'چند درصد از وزن «شاخص كل» در سهام نمونه است. مثلاً ۷۰٪ یعنی ۳۰٪ از شاخص (معمولاً سهام کوچک‌تر) اصلاً خریده نشده و روش انتخاب باید با وزن‌دهی جبرانش کند.', DOC.build]];
   const kpiHtml = a => a.map(([k, v, t, d]) => `<div class="kpi"${tip(t, d || DOC.build)}><div class="k"${tip(t, d || DOC.build)}>${k}</div><div class="v num">${v}</div></div>`).join('');
   // چهار عدد اصلی: چقدر دقیق، چقدر عقب، از شروع تا امروز، چقدر قابل ساخت؛ بقیه در «شاخص‌های بیشتر»
-  const MAIN = new Set(['TE در برابر شاخص رسمی', 'فاصلهٔ بازده سالانه (واحد درصد)', 'تفاوت تجمعی تا امروز', 'ظرفیت امروز (میلیارد ریال)']), all = [...kp, ...kp2];
+  const MAIN = new Set(['TE در برابر شاخص رسمی', 'فاصلهٔ بازده سالانه (واحد درصد)', 'هزینهٔ معامله در سال', 'تفاوت تجمعی تا امروز', 'ظرفیت امروز (میلیارد ریال)']), all = [...kp, ...kp2];
   $('rb-kpi').innerHTML = kpiHtml(all.filter(x => MAIN.has(x[0]))); $('rb-kpi2').innerHTML = kpiHtml(all.filter(x => !MAIN.has(x[0])));
   if (m) {
     const ov = (S.mode === 'none' ? 'تمام در سهام' : S.mode === 'cash' ? `${S.cash}٪ نقد` : 'تراز بتا (فقط نقد)') + (S.br ? '، با وام سود نقدی' : '، بدون وام');
-    $('rbx-read').innerHTML = `<span><b${tip('جمع‌بندی خودکار همین تنظیمات به زبان ساده؛ با هر تغییر دوباره نوشته می‌شود.', DOC.build)}>خوانش</b> اگر از ${dj(R.sig[S.j0])} همتایی با ${S.N} سهم (${METHODS[S.method]}، نقدشوندگی ${LIQN[S.liq][0]}، ${ov}) ساخته بودیم، تا امروز (${f(yrs, 1)} سال) ارزش همتا نسبت به شاخص رسمی ${sg(m.td)}٪ تفاوت داشت و خطای ردیابی سالانه ${f(m.te, 1)}٪ بود.</span><span><b${tip('فرض‌های شبیه‌سازی: سود نقدی با تأخیر واقعی پرداخت (بدون وام تا روز پرداخت بی‌بازده؛ با وام سود سرمایه‌گذاری‌شده با هزینهٔ بهره)، ریبالانس پایان ماه شمسی و اجرا روز بعد، بدون صف خرید و فروش و حد نوسان. نبود صف و حد نوسان نتیجه را کمی خوش‌بینانه می‌کند.', DOC.build)}>فرض</b> بازده کل، ریبالانس پایان ماه جلالی، اجرا روز بعد، بدون صف و حد نوسان؛ نرخ وام ${S.rb}٪ و هزینه ${S.cost}bp [تأیید لازم].</span>`;
+    $('rbx-read').innerHTML = `<span><b${tip('جمع‌بندی خودکار همین تنظیمات به زبان ساده؛ با هر تغییر دوباره نوشته می‌شود.', DOC.build)}>خوانش</b> اگر از ${dj(R.sig[S.j0])} همتایی با ${S.N} سهم (${METHODS[S.method]}، نقدشوندگی ${LIQN[S.liq][0]}، ریبالانس ${R === R0 ? POLS[S.pol] : 'ماهانه'}، ${ov}) ساخته بودیم، تا امروز (${f(yrs, 1)} سال) ارزش همتا نسبت به شاخص رسمی ${sg(m.td)}٪ تفاوت داشت و خطای ردیابی سالانه ${f(m.te, 1)}٪ بود.</span><span><b${tip('فرض‌های شبیه‌سازی: سود نقدی با تأخیر واقعی پرداخت (بدون وام تا روز پرداخت بی‌بازده؛ با وام سود سرمایه‌گذاری‌شده با هزینهٔ بهره)، ریبالانس طبق سیاست انتخابی و اجرا روز بعد، بدون صف خرید و فروش و حد نوسان. نبود صف و حد نوسان نتیجه را کمی خوش‌بینانه می‌کند.', DOC.build)}>فرض</b> بازده کل، ریبالانس ${R === R0 ? POLS[S.pol] : 'ماهانه'}، اجرا روز بعد، بدون صف و حد نوسان؛ نرخ وام ${S.rb}٪ و هزینه ${S.cost}bp [تأیید لازم].</span>`;
   }
   drawCharts(cv, m);
+  renderCmp();
   renderYears(o, key);
   renderPort();
 }
@@ -339,7 +436,7 @@ function drawCharts(cv, m) {
    سهم هر نماد در «انتخاب سهام» = Σ روزها (وزن همتا − وزن شاخص، هر دو رانش‌یافته) × بازده نماد؛ از SIM_REPX (همان بازده‌های روزانهٔ شاخص بهبودیافته). */
 function monthParts() {
   if (!last || !last.sim) return [];
-  const p = prep(R), key = curKey(), r = seriesOf(R, key), c = R.configs[key], sim = last.sim, nm = R.mstart.length, n = R.dates.length, out = [];
+  const p = prep(R), key = curKey(), r = seriesOf(R, key), sim = last.sim, nm = R.mstart.length, n = R.dates.length, out = [];
   for (let j = S.j0; j < nm; j++) {
     const t0 = R.mstart[j], t1 = j + 1 < nm ? R.mstart[j + 1] : n;
     let tot = 0, samp = 0, memb = 0, other = 0, ipo = 0;
@@ -348,7 +445,7 @@ function monthParts() {
       tot += d; samp += rf - p.C[t]; memb += p.C[t] - p.K[t]; ipo += sim.ipoD[t]; other += navR - rf - sim.ipoD[t];
     }
     if (t1 - 1 <= sim.t0) continue;
-    const L = sim.Ls[j] === sim.Ls[j] ? sim.Ls[j] : 1, cost = j === S.j0 ? 0 : -c.to[j] * L * S.cost / 1e4;   // هزینهٔ خرید اولیه در روز شروع است که در سنجش نیست
+    const L = sim.Ls[j] === sim.Ls[j] ? sim.Ls[j] : 1, cost = -sim.cm[j];   // هزینهٔ همهٔ ریبالانس‌های دوره؛ خرید اولیه در روز شروع است که در سنجش نیست
     out.push({ j, t0, t1, end: R.dates[t1 - 1], tot: 100 * tot, samp: 100 * samp, memb: 100 * memb, ipo: 100 * ipo, cost: 100 * cost, lev: 100 * (other - cost), L });
   }
   return out;
@@ -363,10 +460,10 @@ function topContrib(m) {
   const w = new Map(), b = new Map();
   sel[0].forEach((i, q) => w.set(i, sel[1][q] / 1e5)); bj[0].forEach((i, q) => b.set(i, bj[1][q] / 1e5));
   const ids = [...new Set([...w.keys(), ...b.keys()])], ww = ids.map(i => w.get(i) || 0), bb = ids.map(i => b.get(i) || 0), con = ids.map(() => 0), cum = ids.map(() => 0);
-  for (let t = m.t0 + 1; t < m.t1; t++) {
+  for (let t = m.t0 + 1; t < m.t1; t++) {                              // نماد افزودهٔ فایل سیاست (i ≥ K) در SIM_REPX نیست
     const xi = X._di.get(R.dates[t]); if (xi == null) continue;
     const sw = ww.reduce((s, v) => s + v, 0) || 1, sb = bb.reduce((s, v) => s + v, 0) || 1;
-    ids.forEach((i, q) => { const x = X._ret[xi * K + i], rr = x === x ? x : 0; con[q] += (ww[q] / sw - bb[q] / sb) * rr; cum[q] = (1 + cum[q]) * (1 + rr) - 1; ww[q] *= 1 + rr; bb[q] *= 1 + rr; });
+    ids.forEach((i, q) => { const x = i < K ? X._ret[xi * K + i] : NaN, rr = x === x ? x : 0; con[q] += (ww[q] / sw - bb[q] / sb) * rr; cum[q] = (1 + cum[q]) * (1 + rr) - 1; ww[q] *= 1 + rr; bb[q] *= 1 + rr; });
   }
   const all = ids.map((i, q) => ({ s: R.names[i].s, sec: R.names[i].sec, w: w.get(i) || 0, b: b.get(i) || 0, ret: cum[q], c: 100 * con[q] }));
   const out_ = all.filter(x => x.w === 0), sum = a => a.reduce((t, x) => t + x.c, 0);
@@ -403,7 +500,7 @@ function explain(m) {
   } else if (mk === 'ipo') { const names = ipoOf(R).filter(e => e.a < m.t1 && e.a + e.w.length > m.t0).map(e => esc(R.names[e.p].s)); why = `احتمالاً <b>تأخیر ورود عرضهٔ اولیه</b>: نماد تازه${names.length ? ' (' + names.join('، ') + ')' : ''} از روز پس از عرضه در شاخص بود ولی همتا به‌دلیل صف خرید و سقف «سهم از معاملات» فقط بخشی از وزنش را داشت.`; }
   else if (mk === 'memb') why = 'احتمالاً <b>تفاوت اعضا و داده</b>: حتی خرید همهٔ واجدان هم این ماه با شاخص رسمی فاصله داشت؛ «همتای کامل» نمادهای تازه را هم دارد، پس معمولاً بازگشایی پس از توقف، نماد کم‌سابقهٔ غیرتازه‌ای که هنوز واجد نیست، یا تفاوت ثبت سود و افزایش سرمایه.';
   else if (mk === 'lev') why = `احتمالاً <b>${m.L < 1 ? 'نقد' : S.br ? 'وام سود نقدی' : 'تأخیر پرداخت سود'}</b>: L این ماه ${f(m.L, 2)} بود؛ ${m.L < 1 ? 'بخشی از سرمایه بیرون بازار بود و بازار ' + (m.tot < 0 ? 'بالا رفت' : 'پایین آمد') : S.br ? 'طلب سود با وام سرمایه‌گذاری بود و بهرهٔ وام کسر شد' : 'سود تصویب‌شده تا روز پرداخت بی‌بازده ماند در حالی که شاخص رسمی آن را همان روز استحقاق دوباره سرمایه‌گذاری می‌کند'}.`;
-  else why = 'احتمالاً <b>هزینهٔ ریبالانس</b>: گردش سبد در ابتدای این دوره زیاد بود.';
+  else why = `احتمالاً <b>هزینهٔ ریبالانس</b>: گردش سبد در این دوره زیاد بود (سیاست «${R === R0 ? POLS[S.pol] : 'ماهانه'}»).`;
   return `<div class="tt">دوره تا ${dj(m.end)}: همتا ${pp(m.tot)} واحد درصد از شاخص ${dir}</div>
     <div class="td">${why}</div>
     <div class="tf">${parts.map(([k, v]) => `${PART_FA[k]}: ${pp(v)}`).join(' · ')}</div>
@@ -446,11 +543,27 @@ function portOf() {
   const sel = live ? [c.live[0], c.live[1]] : c.sel[j], bj = live ? R.live_b : R.b[j], bmap = new Map(bj[0].map((i, p) => [i, bj[1][p] / 1e5]));
   const b0j = R.b0 ? (live ? R.live_b0 : R.b0[j]) : null, b0map = b0j ? new Map(b0j[0].map((i, p) => [i, b0j[1][p] / 1e5])) : null;
   let rows = sel[0].map((i, p) => ({ i, w: sel[1][p] / 1e5, b: bmap.get(i) || 0, b0: b0map ? (b0map.get(i) || 0) : null, nm: R.names[i] }));
-  // امروز: نماد تازهٔ بزرگ با وزن شاخص (لایهٔ عرضهٔ اولیه)، بقیه به نسبت کوچک می‌شوند
-  const IL = live && R.ipo && R.ipo.live ? R.ipo.live.filter(([i]) => !rows.some(r => r.i === i)) : [];
-  if (IL.length) { const sb = IL.reduce((a, x) => a + x[1], 0); rows.forEach(r => { r.w *= 1 - sb; }); IL.forEach(([i, b]) => rows.push({ i, w: b, b: bmap.get(i) || b, b0: null, nm: R.names[i], ipo: true })); }
+  // ترکیب واقعی با تنظیمات پنل ۱ (نقد/تراز بتا، وام سود، لایهٔ عرضهٔ اولیه): وزن هر ردیف = سهم از NAV
+  const extra = [];
+  if (live) {
+    // امروز: هدف ریبالانس بعد — نماد تازهٔ فعال با وزن شاخص، سپس همه ضربدر L؛ بقیه نقد
+    const IL = R.ipo && R.ipo.live ? R.ipo.live.filter(([i]) => !rows.some(r => r.i === i)) : [];
+    if (IL.length) { const sb = IL.reduce((a, x) => a + x[1], 0); rows.forEach(r => { r.w *= 1 - sb; }); IL.forEach(([i, b]) => rows.push({ i, w: b, b: bmap.get(i) || b, b0: null, nm: R.names[i], ipo: true })); }
+    const L = last && last.sim && last.sim.Ls[nm - 1] === last.sim.Ls[nm - 1] ? last.sim.Ls[nm - 1] : 1;
+    rows.forEach(r => { r.w *= L; });
+    if (L < 0.9995) extra.push({ kind: 'cash', w: 1 - L });
+  } else {
+    const sim = last && last.sim && j >= S.j0 ? last.sim : simulate(R, key, { ...opts(), j0: j }), st = sim.mstate[j];
+    if (st) {
+      rows.forEach(r => { r.w *= st.rest; });
+      st.ipo.forEach(([i, h]) => { const r = rows.find(x => x.i === i); if (r) r.w += h; else rows.push({ i, w: h, b: bmap.get(i) || 0, b0: null, nm: R.names[i], ipo: true }); });
+      if (st.cash > 5e-4) extra.push({ kind: 'cash', w: st.cash });
+      if (st.rcv > 5e-4) extra.push({ kind: 'rcv', w: st.rcv });
+      if (st.debt > 5e-4) extra.push({ kind: 'debt', w: -st.debt });
+    }
+  }
   rows.sort((a, b) => b.w - a.w);
-  return { live, j, rows, bmap, cap: live ? c.live[2] : c.cap[j], key, bj };
+  return { live, j, rows, extra, bmap, cap: live ? c.live[2] : c.cap[j], key, bj };
 }
 function renderPort() {
   if (!host) return;
@@ -468,16 +581,16 @@ function renderPort() {
   $('rb-ptab').innerHTML = `<thead><tr>${hd.map(([t, c, d]) => `<th class="${c}"${tip(d)}>${t}</th>`).join('')}</tr></thead><tbody>` + P.rows.map((r, p) => {
     const ad = adv[r.i], days = ad ? r.w * aumR / 1e9 / (R.part * ad) : NaN;
     return `<tr><td class="rank">${p + 1}</td><td>${esc(r.nm.s)}${r.ipo ? ' <span class="chip warn"' + tip('نماد تازهٔ بزرگ (لایهٔ عرضهٔ اولیه): با وزن شاخص بیرون از روش انتخاب؛ اگر هنوز در صف خرید است، سفارش در قیمت سقف بگذارید و بخشی پر می‌شود.', DOC.ipo) + '>عرضهٔ اولیه</span>' : ''}</td><td>${esc(r.nm.sec)}</td><td class="n">${f(100 * r.w, 2)}</td><td class="n">${f(100 * r.b, 2)}</td>${R.b0 ? `<td class="n">${f(100 * r.b0, 2)}</td>` : ''}<td class="n ${r.w >= r.b ? 'up' : 'down'}">${sg(100 * (r.w - r.b), 2)}</td>` + (P.live ? `<td class="n">${f(ad, 1)}</td><td class="n ${days > 5 ? 'down' : ''}">${f(days, 1)}</td>` : '') + '</tr>';
-  }).join('') + '</tbody>';
-  $('rb-plin').innerHTML = `<span><b${tip('وزن هدف = ارزش بازار کل (قیمت × همهٔ سهام) نمادهای واجد بورس در روز سیگنال؛ همان روش وزن‌دهی «شاخص كل» رسمی (نه شناور آزاد؛ بازسازی کامل شاخص با این وزن TE حدود ۰٫۳٪ دارد). تفاوت با شاخص از اعضاست، نه روش وزن.', DOC.build)}>وزن شاخص</b> ارزش بازار کل، همان روش «شاخص كل»</span><span><b${tip('نمادهای واجد شاخص که در همتا نیستند و مجموع وزنشان در شاخص؛ منبع اصلی خطای نمونه‌گیری.', DOC.build)}>خارج از نمونه</b> ${P.bj[0].length - nmT} نماد با مجموع وزن ${f(100 * (1 - cov), 0)}٪</span>`;
+  }).join('') + P.extra.map(x => `<tr class="weak"><td></td><td colspan="2"${tip({ cash: 'بخش نقد طبق «سهم سهام» پنل ۱ (نقد ثابت یا تراز بتا).', rcv: 'سود نقدی تصویب‌شده و هنوز پرداخت‌نشده (طلب)؛ تا روز پرداخت بی‌بازده است مگر «وام سود نقدی» روشن باشد.', debt: 'وام سود نقدی؛ هرگز بیش از طلب سود نیست.' }[x.kind], DOC.loan)}>${{ cash: 'نقد', rcv: 'طلب سود نقدی', debt: 'وام سود نقدی' }[x.kind]}</td><td class="n">${f(100 * x.w, 2)}</td><td class="n">—</td><td colspan="9"></td></tr>`).join('') + '</tbody>';
+  const cfgTxt = `${S.tgt === 'ew' ? '«شاخص كل (هم وزن)»' : '«شاخص كل»'} · ${METHODS[S.method]} ${S.N} سهم · نقدشوندگی ${LIQN[S.liq][0]} · ریبالانس ${R === R0 ? POLS[S.pol] : 'ماهانه'} · ${S.mode === 'none' ? 'تمام در سهام' : S.mode === 'cash' ? S.cash + '٪ نقد' : 'تراز بتا'} · ${S.br ? 'وام سود نقدی' : 'بدون وام'}${R.ipo ? ' · نماد تازه ' + S.phi + '٪ از معاملات، صندوق ' + f(S.aum, 0) + ' میلیارد ریال' : ''}`;
+  $('rb-plin').innerHTML = `<span><b${tip('همهٔ اعداد این پنل با همین تنظیمات پنل ۱ حساب می‌شوند؛ هر تغییری در پنل ۱ این جدول را هم دوباره می‌سازد. وزن‌ها سهم از کل دارایی (NAV) است: سهام به‌اضافهٔ نقد، طلب سود و منهای وام.', DOC.build)}>تنظیمات</b> ${esc(cfgTxt)}</span><span><b${tip('وزن هدف = ارزش بازار کل (قیمت × همهٔ سهام) نمادهای واجد بورس در روز سیگنال؛ همان روش وزن‌دهی «شاخص كل» رسمی (نه شناور آزاد؛ بازسازی کامل شاخص با این وزن TE حدود ۰٫۳٪ دارد). تفاوت با شاخص از اعضاست، نه روش وزن.', DOC.build)}>وزن شاخص</b> ارزش بازار کل، همان روش «شاخص كل»</span><span><b${tip('نمادهای واجد شاخص که در همتا نیستند و مجموع وزنشان در شاخص؛ منبع اصلی خطای نمونه‌گیری.', DOC.build)}>خارج از نمونه</b> ${P.bj[0].length - nmT} نماد با مجموع وزن ${f(100 * (1 - cov), 0)}٪</span>`;
   $('rb-plan').style.display = P.live ? '' : 'none';
-  $('rbx-csv').onclick = () => download(`replica_${P.live ? R.asof : dj(R.sig[P.j]).replace(/\//g, '-')}.csv`, [['symbol', 'sector', 'w_replica_pct', 'w_index_pct'], ...P.rows.map(r => [r.nm.s, r.nm.sec, (100 * r.w).toFixed(3), (100 * r.b).toFixed(3)])]);
+  $('rbx-csv').onclick = () => download(`replica_${P.live ? R.asof : dj(R.sig[P.j]).replace(/\//g, '-')}.csv`, [['symbol', 'sector', 'w_replica_pct', 'w_index_pct'], ...P.rows.map(r => [r.nm.s, r.nm.sec, (100 * r.w).toFixed(3), (100 * r.b).toFixed(3)]), ...P.extra.map(x => [x.kind, '', (100 * x.w).toFixed(3), ''])]);
   $('rb-plan').onclick = () => {
     if (!root.SIM_ENSURE_LAB || !root.SIM_SEND_PLAN) { toast('Lab بارگذاری نشده'); return; }
     root.SIM_ENSURE_LAB(() => {
     const LAB = root.SIM_LAB, map = new Map(LAB.codes.map((c, i) => [String(c.c), i])), w = new Float64Array(LAB.k); let miss = 0;
-    const L = last && last.sim ? last.sim.Ls[R.mstart.length - 1] : 1, ex = Math.min(1, L > 0 ? L : 1);
-    P.rows.forEach(r => { const i = map.get(r.nm.c); if (i == null) miss++; else w[i] = r.w * ex; });
+    P.rows.forEach(r => { const i = map.get(r.nm.c); if (i == null) miss++; else w[i] = r.w; });   // وزن‌ها سهم از NAV‌اند (نقد بیرون)
     root.SIM_SEND_PLAN(`همتاساز${S.tgt === 'ew' ? ' هم‌وزن' : ''} · ${METHODS[S.method]} ${S.N} سهم · نقدشوندگی ${LIQN[S.liq][0]}`, w, R === R0 ? { kind: 'replica', key: curKey() } : { kind: 'enh' });
     if (miss) toast(`${miss} نماد در Lab نبود و کنار ماند`);
     });
