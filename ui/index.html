@@ -316,7 +316,7 @@ function render() {
     return `<tr ${sel ? 'aria-selected="true"' : ''}><td>${D.labels[k].title}</td><td class="num">${w === 'all' ? '۲۰۱۴' : '۲۰۱۶'}→</td><td class="n">${fmt(s.corr, 4)}</td><td class="n">${fmt(s.te)}</td><td class="n">${fmt(s.mad_bp, 1)}</td><td class="n ${s.td_bp >= 0 ? 'up' : 'down'}">${sgn(s.td_bp, 0)}</td><td class="n">${fmt(s.cum_ratio, 3)}</td><td class="n">${s.days50}</td></tr>`;
   }).join('') + '</tbody>';
   $('per-sub').textContent = 'بازدهی دوره‌ای — ' + L.title;
-  $('per').innerHTML = th([['دوره'], ['رسمی %', 'n'], ['بازسازی %', 'n'], ['تفاوت bp', 'n']]) + '<tbody>' + pr.map(p => `<tr><td>${p.label}</td><td class="n ${p.off >= 0 ? 'up' : 'down'}">${sgn(p.off)}</td><td class="n ${p.mine >= 0 ? 'up' : 'down'}">${sgn(p.mine)}</td><td class="n">${sgn(p.diff_bp, 0)}</td></tr>`).join('') + '</tbody>';
+  $('per').innerHTML = th([['دوره'], ['رسمی %', 'n'], ['بازسازی %', 'n'], ['تفاوت نسبی bp', 'n']]) + '<tbody>' + pr.map(p => `<tr><td>${p.label}</td><td class="n ${p.off >= 0 ? 'up' : 'down'}">${sgn(p.off)}</td><td class="n ${p.mine >= 0 ? 'up' : 'down'}">${sgn(p.mine)}</td><td class="n">${sgn(((1 + p.mine / 100) / (1 + p.off / 100) - 1) * 1e4, 0)}</td></tr>`).join('') + '</tbody>';
   $('b-lineage').innerHTML = `<span><b>TE</b> انحراف معیار تفاضل روزانه × √۲۵۲</span><span><b>TD</b> نسبت سطوح تجمعی − ۱</span><span><b>مرجع</b> سری رسمی TSETMC (کد <span class="num">${state.k === 'K' ? '32097…' : '67130…'}</span>)</span>`;
 
   // C: روزهای انحراف
