@@ -135,7 +135,7 @@ function initLive() {
   </section>
   ${attrPanel(B.attribution)}
   <section class="panel" style="--lg:var(--lg-b)">
-    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('آخرین دستور اجرای ساخته‌شده؛ پیش‌نویس میان‌ماه ثبت رسمی نمی‌شود و فقط برای دیدن است.')}>آخرین دستور اجرا</span>${O ? `<span class="chip ${O.official_month_end ? 'ok' : 'warn'}"${tip(O.official_month_end ? 'ریبالانس رسمی پایان ماه؛ قابل ثبت در دفتر.' : 'پیش‌نویس میان‌ماه: ثبت رسمی ندارد.')}>${O.official_month_end ? 'رسمی' : 'پیش‌نویس میان‌ماه'}</span>` : ''}
+    <div class="panel-head"><span class="lg-badge">2</span><span class="panel-title"${tip('آخرین سفارش پیش‌نویس ساخته‌شده؛ پیش‌نویس میان‌ماه ثبت رسمی نمی‌شود و فقط برای دیدن است.')}>آخرین سفارش پیش‌نویس</span>${O ? `<span class="chip ${O.official_month_end ? 'ok' : 'warn'}"${tip(O.official_month_end ? 'ریبالانس رسمی پایان ماه؛ قابل ثبت در دفتر.' : 'پیش‌نویس میان‌ماه: ثبت رسمی ندارد.')}>${O.official_month_end ? 'رسمی' : 'پیش‌نویس میان‌ماه'}</span>` : ''}
       <div class="panel-tools"><button class="tool" id="lv-csv"${tip('دستورهای خرید و فروش به‌صورت CSV.')}>CSV</button><button class="tool" id="lv-json"${tip('فایل sim.trade_plan/1 برای سامانهٔ الگوریتمی (فصل ۹ §۹٫۲٫۱).')}>JSON برای سامانهٔ الگوریتمی</button></div></div>
     <div class="panel-body scroll" style="max-height:420px"><table class="dt" id="lv-orders"></table></div>
     <div class="lineage" id="lv-orders-lin"></div>

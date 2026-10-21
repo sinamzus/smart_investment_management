@@ -1,4 +1,4 @@
-/* همتا — میز پژوهش (Lab) · معیارها (Signals) · برنامهٔ اقدام (Plan)  — فصل ۱۴
+/* همتا — میز پژوهش (Lab) · معیارها (Signals) · سفارش (Plan)  — فصل ۱۴
    داده: window.SIM_LAB (tools/build_lab.py)؛ موتور: labengine.js. هیچ عدد ثابتی در این فایل نیست مگر پیش‌فرض‌های کنترل‌ها. */
 (function () {
 'use strict';
@@ -495,7 +495,7 @@ function tabLive(host) {
     mon = `<div class="lb-note"><b>رصد زنده:</b> اگر امروز ریبالانس بود، <b class="up">${ent.length} نماد وارد</b> و <b class="down">${ext.length} نماد خارج</b> می‌شد (بقیه می‌مانند). ورود: ${nm(ent) || '—'}. خروج: ${nm(ext) || '—'}. سبد فعلی = وزن رانش‌یافته تا آخرین پایان ماه${lab.res.live.driftAsOf ? ` (<span class="num">${lab.res.live.driftAsOf}</span>)` : ''}؛ اقدام واقعی فقط در روز ریبالانس است (فصل ۵ §۵٫۸٫۳) و این فهرست برای برنامه‌ریزی نقدینگی و رصد پیش از روز ریبالانس است.</div>`;
   }
   host.innerHTML = mon + `<div class="ctl"><label>سرمایه (میلیارد ریال) <input type="number" id="lv-aum" value="${lab.aum || 100}" min="1" step="10"></label><span class="mute">برای محاسبهٔ روز لازم برای ساخت با ۱۰٪ مشارکت در ارزش معاملات روزانه</span>
-    <span class="spacer"></span><button class="tool" id="lv-plan">ارسال به برنامهٔ اقدام ←</button><button class="tool" id="lv-csv">CSV</button></div>
+    <span class="spacer"></span><button class="tool" id="lv-plan">ارسال به سفارش ←</button><button class="tool" id="lv-csv">CSV</button></div>
     <div class="lb-note">وزن هدف بر پایهٔ آخرین روز داده (<span class="num">${L.asof}</span>) · ${idx.length} نماد · تعداد مؤثر ${f1(effN, 0)} · ۱۰ نماد برتر ${f1(top10, 0)}٪.</div>
     <div class="lb-grid2"><div><table class="dt" id="lv-tab">${th([['#'], ['نماد'], ['بازار'], ['صنعت'], ['وزن %', 'n'], ['امتیاز Z', 'n'], ['ارزش معاملات روزانه (میلیون ریال)', 'n'], ['روز لازم (۱۰٪)', 'n']])}<tbody>${idx.slice(0, 80).map((i, j) => {
       const adv = Math.exp(CTX.adv[rl * k + i]) / 1e6, days = adv > 0 ? w[i] / tot * aum / 1e6 / (0.1 * adv) : NaN;
@@ -608,16 +608,28 @@ const plan = { src: 'lab', aum: 100, lot: 1, min_trade: 0.001, hold: [], cost: 1
 /* هر ارسال، یک «سبد» با نام و منبعش در بخش «پرتفو» هم ذخیره می‌کند (ui/portfolio.js؛ فصل ۵ §۵٫۹) */
 function sendToPlan(name, w, src) {
   window.SIM_PLAN_SRC = { name, w, src };
-  if (window.SIM_PF) { const b = window.SIM_PF.saveBasket(name, w, src || { kind: 'manual' }); if (b) toast('سبد ذخیره شد: ' + b.name); }
-  window.SIM_SHOW('plan');
-  if ($('pl-src')) { fillPlanSrc(); $('pl-src').value = 'sent'; renderPlan(); }
-  toast('وزن هدف به «دستور اجرا» فرستاده شد: ' + name);
+  const b = window.SIM_PF ? window.SIM_PF.saveBasket(name, w, src || { kind: 'manual' }) : null;   // هر ارسال یک سبد در «۱ سبدهای هدف»
+  openPlan(b ? 'bsk:' + b.id : 'sent');
+  toast(`سبد «${b ? b.name : name}» ذخیره و در «۲ سفارش» باز شد`);
 }
+/** «۲ سفارش» را با هدف v باز می‌کند (bsk:<id> | K | EW | lab | lib:<id> | sent) */
+function openPlan(v) {
+  window.SIM_PLAN_PICK = v;
+  window.SIM_SHOW('plan');
+  if ($('pl-src')) { fillPlanSrc(); $('pl-src').value = v; renderPlan(); }
+}
+window.SIM_PLAN_OPEN = openPlan;
+/** منبع‌های داخلی سبد برای «۱ سبدهای هدف»: فهرست [مقدار، برچسب] و ساخت {name, w, src} (همان targetFor) */
+window.SIM_PLAN_SOURCES = {
+  list: () => [['K', 'شاخص كل (ارزش‌وزن، بورس)'], ['EW', 'كل (هم وزن) (بورس)'], ['lab', 'خروجی فعلی Lab'], ...L.library.filter(r => r.live && r.live.top && r.live.top.length).map(r => ['lib:' + r.id, 'کتابخانه · ' + r.name])],
+  make: v => { const t = targetFor(v), src = v === 'K' || v === 'EW' ? { kind: 'index', idx: v } : v === 'lab' ? { kind: 'lab', spec: lab.runSpec || JSON.parse(JSON.stringify(lab.spec || {})) } : (() => { const r = L.library.find(x => 'lib:' + x.id === v); return { kind: 'lib', libId: r && r.id, spec: r && r.spec }; })(); return { name: t.name, w: t.w, src }; }
+};
 window.SIM_SEND_PLAN = sendToPlan;
 function fillPlanSrc() {
   const cur = $('pl-src').value, sent = window.SIM_PLAN_SRC;
-  const opts = [...(sent ? [['sent', 'ارسال‌شده: ' + sent.name]] : []), ['K', 'شاخص كل (ارزش‌وزن، بورس)'], ['EW', 'كل (هم وزن) (بورس)'], ['lab', 'خروجی فعلی Lab'], ...L.library.filter(r => r.live && r.live.top && r.live.top.length).map(r => ['lib:' + r.id, 'کتابخانه · ' + r.name])];
-  const srcTip = v => v === 'sent' ? 'وزن هدفی که از نمای دیگری (همتاساز، شاخص بهبودیافته، Lab) فرستاده شده.' : v === 'K' ? 'وزن ارزش بازار همهٔ واجدان بورس؛ تقریب «شاخص كل» رسمی.' : v === 'EW' ? 'وزن برابر همهٔ واجدان بورس؛ تقریب «كل (هم وزن)».' : v === 'lab' ? 'پرتفوی زندهٔ آخرین اجرای سازندهٔ Lab (وزن هدف امروز).' : 'پرتفوی زندهٔ امروز این استراتژی از کتابخانهٔ پایتون؛ آمار آن در Lab ← کتابخانه.';
+  const bsk = window.SIM_PF ? window.SIM_PF.baskets().map(b => ['bsk:' + b.id, 'سبد · ' + b.name]) : [];
+  const opts = [...bsk, ...(sent && !bsk.length ? [['sent', 'ارسال‌شده: ' + sent.name]] : []), ['K', 'شاخص كل (ارزش‌وزن، بورس)'], ['EW', 'كل (هم وزن) (بورس)'], ['lab', 'خروجی فعلی Lab'], ...L.library.filter(r => r.live && r.live.top && r.live.top.length).map(r => ['lib:' + r.id, 'کتابخانه · ' + r.name])];
+  const srcTip = v => v.startsWith('bsk:') ? 'سبد ذخیره‌شده در «۱ سبدهای هدف».' : v === 'sent' ? 'وزن هدفی که از نمای دیگری (همتاساز، شاخص بهبودیافته، Lab) فرستاده شده.' : v === 'K' ? 'وزن ارزش بازار همهٔ واجدان بورس؛ تقریب «شاخص كل» رسمی.' : v === 'EW' ? 'وزن برابر همهٔ واجدان بورس؛ تقریب «كل (هم وزن)».' : v === 'lab' ? 'پرتفوی زندهٔ آخرین اجرای سازندهٔ Lab (وزن هدف امروز).' : 'پرتفوی زندهٔ امروز این استراتژی از کتابخانهٔ پایتون؛ آمار آن در Lab ← کتابخانه.';
   $('pl-src').innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}" data-tip="${esc(srcTip(v))}">${esc(t)}</option>`).join('');
   if (opts.some(o => o[0] === cur)) $('pl-src').value = cur;
 }
@@ -625,8 +637,8 @@ function initPlan() {
   const m = $('v-plan'); m.dataset.ready = 1;
   m.innerHTML = `
   <section class="panel" style="--lg:var(--lg-a)">
-    <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title">برنامهٔ اقدام · سفارش‌ها برای رسیدن به پرتفوی هدف</span><span class="chip" id="pl-chip"></span>
-      <div class="panel-tools"><button class="tool" id="pl-bsk" data-tip="هدف فعلی را با نام دلخواه در «پرتفو ← سبدها» ذخیره می‌کند تا بعداً پرتفو از آن بسازید یا با آن ریبالانس کنید. منبع (شاخص، Lab، کتابخانه، ارسالی) هم ذخیره می‌شود تا در تاریخ دیگر دوباره ساخته شود." data-doc="5:5.9">ذخیره به‌عنوان سبد</button><button class="tool" id="pl-csv">CSV</button><button class="tool" id="pl-json">JSON برای سامانهٔ الگوریتمی</button></div></div>
+    <div class="panel-head"><span class="lg-badge">A</span><span class="panel-title" data-tip="خرید و فروش لازم برای رسیدن به یک سبد، با پول تازه یا موجودی‌ای که دستی وارد می‌کنید. برای پرتفویی که موجودی و سود و حق‌تقدمش پیگیری می‌شود «۳ پرتفوها ← ریبالانس» را به‌کار ببرید. سبد تازه را در «۱ سبدهای هدف» بسازید.">سفارش · خرید و فروش برای رسیدن به سبد هدف</span><span class="chip" id="pl-chip"></span>
+      <div class="panel-tools"><button class="tool" id="pl-csv">CSV</button><button class="tool" id="pl-json">JSON برای سامانهٔ الگوریتمی</button></div></div>
     <div class="ctl" id="pl-ctl"><label>هدف <select id="pl-src"></select></label><label>سرمایه (میلیارد ریال) <input type="number" id="pl-aum" value="100" min="1" step="10"></label>
       <label>حداقل معامله (٪ سرمایه) <input type="number" id="pl-min" value="0.1" min="0" step="0.05"></label><label>هزینهٔ رفت‌وبرگشت (bp) <input type="number" id="pl-cost" value="125" min="0" step="5"></label></div>
     <div class="ctl"><label>پرتفوی فعلی (نماد،تعداد — هر خط یک نماد؛ خالی = شروع از نقد) <textarea id="pl-hold" rows="2" placeholder="فولاد,120000&#10;فملی,50000" style="width:360px"></textarea></label><button class="tool" id="pl-apply">محاسبه</button><span class="mute" id="pl-note"></span></div>
@@ -638,15 +650,9 @@ function initPlan() {
     <div class="panel-body scroll"><div class="prose" id="pl-cal"></div><table class="dt" id="pl-div"></table></div>
     <div class="lineage" id="pl-cal-lin"></div></section>`;
   fillPlanSrc();
-  if (window.SIM_PLAN_SRC) $('pl-src').value = 'sent';
+  if (window.SIM_PLAN_PICK && [...$('pl-src').options].some(o => o.value === window.SIM_PLAN_PICK)) $('pl-src').value = window.SIM_PLAN_PICK;
   ['pl-src', 'pl-aum', 'pl-min', 'pl-cost'].forEach(i => { $(i).onchange = renderPlan; }); $('pl-apply').onclick = renderPlan;
   plan.hold = store.get('hold') || ''; $('pl-hold').value = plan.hold;
-  $('pl-bsk').onclick = () => {
-    if (!window.SIM_PF) { toast('بخش پرتفو بارگذاری نشده'); return; }
-    const v = $('pl-src').value, t = targetFor(v), n = prompt('نام سبد', t.name); if (!n || !n.trim()) return;
-    const sent = window.SIM_PLAN_SRC, src = v === 'K' || v === 'EW' ? { kind: 'index', idx: v } : v === 'lab' ? { kind: 'lab', spec: lab.runSpec || JSON.parse(JSON.stringify(lab.spec || {})) } : v === 'sent' ? (sent && sent.src) || { kind: 'manual' } : (() => { const r = L.library.find(x => 'lib:' + x.id === v); return { kind: 'lib', libId: r && r.id, spec: r && r.spec }; })();
-    const b = window.SIM_PF.saveBasket(n.trim(), t.w, src, { name: n.trim(), force: true }); if (b) toast('سبد ذخیره شد: ' + b.name);
-  };
   $('pl-csv').onclick = () => exportPlan('csv'); $('pl-json').onclick = () => exportPlan('json');
   renderPlan();
 }
@@ -654,6 +660,12 @@ function targetFor(src) {
   const k = L.k, rl = L.rows - 1, w = new Float64Array(k);
   if (src === 'K' || src === 'EW') { let s = 0; for (let i = 0; i < k; i++) if (!L.codes[i].m && CTX.ok[rl * k + i]) { w[i] = src === 'K' ? Math.exp(CTX.mcap[rl * k + i]) : 1; s += w[i]; } return { name: src === 'K' ? 'شاخص كل (ارزش‌وزن)' : 'كل (هم وزن)', w: w.map(x => x / s) }; }
   if (src === 'sent') { const p = window.SIM_PLAN_SRC; return p ? { name: p.name, w: p.w } : { name: '—', w }; }
+  if (src.startsWith('bsk:')) {                                        // سبد ذخیره‌شده: وزن {ins_code: وزن} به ترتیب نمادهای Lab
+    const b = window.SIM_PF && window.SIM_PF.baskets().find(x => 'bsk:' + x.id === src); if (!b) return { name: '—', w };
+    const ci = new Map(L.codes.map((c, i) => [String(c.c), i])); let s = 0;
+    Object.entries(b.w).forEach(([c, v]) => { const i = ci.get(String(c)); if (i != null) { w[i] = v; s += v; } });
+    return { name: b.name, w: w.map(x => x / (s || 1)) };
+  }
   if (src === 'lab') { if (lab.res && lab.res.live) { const x = lab.res.live.target, s = x.reduce((a, b) => a + b, 0) || 1; return { name: lab.name || specText(lab.spec), w: x.map(v => v / s) }; } return { name: '—', w }; }
   const r = L.library.find(x => 'lib:' + x.id === src); if (!r || !r.live) return { name: '—', w };
   let s = 0; r.live.top.forEach(([sym, wt]) => { const i = CTX.sym.indexOf(sym); if (i >= 0) { w[i] = wt; s += wt; } });
@@ -721,6 +733,6 @@ const wrap = f => () => ensureData(f);
 window.SIM_NEWVIEWS = {
   lab: { id: 'v-lab', init: wrap(initLab), redraw: () => { if (lab.res && lab.tab === 'perf' && $('lb-chart')) tabPerf($('lb-view')); } },
   sig: { id: 'v-sig', init: wrap(initSig), redraw: () => { } },
-  plan: { id: 'v-plan', init: wrap(() => { L.px = window.SIM_LAB.px ? Float64Array.from(window.SIM_LAB.px) : new Float64Array(L.k); initPlan(); }), redraw: () => { } },
+  plan: { id: 'v-plan', init: wrap(() => { L.px = window.SIM_LAB.px ? Float64Array.from(window.SIM_LAB.px) : new Float64Array(L.k); initPlan(); }), redraw: () => { if ($('pl-src')) { const v = $('pl-src').value; fillPlanSrc(); if ($('pl-src').value !== v) renderPlan(); } } },   // سبد تازهٔ «۱ سبدهای هدف» در فهرست هدف
 };
 })();

@@ -75,7 +75,7 @@ def pick_top(b, idx, N, rk=None):
     return o[:N]
 
 
-def pick_strat(b, idx, N, sector, rk=None):
+def pick_strat(b, idx, N, sector, rk=None, cand=None):
     sec = pd.Series(sector[idx], index=idx)
     wsec = pd.Series(b[idx], index=idx).groupby(sec).sum().sort_values(ascending=False)
     quota = np.floor(wsec / wsec.sum() * N).astype(int)
@@ -86,13 +86,15 @@ def pick_strat(b, idx, N, sector, rk=None):
         if q <= 0:
             continue
         members = sec[sec == s].index.values
+        if cand is not None:                                            # سهمیهٔ صنعت از هدف، عضو از نامزدها
+            members = members[np.isin(members, cand)]
         sel += list(members[np.argsort(-(b if rk is None else rk)[members])][:q])
     return np.array(sel[:N])
 
 
-def pick_opt(b, idx, N, Sig, pos, rk=None):
+def pick_opt(b, idx, N, Sig, pos, rk=None, cand=None):
     from cvxpy import Minimize, Problem, Variable, quad_form, psd_wrap
-    pool = pick_top(b, idx, 3 * N, rk)
+    pool = pick_top(b, idx if cand is None else cand, 3 * N, rk)        # نامزدها از cand؛ هدف (q) روی همهٔ idx
 
     def solve(sub):
         P = Sig[np.ix_([pos[i] for i in sub], [pos[i] for i in sub])]
@@ -177,6 +179,7 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None, ipo=None, tgt=None
     if pays is None:
         import dividend_pay
         pays = dividend_pay.pay_days(mk)
+    JX = cn.justice_provincial(mk)                                      # کنارگذاشتهٔ ساخت (همان build_replica_panel)
     bridge = lev_mode == "bridge"
     Y = np.nan_to_num(mk.Y)
     n, k = mk.n, mk.k
@@ -212,20 +215,21 @@ def run(mk, K, rate, cost_bp, N, method, lev_mode, pays=None, ipo=None, tgt=None
         else:
             b[idx] = mc[idx] / mc[idx].sum()
         pos = {i: p for p, i in enumerate(idx)}
+        cidx = idx[~JX[idx]]
         Sig = None
         if method == "opt":
             Sig = lw_cov(mk.X[a - 251: a + 1][:, idx])
             Sfull = np.zeros((k, k))
             Sfull[np.ix_(idx, idx)] = Sig
             pos = {i: i for i in idx}
-            sel, wsel = pick_opt(b, idx, N, Sfull, pos, rk)
+            sel, wsel = pick_opt(b, idx, N, Sfull, pos, rk, cand=cidx)
             w = np.zeros(k)
             w[sel] = wsel
         elif method == "strat":
-            sel = pick_strat(b, idx, N, mk.sector, rk)
+            sel = pick_strat(b, idx, N, mk.sector, rk, cand=cidx)
             w = np.zeros(k); w[sel] = b[sel] / b[sel].sum()
         else:
-            sel = pick_top(b, idx, N, rk)
+            sel = pick_top(b, cidx, N, rk)
             w = np.zeros(k); w[sel] = b[sel] / b[sel].sum()
         w[~tr & (w_prev <= 0)] = 0.0                                    # نماد جدید بی‌معامله خریدنی نیست
         if w.sum() > 0:
@@ -318,7 +322,7 @@ def main():
         old = base                                                  # «بدون نمادهای تازه» فقط برای هدف ارزش‌وزن معنا دارد
     print(f"[{'هم‌وزن' if a.target == 'ew' else 'ارزش‌وزن'}] همتای کامل (با نمادهای تازه) در برابر شاخص رسمی: TE = {base['te_vs_official_pct']:.2f}٪؛ تفاوت بازده سالانه {base['gap_pct']:+.2f}٪؛ همبستگی {base['corr']:.4f}")
     print(f"  (بدون نمادهای تازه، قاعدهٔ پیشین: TE = {old['te_vs_official_pct']:.2f}٪؛ تفاوت {old['gap_pct']:+.2f}٪)\n")
-    EV = nl.events(mk, ok, int(np.searchsorted(mk.dates, START))) if a.target == "k" else []
+    EV = nl.events(mk, ok, int(np.searchsorted(mk.dates, START)), exclude=cn.justice_provincial(mk)) if a.target == "k" else []
     WIPO = nl.weights(mk, EV, ok, first)
     print(f"لایهٔ عرضهٔ اولیه: {len(EV)} نماد تازهٔ بزرگ (وزن روز دوم ≥ {100 * nl.THRESH:.1f}٪)؛ φ = {100 * a.phi:.0f}٪، اندازهٔ صندوق {a.aum:,.0f} میلیارد ریال")
     import json

@@ -13,7 +13,7 @@ const PART = 0.10;
 
 function loadX(X) {
   if (X._ctx) return X._ctx;
-  X._ctx = { k: X.k, T: X.days, ret: b64(X.ret, Float32Array), K: b64(X.K, Float32Array), C: b64(X.C, Float32Array), dates: X.dates, names: X.names, sectors: X.sectors, nH: X.n_rebal,
+  X._ctx = { k: X.k, T: X.days, ret: b64(X.ret, Float32Array), K: b64(X.K, Float32Array), C: b64(X.C, Float32Array), dates: X.dates, names: X.names, sectors: X.sectors, nH: X.n_rebal, ex: new Set(X.ex || []),
     months: X.months.map(m => ({ a: m.a, d: m.d, mcap: b64(m.mcap, Float32Array), adv: b64(m.adv, Float32Array), td: b64(m.td, Uint8Array), tr: m.tr ? b64(m.tr, Uint8Array) : null })), asof: X.asof,
     div: (X.div || []).reduce((mp, [t, i, y, p]) => { if (!mp.has(t)) mp.set(t, []); mp.get(t).push([i, y, p]); return mp; }, new Map()) };   // سود نقدی: روز ⇒ [[نماد، سهم سود، روز پرداخت]]
   return X._ctx;
@@ -53,10 +53,12 @@ function tilted(ctx, j, tl, z) {
 
 const pct = (a, p) => { const n = a.length; if (!n) return NaN; const q = p * (n - 1), lo = Math.floor(q), hi = Math.ceil(q); return a[lo] + (a[hi] - a[lo]) * (q - lo); };
 function candidates(ctx, j, idx, liq) {
-  if (!liq) return idx;
+  // کنارگذاشتهٔ ساخت (شرکت‌های استانی سهام عدالت؛ tools/build_replica_x.py، ex) نامزد نیست؛ صدک نقدشوندگی مثل پایتون روی همهٔ واجدان
+  const cidx = ctx.ex && ctx.ex.size ? idx.filter(i => !ctx.ex.has(i)) : idx;
+  if (!liq) return cidx;
   const [dmin, p] = LIQ[liq], m = ctx.months[j], adv = Array.from(idx, i => m.adv[i]).sort((x, y) => x - y), thr = pct(adv, p);
-  const c = idx.filter(i => m.td[i] >= dmin && m.adv[i] >= thr);
-  return c.length >= 3 ? c : idx;
+  const c = cidx.filter(i => m.td[i] >= dmin && m.adv[i] >= thr);
+  return c.length >= 3 ? c : cidx;
 }
 const byB = (b, arr) => Array.from(arr).sort((x, y) => b[y] - b[x] || x - y);
 

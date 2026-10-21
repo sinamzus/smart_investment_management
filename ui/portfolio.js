@@ -235,22 +235,30 @@ function renderAll() { if ($('v-bsk') && $('v-bsk').dataset.ready) renderBaskets
 /* ── سبدها ── */
 function initBaskets() {
   const m = $('v-bsk'); m.dataset.ready = 1;
-  m.innerHTML = `<section class="panel" style="--lg:var(--lg-a)"><div class="panel-head"><span class="lg-badge">A</span><span class="panel-title"${tip('هر وزن هدفی که از هر جای برنامه به «دستور اجرا» فرستاده شود (Lab، کتابخانه، همتاساز، شاخص بهبودیافته) یا در «دستور اجرا» با «ذخیره به‌عنوان سبد» ثبت شود، اینجا با نام ذخیره می‌شود. سبد «چگونه ساختن» را هم نگه می‌دارد تا در تاریخ دیگری دوباره حساب شود.', DOCS)}>سبدهای ذخیره‌شده</span>
+  m.innerHTML = `<section class="panel" style="--lg:var(--lg-a)"><div class="panel-head"><span class="lg-badge">A</span><span class="panel-title"${tip('هر وزن هدفی که از منبع‌های بالا ساخته یا از جای دیگر برنامه با «ارسال به سفارش ←» فرستاده شود (Lab، کتابخانه، همتاساز، شاخص بهبودیافته) با «ذخیره به‌عنوان سبد» ثبت شود، اینجا با نام ذخیره می‌شود. سبد «چگونه ساختن» را هم نگه می‌دارد تا در تاریخ دیگری دوباره حساب شود.', DOCS)}>سبدهای ذخیره‌شده</span>
       <div class="panel-tools"><button class="tool" id="bk-exp"${tip('همهٔ سبدها و پرتفوها را در یک فایل JSON دانلود می‌کند. ذخیرهٔ اصلی در همین مرورگر است؛ با پاک‌شدن دادهٔ مرورگر از بین می‌رود، پس گاهی پشتیبان بگیرید.')}>پشتیبان (JSON)</button><label class="tool" style="cursor:pointer"${tip('بازیابی از فایل پشتیبان: سبدها و پرتفوهای فایل به فهرست فعلی افزوده می‌شوند (شناسهٔ تکراری جایگزین می‌شود).')}>بازیابی<input type="file" id="bk-imp" accept=".json,application/json" hidden></label></div></div>
+      <div class="ctl" id="bk-add"><label${tip('هدف تازه از منبع‌های داخلی؛ از همتاساز و شاخص بهبودیافته با «ارسال به سفارش ←» در همان صفحه‌ها بفرستید.')}>افزودن سبد از <select id="bk-src"></select></label><label${tip('نام سبد؛ خالی = نام منبع.')}>نام <input id="bk-name" style="width:180px"></label><button class="tool" id="bk-save">ذخیره</button></div>
       <div class="panel-body scroll" style="max-height:420px"><table class="dt" id="bk-tab"></table></div>
       <div class="lineage"><span><b${tip('ذخیره در localStorage همین مرورگر (کلید sim.pf.v1). جای دیگری فرستاده نمی‌شود.')}>ذخیره</b> مرورگر + فایل پشتیبان</span><span><b${tip('شاخص، استراتژی Lab با الگوریتم مرورگر، و همتاساز در هر تاریخ دوباره ساخته می‌شوند؛ شاخص بهبودیافته و ردیف‌های کتابخانه با الگوریتم پایتونی همان وزن لحظهٔ ذخیره را نگه می‌دارند.')}>بازسازی در تاریخ دیگر</b> شاخص · Lab · همتاساز</span></div></section>
     <section class="panel" style="--lg:var(--lg-b)"><div class="panel-head"><span class="lg-badge">B</span><span class="panel-title" id="bk-dt"${tip('وزن‌های سبد انتخاب‌شده، به ترتیب وزن.')}>وزن‌های سبد</span></div>
       <div class="panel-body scroll" style="max-height:420px"><table class="dt" id="bk-w"></table></div></section>`;
   $('bk-exp').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(db, null, 1)], { type: 'application/json' })); a.download = `hamta_portfolios_${today()}.json`; a.click(); };
   $('bk-imp').onchange = e => { const fl = e.target.files[0]; if (!fl) return; fl.text().then(t => { try { const d = JSON.parse(t); if (d.v !== 1) throw new Error('نسخه'); const mg = (a, b) => { const ids = new Set(b.map(x => x.id)); return [...b, ...a.filter(x => !ids.has(x.id))]; }; db.baskets = mg(db.baskets, d.baskets || []); db.ports = mg(db.ports, d.ports || []); DB.save(db); renderAll(); toast('بازیابی شد'); } catch (er) { toast('فایل پشتیبان معتبر نیست'); } }); };
+  const fillSrc = () => { const S = root.SIM_PLAN_SOURCES; $('bk-src').innerHTML = S ? S.list().map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('') : ''; };
+  fillSrc(); $('bk-src').onfocus = fillSrc;
+  $('bk-save').onclick = () => {
+    const S = root.SIM_PLAN_SOURCES; if (!S) { toast('Lab بارگذاری نشده'); return; }
+    const t = S.make($('bk-src').value), n = ($('bk-name').value || '').trim() || t.name;
+    const b = saveBasket(n, t.w, t.src, { name: n, force: true }); if (b) { ui.bid = b.id; $('bk-name').value = ''; renderBaskets(); toast('سبد ذخیره شد: ' + b.name); }
+  };
   renderBaskets();
 }
 function renderBaskets() {
   const B = db.baskets;
   $('bk-tab').innerHTML = `<thead><tr><th${tip('نام سبد؛ با «نام» عوض می‌شود.')}>نام</th><th${tip('از کجا آمده و آیا در تاریخ دیگر دوباره ساخته می‌شود.')}>منبع</th><th${tip('آخرین روز داده هنگام ذخیره.')}>تاریخ داده</th><th class="n"${tip('تعداد نمادهای دارای وزن.')}>نماد</th><th${tip('پنج نماد با بیشترین وزن.')}>وزن‌های برتر</th><th></th></tr></thead><tbody>` +
     (B.map(b => { const top = Object.entries(b.w).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([c, w]) => `${symOf(c)} ${fmt(100 * w, 1)}٪`).join('، ');
-      return `<tr${b.id === ui.bid ? ' aria-selected="true"' : ''} data-b="${b.id}"><td><a class="symlink" data-act="show">${esc(b.name)}</a></td><td>${esc(SRC_FA[b.src.kind] || b.src.kind)}</td><td class="num">${jdate(b.asof)}</td><td class="n">${Object.keys(b.w).length}</td><td>${esc(top)}</td><td><button class="tool" data-act="port"${tip('پرتفوی تازه با هدف این سبد می‌سازد.')}>پرتفو</button> <button class="tool" data-act="ren"${tip('تغییر نام')}>نام</button> <button class="tool" data-act="del"${tip('حذف سبد (پرتفوهایی که از آن ساخته شده‌اند می‌مانند).')}>×</button></td></tr>`; }).join('') ||
-      '<tr><td colspan="6" class="mute" style="white-space:normal">هنوز سبدی نیست. از Lab (پرتفوی زنده ← «ارسال به برنامهٔ اقدام»)، همتاساز (پرتفوی امروز ← «ارسال به برنامهٔ اقدام») یا «دستور اجرا» (← «ذخیره به‌عنوان سبد») بفرستید.</td></tr>') + '</tbody>';
+      return `<tr${b.id === ui.bid ? ' aria-selected="true"' : ''} data-b="${b.id}"><td><a class="symlink" data-act="show">${esc(b.name)}</a></td><td>${esc(SRC_FA[b.src.kind] || b.src.kind)}</td><td class="num">${jdate(b.asof)}</td><td class="n">${Object.keys(b.w).length}</td><td>${esc(top)}</td><td><button class="tool" data-act="plan"${tip('در «۲ سفارش» با همین سبد باز می‌شود: خرید و فروش برای پول تازه یا موجودی دستی.')}>سفارش</button><button class="tool" data-act="port"${tip('پرتفوی تازه با هدف این سبد می‌سازد.')}>پرتفو</button> <button class="tool" data-act="ren"${tip('تغییر نام')}>نام</button> <button class="tool" data-act="del"${tip('حذف سبد (پرتفوهایی که از آن ساخته شده‌اند می‌مانند).')}>×</button></td></tr>`; }).join('') ||
+      '<tr><td colspan="6" class="mute" style="white-space:normal">هنوز سبدی نیست. بالا از یک منبع بسازید، یا از Lab، همتاساز و شاخص بهبودیافته با «ارسال به سفارش ←» بفرستید.</td></tr>') + '</tbody>';
   $('bk-tab').querySelectorAll('[data-act]').forEach(a => a.onclick = () => {
     const b = db.baskets.find(x => x.id === a.closest('tr').dataset.b); if (!b) return;
     const act = a.dataset.act;
@@ -258,6 +266,7 @@ function renderBaskets() {
     if (act === 'ren') { const n = prompt('نام تازهٔ سبد', b.name); if (n && n.trim()) { b.name = n.trim(); DB.save(db); renderAll(); } }
     if (act === 'del' && confirm(`سبد «${b.name}» حذف شود؟`)) { db.baskets = db.baskets.filter(x => x.id !== b.id); DB.save(db); renderAll(); }
     if (act === 'port') { ui.newFrom = b.id; root.SIM_SHOW('port'); }
+    if (act === 'plan' && root.SIM_PLAN_OPEN) root.SIM_PLAN_OPEN('bsk:' + b.id);
   });
   const b = db.baskets.find(x => x.id === ui.bid) || db.baskets[0];
   if (!b) { $('bk-w').innerHTML = ''; return; }
@@ -278,7 +287,7 @@ function initPort() {
   <section class="panel" style="--lg:var(--lg-b)"><div class="panel-head"><span class="lg-badge">B</span><span class="panel-title"${tip('پرتفوی واقعی (آخرین ثبت) در برابر آخرین برنامه، هر دو با قیمت همان روز: کدام نمادها کم یا زیاد خریده شده‌اند.', DOCS)}>انحراف از برنامه</span><span class="chip" id="pt-dchip"></span></div>
     <div class="panel-body scroll" style="max-height:360px"><table class="dt" id="pt-dev"></table></div></section>
   <section class="panel" style="--lg:var(--lg-c)"><div class="panel-head"><span class="lg-badge">C</span><span class="panel-title"${tip('در هر تاریخ: وضعیت از آخرین ثبت تا این تاریخ با اقدامات شرکتی جلو می‌رود، سپس با سبد انتخابی سفارش خرید و فروش پیشنهاد می‌شود.', DOCS)}>ریبالانس</span>
-    <div class="panel-tools"><button class="tool" id="rb-csv2"${tip('سفارش‌ها به‌صورت CSV.')}>CSV</button><button class="tool" id="rb-json2"${tip('سفارش‌ها با همان طرح JSON «دستور اجرا» برای سامانهٔ الگوریتمی.')}>JSON</button><button class="tool" id="rb-saveplan"${tip('این ریبالانس را به‌عنوان «برنامه» در تاریخچه ثبت می‌کند و متن «ثبت اجرا» را با موجودی پس از سفارش‌ها پر می‌کند.')}>ثبت به‌عنوان برنامه</button></div></div>
+    <div class="panel-tools"><button class="tool" id="rb-csv2"${tip('سفارش‌ها به‌صورت CSV.')}>CSV</button><button class="tool" id="rb-json2"${tip('سفارش‌ها با همان طرح JSON «۲ سفارش» برای سامانهٔ الگوریتمی.')}>JSON</button><button class="tool" id="rb-saveplan"${tip('این ریبالانس را به‌عنوان «برنامه» در تاریخچه ثبت می‌کند و متن «ثبت اجرا» را با موجودی پس از سفارش‌ها پر می‌کند.')}>ثبت به‌عنوان برنامه</button></div></div>
     <div class="ctl"><label${tip('تاریخ ریبالانس (شمسی). قیمت‌ها پایانی آخرین روز معاملاتی تا این تاریخ‌اند؛ هدف سبد با آخرین سیگنال تا این تاریخ دوباره ساخته می‌شود.')}>تاریخ <input id="rb-d" style="width:100px"></label>
       <label${tip('استراتژی ریبالانس: همان سبد پرتفو یا هر سبد ذخیره‌شدهٔ دیگر.')}>سبد هدف <select id="rb-b"></select></label>
       <label${tip('کمترین معامله به درصد سرمایه؛ معاملهٔ کوچک‌تر حذف می‌شود (مگر فروش کامل).')}>حداقل معامله ٪ <input type="number" id="rb-min" value="0.1" min="0" step="0.05" style="width:70px"></label>
@@ -324,7 +333,7 @@ function renderPort() {
   $('pt-sel').innerHTML = db.ports.map(p => `<option value="${p.id}"${p.id === ui.pid ? ' selected' : ''}>${esc(p.name)}</option>`).join('') || '<option value="">— هنوز پرتفویی نیست —</option>';
   $('rb-b').innerHTML = bOpts(ui.rb.bid || (port() || {}).basketId);
   const p = port();
-  if (!p) { ['pt-kpi', 'pt-lin', 'pt-dev', 'rb-kpi2', 'rb-ev', 'rb-ord', 'rb-lin2', 'pt-hist'].forEach(i => { $(i).innerHTML = ''; }); $('pt-kpi').innerHTML = '<div class="lb-note">با «+ پرتفوی تازه» از یک سبد شروع کنید. سبدها از «ارسال به برنامهٔ اقدام» در Lab یا همتاساز، یا «ذخیره به‌عنوان سبد» در «دستور اجرا» ساخته می‌شوند.</div>'; return; }
+  if (!p) { ['pt-kpi', 'pt-lin', 'pt-dev', 'rb-kpi2', 'rb-ev', 'rb-ord', 'rb-lin2', 'pt-hist'].forEach(i => { $(i).innerHTML = ''; }); $('pt-kpi').innerHTML = '<div class="lb-note">با «+ پرتفوی تازه» از یک سبد شروع کنید. سبدها در «۱ سبدهای هدف» ساخته می‌شوند (یا با «ارسال به سفارش ←» از Lab و همتاساز).</div>'; return; }
   const act = lastOf(p, 'actual'), pl = lastOf(p, 'plan'), b = db.baskets.find(x => x.id === p.basketId);
   const d = today(), now = roll(X, act, d), V = value(X, now, d);
   $('pt-kpi').innerHTML = [['ارزش کل امروز (میلیارد ریال)', f(V.nav / 1e9, 2), 'سهام با قیمت پایانی آخرین روز داده + نقد + سود دریافت‌نشده، پس از اعمال اقدامات شرکتی از آخرین ثبت.'], ['سهام', f(V.stock / 1e9, 2), 'ارزش بازار موجودی.'], ['نقد', f(V.cash / 1e9, 2), 'نقد پس از وصول سودهای پرداخت‌شده و پذیره‌نویسی‌ها.'], ['سود دریافت‌نشده', f(V.recv / 1e9, 2), 'سودهایی که روز استحقاق‌شان گذشته ولی هنوز پرداخت نشده‌اند (طلب).'], ['نماد', Object.keys(now.hold).length, 'تعداد نمادهای موجودی.'], ['آخرین ثبت', jdate(act.date), 'تاریخ آخرین موجودی ثبت‌شده.']]
@@ -416,7 +425,7 @@ function renderHist() {
 }
 
 /* ── ثبت در روتر و API برای نماهای دیگر ── */
-root.SIM_PF = { saveBasket, targetAt, db: () => db };
+root.SIM_PF = { baskets: () => db.baskets, saveBasket, targetAt, db: () => db };
 root.SIM_NEWVIEWS = Object.assign(root.SIM_NEWVIEWS || {}, {
   port: { id: 'v-port', init: () => ensurePFX(initPort), redraw: () => { } },
   bsk: { id: 'v-bsk', init: () => ensurePFX(initBaskets), redraw: () => { } },

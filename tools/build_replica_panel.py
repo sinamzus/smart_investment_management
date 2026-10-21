@@ -99,7 +99,8 @@ def context(mk, K, target, keep):
     ok_all = np.isin(mk.market, ["bourse"])
     adv, td = cn.liq_windows(mk, ok_all)                         # پنجرهٔ ۶۳ روز باز بازار (تعطیلی سراسری شمرده نمی‌شود)
     cx = SimpleNamespace(mk=mk, K=K, EWT=EWT, n=mk.n, k=mk.k, X=np.nan_to_num(mk.X), Y=np.nan_to_num(mk.Y), mc=np.nan_to_num(mk.mcap),
-                         ok_all=ok_all, adv=adv, td=td, Cfull=None, BEW=None)
+                         ok_all=ok_all, adv=adv, td=td, Cfull=None, BEW=None,
+                         jx=cn.justice_provincial(mk))                # کنارگذاشتهٔ ساخت: شرکت‌های استانی سهام عدالت (تصمیم مالک ۲۰۲۶-۱۰-۲۱)
     if EWT:                                                     # هدف هم‌وزن: همتای کامل و وزن هدف روزها از ew_target (هم‌وزن فصلی همهٔ بورس)
         cx.Cfull, cx.BEW = et.ew_path(mk, cx.ok_all, list(keep))
     return cx
@@ -126,16 +127,17 @@ def targets_at(cx, aidx, keys):
         Sig[np.ix_(idx, idx)] = S
         g = Sig[:, idx] @ b[idx]
     cands = {}
+    cidx = idx[~cx.jx[idx]]                                         # نامزد نمونه: واجدان منهای کنارگذاشتهٔ ساخت؛ وزن هدف b همچنان روی همهٔ واجدان
     for q, (dmin, pct) in LIQ.items():
-        c = idx
+        c = cidx
         if q > 0:
             thr = np.nanpercentile(adv[aidx, idx], pct * 100)
-            c = idx[(td[aidx, idx] >= dmin) & (adv[aidx, idx] >= thr)]
+            c = cidx[(td[aidx, cidx] >= dmin) & (adv[aidx, cidx] >= thr)]
         cands[q] = c
     store = {}
     for key in keys:
         m, N, q = key
-        cand = cands[q] if len(cands[q]) >= 3 else idx
+        cand = cands[q] if len(cands[q]) >= 3 else cidx
         if m == "opt":
             sel, w = opt_pick(N, b, cand, Sig, g, rk)
         else:
@@ -230,7 +232,7 @@ def main():
             if len(i):
                 Cfull[t] = float(w_ @ X[t, i])
     # لایهٔ عرضهٔ اولیه: نماد تازهٔ بزرگ با وزن شاخص بیرون از انتخاب؛ مرورگر خرید روزانه (φ × ارزش معاملات ÷ اندازهٔ صندوق) را حساب می‌کند
-    EV = [] if EWT else nl.events(mk, ok_all, me[0])
+    EV = [] if EWT else nl.events(mk, ok_all, me[0], exclude=cx.jx)
     WIPO = nl.weights(mk, EV, ok_all, first)
     VAL = np.nan_to_num(mk.val)
     print(f"لایهٔ عرضهٔ اولیه: {len(EV)} نماد تازهٔ بزرگ")

@@ -36,7 +36,8 @@ def main():
     X = np.nan_to_num(mk.X)
     mc = np.nan_to_num(mk.mcap)
     ok_all = np.isin(mk.market, ["bourse"])
-    adv, td = cn.liq_windows(mk, ok_all)                    # پنجرهٔ ۶۳ روز باز بازار (همان build_replica_panel)
+    adv, td = cn.liq_windows(mk, ok_all)
+    JX = cn.justice_provincial(mk)                    # پنجرهٔ ۶۳ روز باز بازار (همان build_replica_panel)
     me = [int(x) for x in mk.month_end if mk.dates[x] >= sr.START and x >= 252 and x + 1 < n]
     ends = me + [n - 1]
     elig = {a: np.where(mk.eligible(a, require_trade=False) & ok_all & (mc[a] > 0))[0] for a in ends}   # هدف شاخص از همهٔ واجدان (همان build_replica_panel)
@@ -66,7 +67,8 @@ def main():
            for t, i in zip(*np.nonzero(Y[d0:] > 0)) for t in [t + d0] if int(i) in pos]
     out = {"built": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"), "asof": str(mk.dates[-1].date()), "k": len(used), "days": n - d0,
            "dates": [int((d - EPOCH).days) for d in mk.dates[d0:]], "ret": f32(ret), "K": f32(K.values[d0:]), "C": f32(Cfull[d0:]),
-           "names": [{"c": str(mk.cols[i]), "s": str(mk.sym[i]), "sec": sid[str(mk.sector[i])]} for i in used], "sectors": sectors, "months": months, "n_rebal": len(me), "div": div}
+           "names": [{"c": str(mk.cols[i]), "s": str(mk.sym[i]), "sec": sid[str(mk.sector[i])]} for i in used], "sectors": sectors,
+           "ex": [pos[i] for i in used if JX[i]], "months": months, "n_rebal": len(me), "div": div}
     path = ROOT / "ui" / "data" / "replica_x.js"
     path.write_text("window.SIM_REPX = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
     print(f"ذخیره شد: {path} ({path.stat().st_size / 1e6:.1f} MB)؛ {len(used)} نماد × {n - d0} روز؛ {len(months)} ماه (آخرین = زنده)")

@@ -40,11 +40,11 @@ def full_target(mk, t, ok, first=None):
     return idx, (mc[idx] / mc[idx].sum() if len(idx) else np.zeros(0))
 
 
-def events(mk, ok, start_idx: int, thresh: float = THRESH):
+def events(mk, ok, start_idx: int, thresh: float = THRESH, exclude=None):
     """رویدادهای نماد تازهٔ بزرگ: [{i, s (نخستین روز خرید = روز پس از نخستین معامله), end (نخستین روز واجدیت عادی، حداکثر MAX_LAYER روز پس از نخستین معامله، یا n)}]."""
     first = first_trade(mk)
     out = []
-    for i in np.where(ok & (first >= start_idx - 260))[0]:
+    for i in np.where(ok & (first >= start_idx - 260) & (True if exclude is None else ~exclude))[0]:   # exclude: کنارگذاشتهٔ ساخت (construction.justice_provincial)
         t1 = int(first[i])
         if t1 + 2 >= mk.n:
             continue

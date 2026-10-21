@@ -691,3 +691,18 @@ def liq_windows(mk, ok, w=63, min_periods=30):
     adv = vo.rolling(w, min_periods=min_periods).median().reindex(val.index).ffill().values
     td = (vo.fillna(0) > 0).astype(float).rolling(w, min_periods=min_periods).sum().reindex(val.index).ffill().values
     return adv, td
+
+
+def justice_provincial(mk):
+    """بولی (طول mk.k): شرکت‌های سرمایه‌گذاری استانی سهام عدالت (نماد «وس…» و نام شامل «استان»؛ ۲۷ شرکت، عرضه از آذر ۱۳۹۹).
+    تصمیم مالک ۲۰۲۶-۱۰-۲۱: در ساخت همتا هرگز نامزد نمونه یا لایهٔ عرضهٔ اولیه نیستند؛ در وزن شاخص (هدف) و همتای کامل می‌مانند،
+    چون «شاخص كل» رسمی آن‌ها را دارد و TE باید هزینهٔ کنارگذاشتنشان را نشان دهد."""
+    codes, syms = set(), set()
+    for f in ("data/instruments_extra.csv", "data/instruments.csv"):
+        p = ROOT / f
+        if not p.exists():
+            continue
+        I = pd.read_csv(p, dtype={"ins_code": str})
+        m = I.symbol.astype(str).str.startswith("وس") & I.name.astype(str).str.contains("استان")
+        codes |= set(I.ins_code[m].astype(str)); syms |= set(I.symbol[m].astype(str))
+    return np.array([str(c) in codes or str(s) in syms for c, s in zip(mk.cols, mk.sym)])
