@@ -365,6 +365,24 @@ def fipiran_nav(f: dict, row: dict) -> list[dict]:
         print(f"    فیپیران {ep.split('?')[0]}: {len(out)} روز؛ کلیدها: {keys[:20]}")
         if len(out) > len(best):
             best = out
+    # سطح NAV (قیمت ابطال، صدور، آماری) از /chart/getfundchart: dailyEfficiency در روزهایی که NAV به‌روز نشده ۰ است و حرکت آن روز
+    # در روز بعد جبران نمی‌شود (ممیزی ۲۰۲۶-۱۱-۰۳، جوانه کوچک: ۱۳ روز، بازده تجمعی ۲۴۶٪ در برابر ۲۶۹٪)؛ بازده از سطح ساخته می‌شود.
+    try:
+        lv = fip_get(f"chart/getfundchart?regno={reg}&showAll=true&groupId=0")
+        save_raw(f"fipiran_chart_getfundchart_{f['symbol']}.json", lv)
+        by = {r["date"]: r for r in best}
+        n = 0
+        for it in (lv if isinstance(lv, list) else find_list(lv)):
+            dd = to_date(it.get("date")) if isinstance(it, dict) else None
+            if not dd:
+                continue
+            r = by.setdefault(dd, {"date": dd, "ret_daily": None, "ret_price": None, "aum": None})
+            r.update({"nav_cancel": num(it.get("cancelNav")), "nav_issue": num(it.get("issueNav")), "nav_stat": num(it.get("statisticalNav"))})
+            n += 1
+        best = sorted(by.values(), key=lambda r: r["date"])
+        print(f"    فیپیران getfundchart: {n} روز سطح NAV")
+    except Exception as e:  # noqa: BLE001
+        print(f"    فیپیران getfundchart: {str(e)[:160]}")
     return best
 
 

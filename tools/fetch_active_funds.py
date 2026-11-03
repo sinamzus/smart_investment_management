@@ -5,7 +5,7 @@
     python tools/fetch_active_funds.py                    # همهٔ صندوق‌های ACTIVE
     python tools/fetch_active_funds.py --only "جوانه کوچک"
 
-همان توابع tools/fetch_index_funds.py (قیمت بازار TSETMC و بازده/NAV روزانهٔ فیپیران)، ولی خروجی در data/funds/active/ تا فهرست
+همان توابع tools/fetch_index_funds.py (قیمت بازار TSETMC اگر صندوق قابل معامله است، و بازده و سطح NAV روزانهٔ فیپیران با شمارهٔ ثبت)، ولی خروجی در data/funds/active/ تا فهرست
 صندوق‌های شاخصی (funds.csv و صفحهٔ «ردیابی صندوق‌ها») دست نخورد:
   data/funds/active/nav_<نماد>.csv   ‏(date, ret_daily, ret_price, nav_cancel, nav_issue, nav_stat, aum, source)
   data/funds/active/price_<نماد>.csv.gz
@@ -21,9 +21,17 @@ sys.path.insert(0, str(ROOT / "tools"))
 import fetch_index_funds as fi  # noqa: E402
 
 OUT = ROOT / "data" / "funds" / "active"
-# نماد TSETMC → (نام، insCode، نام فیپیران، سبک اعلام‌شده در نام صندوق)
+# نام کوتاه → (نام کامل، insCode در TSETMC یا "" برای صندوق صدور و ابطالی، شمارهٔ ثبت فیپیران، سبک/نوع)
+# گزینش (۲۰۲۶-۱۱-۰۳): بزرگ‌ترین صندوق‌های سهامی با سبک‌های متفاوت، فصل ۷ §۷٫۹. صندوق اهرمی کنار ماند: بازده روزانه و سطح NAV
+# فیپیران دو سری متفاوت (احتمالاً واحد عادی و کل صندوق) می‌دهند و β آن قابل‌تفسیر نیست.
 ACTIVE = {
-    "جوانه کوچک": ("صندوق س.جوانه کوچک گندم-سهام", "67455383896188985", "جوانه کوچک گندم", "سهام کوچک"),
+    "جوانه کوچک": ("صندوق س.جوانه کوچک گندم-سهام", "67455383896188985", "12339", "سهام کوچک"),
+    "پیشرو مفید": ("صندوق مشترک پیشرو مفید", "", "10851", "سهامی صدور و ابطالی، بزرگ‌ترین"),
+    "اطلس مفید": ("صندوق توسعه اطلس مفید", "", "11215", "سهامی قابل معامله، بزرگ‌ترین"),
+    "هستی‌بخش آگاه": ("صندوق هستی بخش آگاه", "", "11341", "سهامی قابل معامله"),
+    "مشترک آگاه": ("صندوق مشترک آگاه", "", "10616", "سهامی صدور و ابطالی (هم‌مدیر هستی‌بخش)"),
+    "مانا الگوریتم": ("صندوق مشترک مانا الگوریتم", "", "10896", "سهامی، الگوریتمی"),
+    "ارزش‌آفرین بیدار": ("صندوق ارزش آفرین بیدار", "", "11712", "سهامی قابل معامله"),
 }
 
 
@@ -37,29 +45,23 @@ def main() -> int:
             s.reconfigure(encoding="utf-8")
     OUT.mkdir(parents=True, exist_ok=True)
     fi.OUT = OUT                                                          # tse_prices و write_nav در همین پوشه می‌نویسند
-    rows = fi.fipiran_list()
     meta = []
-    for sym, (name, ins, fip, style) in ACTIVE.items():
+    for sym, (name, ins, reg, style) in ACTIVE.items():
         if a.only and sym not in a.only:
             continue
         print(f"── {sym} · {name}")
-        m = {"symbol": sym, "name": name, "ins_code": ins, "style": style, "n_price": 0, "n_nav": 0, "fipiran_regno": ""}
-        if not a.no_price:
+        m = {"symbol": sym, "name": name, "ins_code": ins, "style": style, "n_price": 0, "n_nav": 0, "fipiran_regno": reg}
+        if ins and not a.no_price:
             try:
                 m["n_price"] = fi.tse_prices(ins, sym)
                 print(f"    قیمت بازار: {m['n_price']} روز")
             except Exception as e:  # noqa: BLE001
                 print(f"    TSETMC: {e}")
-        row = next((r for r in rows if fi.norm(r.get("name", "")).replace(" ", "") == fi.norm(fip).replace(" ", "")), None)
-        if not row:
-            print(f"    فیپیران: «{fip}» در فهرست نبود")
-        else:
-            m["fipiran_regno"] = str(row.get("regNo") or "")
-            navs = fi.fipiran_nav({"symbol": sym, "name": name}, row)
-            if navs:
-                fi.write_nav(sym, navs, "fipiran")
-                m["n_nav"] = len(navs)
-                print(f"    NAV: {len(navs)} روز ({navs[0]['date']} تا {navs[-1]['date']})")
+        navs = fi.fipiran_nav({"symbol": sym, "name": name}, {"regNo": reg})
+        if navs:
+            fi.write_nav(sym, navs, "fipiran")
+            m["n_nav"] = len(navs)
+            print(f"    NAV: {len(navs)} روز ({navs[0]['date']} تا {navs[-1]['date']})")
         meta.append(m)
     p = OUT / "funds.csv"
     old = {r["symbol"]: r for r in csv.DictReader(p.open(encoding="utf-8"))} if p.exists() else {}

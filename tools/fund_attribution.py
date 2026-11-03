@@ -6,10 +6,10 @@
     python tools/fund_attribution.py --refactor           # سری روزانهٔ فاکتورها را هم از نو بساز (پیش‌فرض: data/derived/factors_daily.csv اگر به‌روز است)
 
 دو نگاه مکمل:
-۱. بر پایهٔ بازده (returns-based): بازده هفتگی صندوق منهای نرخ بدون ریسک روی شش فاکتور رگرس می‌شود:
+۱. بر پایهٔ بازده (returns-based): بازده هفتگی صندوق (از سطح NAV ابطال) منهای نرخ بدون ریسک روی شش فاکتور رگرس می‌شود:
        R_f − rf = α + β_MKT·(R_K − rf) + β_SMB·SMB + β_HML·HML + β_MOM·MOM + β_LV·LV + β_ILQ·ILQ + e
    MKT = «شاخص كل» بازده کل رسمی. پنج فاکتور دیگر سبدهای صفر-هزینهٔ بلند−کوتاه با مرتب‌سازی دوگانهٔ ۲×۳ (Fama–French):
-   اندازه در میانه × معیار در صدک ۳۰ و ۷۰؛ وزن ارزش بازاری درون هر سبد؛ تشکیل در آخرین روز معاملاتی هر ماه شمسی (داده تا بستهٔ همان روز)،
+   اندازه در میانه × معیار در صدک ۳۰ و ۷۰ درون هر نیمهٔ اندازه (وابسته)، دست‌کم ۱۰ نماد در هر سبد؛ وزن ارزش بازاری درون هر سبد؛ تشکیل در آخرین روز معاملاتی هر ماه شمسی (داده تا بستهٔ همان روز)،
    نگه‌داری (خرید و نگه‌داری) تا پایان ماه بعد. جهان = نمادهای عملیاتی واجد بورس و فرابورس (همان جهان Lab؛ فصل ۲ §۲٫۰).
      SMB  کوچک − بزرگ (میانگین سه سبد کوچک − سه سبد بزرگ، روی هر چهار مرتب‌سازی)
      HML  ارزشی − رشدی: E/P بالا − E/P پایین (signals.ep؛ EPS سالانهٔ اعلام‌شده)
@@ -53,6 +53,10 @@ RF_CSV = ROOT / "data" / "derived" / "rf_daily.csv"
 FAC_START = pd.Timestamp("2018-03-21")
 EPOCH = pd.Timestamp("1970-01-01")
 HAC_L = 4
+MIN_BUCKET = 10                   # کمترین شمار نماد در هر سبد ۲×۳
+CLOSE_DAYS = 14                   # هفتهٔ با فاصلهٔ بیش از این تا هفتهٔ باز قبلی = تعطیلی سراسری؛ نوروز (تا ۱۰ روز بسته، هفتهٔ ۱۴ روزه) می‌ماند
+POST_CLOSE = 2                    # هفته‌های پس از بازگشایی که کنار می‌روند
+MAX_GAP = 7                       # فاصلهٔ بیش از این (روز تقویمی) میان دو سطح NAV: بازدهٔ آن فاصله کنار می‌رود
 ROLL = 52
 FACTORS = [("MKT", "بازار («شاخص كل» − rf)"), ("SMB", "اندازه: کوچک − بزرگ"), ("HML", "ارزش: E/P بالا − پایین"),
            ("MOM", "مومنتوم: برنده − بازنده"), ("LV", "کم‌نوسان − پرنوسان"), ("ILQ", "نقدناپذیر − نقدشونده")]
@@ -82,17 +86,19 @@ def bh_returns(X: np.ndarray, w: np.ndarray) -> np.ndarray:
 
 
 def sort_2x3(size_v, sig_v, ok, mcap):
-    """شش سبد (کوچک/بزرگ × پایین/میانه/بالا): فهرست اندیس‌ها و وزن ارزش بازاری؛ برش اندازه میانه، برش معیار صدک ۳۰ و ۷۰ (روی همهٔ واجدان)."""
+    """شش سبد (کوچک/بزرگ × پایین/میانه/بالا): فهرست اندیس‌ها. برش اندازه میانه؛ برش معیار صدک ۳۰ و ۷۰ **درون هر نیمهٔ اندازه**
+    (مرتب‌سازی وابسته). در ایران اندازه و نقدناپذیری (و کمتر، نوسان) چنان همبسته‌اند که با برش مستقل گوشهٔ «کوچک و نقدشونده»
+    ۰ تا ۲۳ نماد داشت و سبد خالی بازده صفر می‌داد (ممیزی ۲۰۲۶-۱۱-۰۳). اگر سبدی کمتر از MIN_BUCKET نماد داشت، None."""
     m = ok & np.isfinite(size_v) & np.isfinite(sig_v) & (mcap > 0)
-    if m.sum() < 30:
+    if m.sum() < 6 * MIN_BUCKET:
         return None
     big = size_v >= np.median(size_v[m])
-    lo, hi = np.percentile(sig_v[m], [30, 70])
     out = {}
     for sz, sm in (("S", ~big), ("B", big)):
+        lo, hi = np.percentile(sig_v[m & sm], [30, 70])
         for g, gm in (("L", sig_v <= lo), ("M", (sig_v > lo) & (sig_v < hi)), ("H", sig_v >= hi)):
             out[sz + g] = np.where(m & sm & gm)[0]
-    return out
+    return out if min(len(v) for v in out.values()) >= MIN_BUCKET else None
 
 
 def build_factors(mk) -> pd.DataFrame:
@@ -135,13 +141,23 @@ def market_series(dates) -> pd.Series:
 
 # ═══════════════════ صندوق ═══════════════════
 def fund_daily(sym: str) -> pd.Series:
-    """بازده روزانهٔ NAV (فیپیران، درصد یا کسر) بدون ردیف‌های خالی."""
+    """بازده روزانهٔ صندوق از سطح NAV ابطال (فیپیران getfundchart). ستون ret_daily (dailyEfficiency) در روزهایی که NAV به‌روز
+    نشده ۰ است و آن حرکت گم می‌شود (ممیزی ۲۰۲۶-۱۱-۰۳)؛ فقط در روز تقسیم واحد (|بازده سطح| > ۳۰٪) جای سطح را می‌گیرد.
+    بازده روی فاصلهٔ بیش از MAX_GAP روز بین دو سطح NaN است. اگر سطح نبود، همان ret_daily (درصد یا کسر)."""
     p = ACTIVE / f"nav_{sym}.csv"
     if not p.exists():
         p = FUNDS / f"nav_{sym}.csv"
-    d = pd.read_csv(p, parse_dates=["date"]).set_index("date")
-    x = d.ret_daily.dropna()
-    return (x / 100 if x.abs().median() > 0.05 else x).astype(float)
+    d = pd.read_csv(p, parse_dates=["date"]).set_index("date").sort_index()
+    eff = d.ret_daily
+    eff = eff / 100 if eff.abs().median() > 0.05 else eff
+    lv = d.nav_cancel.where(d.nav_cancel > 0).dropna() if "nav_cancel" in d else pd.Series(dtype=float)
+    if len(lv) < 30:
+        return eff.dropna().astype(float)
+    r = lv.pct_change()
+    split = r.abs() > 0.3
+    r = r.where(~split, eff.reindex(r.index).where(lambda x: x.abs() < 0.3))
+    gap = pd.Series(lv.index, index=lv.index).diff().dt.days
+    return r.where(gap <= MAX_GAP).iloc[1:].astype(float)
 
 
 def week_id(dates) -> np.ndarray:
@@ -150,22 +166,29 @@ def week_id(dates) -> np.ndarray:
 
 def weekly(fund: pd.Series, mkt: pd.Series, F: pd.DataFrame, open_days: pd.DatetimeIndex, skip_days: int = 60):
     """هم‌ترازی هفتگی: بازده مرکب هر هفتهٔ شمسی (شنبه تا جمعه) برای صندوق، بازار و فاکتورها. هفتهٔ بدون روز باز بازار کنار می‌رود.
-    دو ماه نخست عمر صندوق (تشکیل سبد) کنار می‌رود. خروجی: DataFrame با ستون‌های y (صندوق)، MKT_raw، فاکتورها، days (روز تقویمی هفته)."""
+    دو ماه نخست عمر صندوق (تشکیل سبد) و هفته‌های پیش از آغاز فاکتورها کنار می‌رود؛ هفته‌ای که برای ستونی هیچ داده‌ای ندارد آن ستون را NaN دارد. خروجی: DataFrame با ستون‌های y (صندوق)، MKT_raw، فاکتورها، days (روز تقویمی هفته)."""
     start = fund.index.min() + pd.Timedelta(days=skip_days)
     fund = fund[fund.index >= start]
-    lo, hi = fund.index.min(), min(fund.index.max(), mkt.dropna().index.max(), F.dropna(how="all").index.max())
+    lo, hi = max(fund.dropna().index.min(), F.dropna(how="all").index.min()), min(fund.index.max(), mkt.dropna().index.max(), F.dropna(how="all").index.max())
     D = pd.DataFrame({"y": fund}).join(pd.DataFrame({"MKT_raw": mkt}), how="outer").join(F, how="outer")
     D = D[(D.index >= lo) & (D.index <= hi)]
     D["open"] = D.index.isin(open_days)
     D["w"] = week_id(D.index)
     g = D.groupby("w")
     cols = ["y", "MKT_raw"] + list(F.columns)
-    W = g[cols].apply(lambda x: (1 + x.fillna(0)).prod() - 1)
+    # هفتهٔ بی‌دادهٔ یک ستون NaN است، نه صفر (پیش از ممیزی ۲۰۲۶-۱۱-۰۳ هفته‌های پیش از آغاز فاکتورها با فاکتور ۰ وارد رگرسیون می‌شدند)
+    W = g[cols].apply(lambda x: (1 + x.fillna(0)).prod().where(x.notna().any()) - 1)
     W["n_open"] = g.open.sum()
     W["end"] = g.apply(lambda x: x.index.max())
     W = W[W.n_open > 0]
     W = W.set_index("end")
     W["days"] = np.r_[7, np.diff(W.index.values).astype("timedelta64[D]").astype(int)]
+    # تعطیلی سراسری غیرعادی (جنگ خرداد ۱۴۰۴: ۱۷ روز؛ اسفند ۱۴۰۴ تا اردیبهشت ۱۴۰۵: ۸۳ روز): NAV صندوق‌ها در تعطیلی و بازگشایی ارزش‌گذاری می‌شود ولی
+    # «شاخص كل» با صف و دامنهٔ نوسان هفته‌ها بعد می‌رسد؛ هفتهٔ دربرگیرندهٔ تعطیلی و POST_CLOSE هفتهٔ بعد کنار می‌رود (ممیزی ۲۰۲۶-۱۱-۰۳:
+    # یک هفتهٔ بازگشایی بتای صندوق‌های شاخصی «شاخص كل» را به ۱٫۱۷ و β نقدناپذیری را به ۰٫۴ می‌برد).
+    span = np.flatnonzero(W.days.values > CLOSE_DAYS)
+    drop = np.unique(np.concatenate([span + k for k in range(POST_CLOSE + 1)])) if len(span) else np.array([], int)
+    W = W.drop(index=W.index[drop[drop < len(W)]])
     return W.drop(columns="n_open")
 
 
@@ -178,22 +201,29 @@ def rf_weekly(W: pd.DataFrame) -> np.ndarray | None:
     return s.reindex(s.index.union(start)).ffill().reindex(start).values.astype(float)
 
 
-def regress(W: pd.DataFrame, rf_ann=None, codes=None) -> dict:
-    """rf_ann: عدد ثابت، آرایهٔ هفتگی، یا None = ستون rf_ann درون W."""
+def regress(W: pd.DataFrame, rf_ann=None, codes=None, need=None) -> dict:
+    """rf_ann: عدد ثابت، آرایهٔ هفتگی، یا None = ستون rf_ann درون W. need: ستون‌هایی که هفته باید برایشان داده داشته باشد
+    (پیش‌فرض همهٔ فاکتورها، تا مدل «فقط بازار» روی همان هفته‌های مدل کامل برازش شود)."""
     codes = codes or [c for c, _ in FACTORS]
+    need = need or [c for c, _ in FACTORS]
     rf_ann = W.rf_ann.values if rf_ann is None else rf_ann
     rf = (1 + rf_ann) ** (W.days.values / 365.0) - 1
     y = W.y.values - rf
-    F = np.column_stack([W.MKT_raw.values - rf if c == "MKT" else W[c].values for c in codes])
-    ok = np.isfinite(y) & np.isfinite(F).all(axis=1)
+    col = lambda c: W.MKT_raw.values - rf if c == "MKT" else W[c].values  # noqa: E731
+    F = np.column_stack([col(c) for c in codes])
+    ok = np.isfinite(y) & np.isfinite(np.column_stack([col(c) for c in need])).all(axis=1)
+    lag = np.r_[np.nan, col("MKT")[:-1]]                               # MKT هفتهٔ قبل در ردیف‌های پیوستهٔ W (نه پس از حذف ردیف‌ها)
+    lag_ok = ok & np.isfinite(lag)
+    yl, Fl = y[lag_ok], np.column_stack([F[lag_ok], lag[lag_ok]])
     y, F = y[ok], F[ok]
+    if len(y) < len(codes) + 10:                                       # همان کف ui/fattr.js
+        return None
     b, se, r2 = ols_hac(y, F, HAC_L)
     t = b / np.where(se > 0, se, np.nan)
     e = y - np.column_stack([np.ones(len(y)), F]) @ b
     mF = F.mean(axis=0)
     # بتای دیمسون: MKT هفتهٔ جاری + هفتهٔ قبل
-    Fl = np.column_stack([F, np.r_[np.nan, F[:-1, 0]]])[1:]
-    bd, sed, _ = ols_hac(y[1:], Fl, HAC_L)
+    bd, sed, _ = ols_hac(yl, Fl, HAC_L)
     k = len(codes)
     return {"weeks": int(len(y)), "alpha_ann": float(52 * 100 * b[0]), "alpha_t": float(t[0]), "r2": float(r2),
             "resid_vol_ann": float(100 * e.std(ddof=k + 1) * np.sqrt(52)), "excess_ann": float(52 * 100 * y.mean()),
@@ -203,10 +233,13 @@ def regress(W: pd.DataFrame, rf_ann=None, codes=None) -> dict:
                          "contrib_ann": float(52 * 100 * b[i + 1] * mF[i])} for i, c in enumerate(codes)]}
 
 
-def rolling(W: pd.DataFrame, rf_ann=None, n: int = ROLL) -> dict:
-    out = {"end": [], "beta": {c: [] for c, _ in FACTORS}, "alpha_ann": [], "r2": []}
+def rolling(W: pd.DataFrame, rf_ann=None, n: int = ROLL, codes=None) -> dict:
+    codes = codes or [c for c, _ in FACTORS]
+    out = {"end": [], "beta": {c: [] for c in codes}, "alpha_ann": [], "r2": []}
     for i in range(n, len(W) + 1):
-        r = regress(W.iloc[i - n:i], rf_ann)
+        r = regress(W.iloc[i - n:i], rf_ann, codes, codes)
+        if r is None:
+            continue
         out["end"].append(str(W.index[i - 1].date()))
         for f in r["factors"]:
             out["beta"][f["code"]].append(round(f["beta"], 3))
@@ -236,9 +269,9 @@ def holdings_view(mk, sym: str) -> dict | None:
     H = pd.read_csv(p, parse_dates=["date"])
     if "weight_src" in H:                                                  # ماهِ بازسازی‌شده از ارزش (جدول تکراری در Excel، نقد نامعلوم) کنار می‌رود
         H = H[H.weight_src != "value_norm"]
-    pos = {}
+    codes_of = {}
     for i, s in enumerate(mk.sym):
-        pos.setdefault(str(s), i)
+        codes_of.setdefault(str(s), []).append(i)
     kw = np.where(np.asarray(mk.market) == "bourse", 1.0, 0.0)               # «شاخص كل»: ارزش بازاری بورس
     reps = []
     for d, h in H.groupby("date"):
@@ -251,7 +284,9 @@ def holdings_view(mk, sym: str) -> dict | None:
         for nm, _, sgn in CHARS:
             v = np.log(np.where(mc > 0, mc, np.nan)) if nm == "size" else getattr(sg, nm)(mk, a)
             Z[nm] = np.full(mk.k, np.nan) if v is None else zscore(sgn * np.asarray(v, float), ok, mc)
-        h = h.assign(i=h.symbol.astype(str).map(pos))
+        # نماد دوکدی (تنزل به پایه کد تازه می‌سازد): کدی که در روز a ارزش بازار دارد
+        pick = lambda s: next((i for i in codes_of.get(s, []) if mc[i] > 0), (codes_of.get(s) or [np.nan])[0])  # noqa: E731
+        h = h.assign(i=h.symbol.astype(str).map(pick))
         stock = h[h.i.notna()].groupby("i").weight_pct.sum()
         ix = stock.index.astype(int).values
         w = stock.values / 100
@@ -312,8 +347,12 @@ def main():
             rw = None
         W["rf_ann"] = rw if rw is not None else (a.rf if a.rf is not None else RF_ANN)
         res = regress(W)
-        res_k = regress(W, None, ["MKT"])
+        res_k = regress(W, None, ["MKT"])                                 # همان هفته‌های مدل کامل
+        c5 = [c for c, _ in FACTORS if c != "HML"]                         # بدون ارزش: کل تاریخچه (HML از مهر ۱۴۰۳)
+        res5, res5_k = regress(W, None, c5, c5), regress(W, None, ["MKT"], c5)
         print(f"\n══ {sym}: {res['weeks']} هفته ({W.index.min().date()} تا {W.index.max().date()})؛ rf میانگین {100 * W.rf_ann.mean():.1f}٪")
+        print(f"  ۵ فاکتور بی‌HML: {res5['weeks']} هفته، α {res5['alpha_ann']:.1f}٪ (t={res5['alpha_t']:.2f})، R² {res5['r2']:.2f}، "
+              + " ".join(f"{f['code']}={f['beta']:+.2f}" for f in res5["factors"]))
         print(f"  بازده مازاد سالانه {res['excess_ann']:.1f}٪، α {res['alpha_ann']:.1f}٪ (t={res['alpha_t']:.2f})، R² {res['r2']:.2f} (فقط بازار {res_k['r2']:.2f})، "
               f"بتای دیمسون {res['dimson_beta']:.2f}")
         for f in res["factors"]:
@@ -328,7 +367,8 @@ def main():
                       "y": [round(float(x), 6) for x in W.y.values], "w_end": [str(d.date()) for d in W.index], "days": W.days.astype(int).tolist(),
                       "F": {c: [None if x != x else round(float(x), 6) for x in W[c].values] for c in ["MKT_raw", *F.columns]},
                       "rf_w": [round(float(x), 5) for x in W.rf_ann.values],
-                      "result": res, "market_only": res_k, "rolling": rolling(W), "holdings": hv}
+                      "result": res, "market_only": res_k, "rolling": rolling(W),
+                      "result5": res5, "market_only5": res5_k, "rolling5": rolling(W, codes=c5), "holdings": hv}
     out = {"asof": str(last.date()), "rf_ann": a.rf if a.rf is not None else RF_ANN, "rf_src": "const" if a.rf is not None or not RF_CSV.exists() else "bills", "hac_lags": HAC_L, "roll": ROLL, "factors": [{"code": c, "fa": fa} for c, fa in FACTORS],
            "funds": funds}
     OUT.write_text("window.SIM_FATTR = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")

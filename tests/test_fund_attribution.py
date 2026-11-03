@@ -34,6 +34,14 @@ class BuyHold(unittest.TestCase):
         self.assertTrue(sig[P["SH"]].min() >= sig[P["SM"]].max())
         self.assertEqual(sum(len(v) for v in P.values()), k)
 
+    def test_sort_2x3_dependent_when_signal_tracks_size(self):
+        k = 200
+        size = np.arange(k, dtype=float)
+        sig = size + np.tile(np.arange(10, dtype=float), 20)                # معیار تقریباً همان اندازه (مثل آمیهود)
+        P = fa.sort_2x3(size, sig, np.ones(k, bool), np.ones(k))
+        self.assertTrue(min(len(v) for v in P.values()) >= 25)              # با برش مستقل، SH و BL خالی می‌شدند
+        self.assertIsNone(fa.sort_2x3(size[:50], sig[:50], np.ones(50, bool), np.ones(50)))   # سبد کمتر از MIN_BUCKET
+
 
 class Regression(unittest.TestCase):
     def setUp(self):
@@ -65,7 +73,56 @@ class Regression(unittest.TestCase):
         W = fa.weekly(fund, mkt, F, open_days, skip_days=0)
         self.assertEqual(len(W), 3)
         self.assertAlmostEqual(W.y.iloc[0], 1.01 ** 7 - 1)
-        self.assertEqual(W.days.tolist()[1:], [7, 14])
+        self.assertEqual(W.days.tolist()[1:], [7, 14])                     # یک هفته تعطیلی (مثل نوروز) کنار نمی‌رود
+
+    def test_weekly_drops_closure_and_reopening_weeks(self):
+        days = pd.date_range("2025-01-04", periods=70, freq="D")             # ده هفته
+        fund, mkt = pd.Series(0.01, index=days), pd.Series(0.0, index=days)
+        F = pd.DataFrame({"SMB": 0.0}, index=days)
+        open_days = days[(days < days[14]) | (days >= days[35])]             # هفته‌های ۳ تا ۵ بسته (هفتهٔ بازگشایی ۲۸ روزه)
+        W = fa.weekly(fund, mkt, F, open_days, skip_days=0)
+        self.assertEqual(len(W), 10 - 3 - (1 + fa.POST_CLOSE))              # سه هفتهٔ بسته + هفتهٔ بازگشایی + دو هفتهٔ بعد
+        self.assertTrue((W.days == 7).all())
+
+    def test_weekly_no_factor_data_is_nan_not_zero(self):
+        days = pd.date_range("2025-01-04", periods=28, freq="D")
+        fund, mkt = pd.Series(0.01, index=days), pd.Series(0.0, index=days)
+        F = pd.DataFrame({"SMB": 0.001, "HML": np.where(days >= days[14], 0.001, np.nan)}, index=days)
+        W = fa.weekly(fund, mkt, F, days, skip_days=0)
+        self.assertEqual(len(W), 4)
+        self.assertTrue(W.HML.iloc[:2].isna().all())                        # پیش‌تر ۰ بود و هفته وارد رگرسیون می‌شد
+        self.assertAlmostEqual(W.HML.iloc[2], 1.001 ** 7 - 1)
+        late = pd.DataFrame({"SMB": np.where(days >= days[14], 0.001, np.nan)}, index=days)
+        self.assertEqual(len(fa.weekly(fund, mkt, late, days, skip_days=0)), 2)   # هفته‌های پیش از آغاز فاکتورها کنار می‌روند
+
+    def test_market_only_on_same_weeks_and_dimson_lag(self):
+        W = self.W.copy()
+        W.loc[W.index[100:110], "HML"] = np.nan
+        full, mo = fa.regress(W, self.rf), fa.regress(W, self.rf, ["MKT"])
+        self.assertEqual(full["weeks"], mo["weeks"])
+        self.assertEqual(full["weeks"], len(W) - 10)
+        self.assertAlmostEqual(full["dimson_lag"], 0.0, delta=0.05)       # MKT هفتهٔ قبل در دادهٔ مصنوعی اثری ندارد
+
+
+class FundDaily(unittest.TestCase):
+    def test_levels_override_stale_daily_and_splits(self):
+        import tempfile
+        d = pd.date_range("2025-01-01", periods=40, freq="D").delete(range(20, 30))   # فاصلهٔ ۱۱ روزه
+        nav = 1000 * 1.01 ** np.arange(len(d))
+        nav[25:] /= 10                                                        # تقسیم واحد در روز ۲۵
+        eff = np.full(len(d), 1.0)
+        eff[5] = 0.0                                                          # dailyEfficiency کهنه: ۰ در حالی که NAV ۱٪ بالا رفت
+        tmp = Path(tempfile.mkdtemp())
+        pd.DataFrame({"date": d, "ret_daily": eff, "nav_cancel": nav}).to_csv(tmp / "nav_T.csv", index=False)
+        old = fa.ACTIVE
+        try:
+            fa.ACTIVE = tmp
+            r = fa.fund_daily("T")
+        finally:
+            fa.ACTIVE = old
+        self.assertAlmostEqual(r.loc[d[5]], 0.01)                              # از سطح
+        self.assertAlmostEqual(r.loc[d[25]], 0.01)                             # روز تقسیم: از dailyEfficiency
+        self.assertTrue(np.isnan(r.loc[d[20]]))                                # پس از فاصلهٔ بیش از MAX_GAP
 
 
 if __name__ == "__main__":
