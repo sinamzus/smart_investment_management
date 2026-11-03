@@ -329,15 +329,17 @@ def parse_nav_rows(rows: list[dict]) -> list[dict]:
     return list(dedup.values())
 
 
-def fipiran_nav(f: dict, row: dict) -> list[dict]:
+def fipiran_nav(f: dict, row: dict, quick: bool = False) -> list[dict]:
     """سری بازده روزانهٔ صندوق از /efficiency/fundefficiencylist (کلیدهای dailyEfficiency و priceEfficiency در JS سایت دیده شد).
-    مقیاس (درصد یا کسر) و تعریف دقیق فیلدها در پاسخ خام بررسی می‌شود؛ build_ui_funds.py مقیاس را خودکار تشخیص می‌دهد."""
+    مقیاس (درصد یا کسر) و تعریف دقیق فیلدها در پاسخ خام بررسی می‌شود؛ build_ui_funds.py مقیاس را خودکار تشخیص می‌دهد.
+    quick: فقط chart/fundefficiencychart و getfundchart (دریافت انبوه: یک درخواست کمتر برای هر صندوق)."""
     reg = _pick(row, "regNo", "regno", "fundRegNo", "regNumber")
     if not reg:
         print("    فیپیران: شمارهٔ ثبت (regNo) در ردیف نیست")
         return []
     best = []
-    for ep in (f"efficiency/fundefficiencylist?showAll=true&regNos={reg}", f"chart/fundefficiencychart?regno={reg}&showAll=true&groupId=0"):
+    eps = (f"efficiency/fundefficiencylist?showAll=true&regNos={reg}", f"chart/fundefficiencychart?regno={reg}&showAll=true&groupId=0")
+    for ep in eps[1:] if quick else eps:
         try:
             d = fip_get(ep)
         except Exception as e:  # noqa: BLE001

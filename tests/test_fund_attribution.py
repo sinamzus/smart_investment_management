@@ -125,5 +125,61 @@ class FundDaily(unittest.TestCase):
         self.assertTrue(np.isnan(r.loc[d[20]]))                                # پس از فاصلهٔ بیش از MAX_GAP
 
 
+    def test_distribution_day_added_back(self):
+        import tempfile
+        d = pd.date_range("2025-01-01", periods=40, freq="D")
+        nav = 1000 * 1.01 ** np.arange(len(d))
+        nav[20:] *= 0.95                                                      # تقسیم سود ۵٪ در روز ۲۰: سطح می‌افتد
+        eff = np.full(len(d), 1.0)                                            # بازده روزانهٔ فیپیران (با سود) همان ۱٪
+        nav2 = nav.copy()
+        nav2[30:] *= 1.37                                                     # جهش ۳۷٪ واقعی (بازگشایی): بماند
+        tmp = Path(tempfile.mkdtemp())
+        pd.DataFrame({"date": d, "ret_daily": eff, "nav_cancel": nav2}).to_csv(tmp / "nav_T.csv", index=False)
+        old = fa.ACTIVE
+        try:
+            fa.ACTIVE = tmp
+            r = fa.fund_daily("T")
+        finally:
+            fa.ACTIVE = old
+        self.assertAlmostEqual(r.loc[d[20]], 0.01)
+        self.assertAlmostEqual(r.loc[d[30]], 1.01 * 1.37 - 1)
+
+
+def panel(alpha_w, n=300, seed=0, start=0):
+    """صندوق مصنوعی ۵ فاکتوری با آلفای هفتگی alpha_w؛ شمارهٔ هفته‌ها از start."""
+    rng = np.random.default_rng(seed)
+    X = rng.normal(0, 0.02, (n, len(fa.C5)))
+    y = alpha_w + X @ np.array([0.9, 0.5, 0.1, 0.0, 0.2]) + rng.normal(0, 0.01, n)
+    return y, X, np.arange(start, start + n)
+
+
+class Skill(unittest.TestCase):
+    def test_market_timing_detected(self):
+        rng = np.random.default_rng(1)
+        n = 300
+        idx = pd.date_range("2020-01-04", periods=n, freq="7D")
+        mkt = rng.normal(0.005, 0.03, n)
+        F = pd.DataFrame({c: rng.normal(0, 0.02, n) for c in ["SMB", "HML", "MOM", "LV", "ILQ"]}, index=idx)
+        rf = 1.30 ** (7 / 365) - 1
+        ex = mkt - rf
+        y = rf + 0.8 * ex + 4.0 * ex ** 2 + rng.normal(0, 0.003, n)          # بتای بالاتر در بازار بالا
+        W = F.assign(y=y, MKT_raw=mkt, days=7, rf_ann=0.30)
+        s = fa.skill(W)
+        self.assertTrue(s["eligible"])
+        self.assertGreater(s["tm_t"], 3)
+        self.assertAlmostEqual(s["tm_gamma"], 4.0, delta=0.6)
+        self.assertGreater(s["tm_ann"], 0)
+
+    def test_luck_vs_skill_null_and_skilled(self):
+        P = {f"n{i}": panel(0.0, seed=i, start=i * 5) for i in range(20)}  # بی‌مهارت، تاریخچه‌های جابه‌جا
+        P["skilled"] = panel(0.004, seed=99)                                  # ≈ ۲۱٪ در سال
+        T = fa.luck_vs_skill(P, n_boot=200)
+        self.assertLess(T["funds"]["skilled"]["p"], 0.01)
+        self.assertGreater(np.median([T["funds"][f"n{i}"]["p"] for i in range(20)]), 0.2)
+        self.assertGreaterEqual(T["sig_pos"], 1)
+        self.assertTrue(0 <= T["pi_pos"] <= 1 and 0 <= T["pi0"] <= 1)
+        self.assertEqual(len(T["t_actual"]), len(T["pct"]))
+
+
 if __name__ == "__main__":
     unittest.main()

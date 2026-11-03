@@ -7,13 +7,19 @@ global.window = global;
 require(path.join(__dirname, '..', 'ui', 'data', 'fund_attr.js'));
 require(path.join(__dirname, '..', 'ui', 'fattr.js'));
 const E = global.FAttr, A = global.SIM_FATTR;
+// جزئیات هفتگی هر صندوق در ui/data/fattr/<شمارهٔ ثبت>.js
+for (const v of Object.values(A.funds)) require(path.join(__dirname, '..', 'ui', 'data', 'fattr', `${v.id}.js`));
 let bad = 0;
 const ok = (c, m) => { if (!c) { bad++; console.log('خطا:', m); } };
 const near = (a, b, tol, m) => ok(Math.abs(a - b) <= tol, `${m}: ${a} ≠ ${b}`);
 const codes = A.factors.map(x => x.code);
-for (const [sym, F] of Object.entries(A.funds)) {
+let n6 = 0;
+for (const [sym, S] of Object.entries(A.funds)) {
+  const F = Object.assign({}, S, global.SIM_FATTR_D[sym]);
   const r = E.regress(F, F.rf_w || A.rf_ann, codes, A.hac_lags), P = F.result;
-  ok(r && r.weeks === P.weeks, `${sym}: تعداد هفته`);
+  ok(!r === !P, `${sym}: مدل ۶ فاکتوری فقط یک‌طرف`);
+  if (r && P) { n6++;
+  ok(r.weeks === P.weeks, `${sym}: تعداد هفته`);
   for (const k of ['alpha_ann', 'alpha_t', 'r2', 'resid_vol_ann', 'excess_ann', 'vol_ann', 'dimson_beta']) near(r[k], P[k], 1e-3 * Math.max(1, Math.abs(P[k])), `${sym} ${k}`);
   r.factors.forEach((f, i) => { for (const k of ['beta', 't', 'factor_ann', 'contrib_ann']) near(f[k], P.factors[i][k], 2e-3 * Math.max(1, Math.abs(P.factors[i][k])), `${sym} ${f.code} ${k}`); });
   near(r.alpha_ann + r.factors.reduce((s, f) => s + f.contrib_ann, 0), r.excess_ann, 1e-9, `${sym} جمع سهم‌ها`);
@@ -22,6 +28,7 @@ for (const [sym, F] of Object.entries(A.funds)) {
   const R = E.rolling(F, F.rf_w || A.rf_ann, codes, A.hac_lags, A.roll);
   ok(R.end.length === F.rolling.end.length, `${sym}: طول بتای غلتان`);
   if (R.end.length) codes.forEach((c, j) => near(R.beta[j][R.end.length - 1], F.rolling.beta[c][R.end.length - 1], 2e-3, `${sym} بتای غلتان ${c}`));
+  }
   // مدل ۵ فاکتوری بدون HML روی کل تاریخچه
   const c5 = codes.filter(c => c !== 'HML'), r5 = E.regress(F, F.rf_w || A.rf_ann, c5, A.hac_lags, 0, F.y.length, c5), P5 = F.result5;
   ok(r5 && r5.weeks === P5.weeks, `${sym}: تعداد هفتهٔ ۵ فاکتوری`);
@@ -30,8 +37,8 @@ for (const [sym, F] of Object.entries(A.funds)) {
   near(E.regress(F, F.rf_w || A.rf_ann, ['MKT'], A.hac_lags, 0, F.y.length, c5).r2, F.market_only5.r2, 1e-4, `${sym} R² فقط بازار ۵ف`);
   const R5 = E.rolling(F, F.rf_w || A.rf_ann, c5, A.hac_lags, A.roll);
   ok(R5.end.length === F.rolling5.end.length, `${sym}: طول بتای غلتان ۵ف`);
-  console.log(`${sym}: ${r.weeks} هفته، α ${r.alpha_ann.toFixed(2)}٪، R² ${r.r2.toFixed(3)}، β_SMB ${r.factors[1].beta.toFixed(3)} · ۵ف ${r5.weeks} هفته`);
 }
+console.log(`${Object.keys(A.funds).length} صندوق (${n6} با مدل ۶ فاکتوری) با پایتون مقایسه شد`);
 // ۴) مصنوعی
 let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 - 0.5; };
 const n = 300, beta = [0.9, 0.6, -0.3], Fm = { MKT_raw: [], SMB: [], HML: [] }, y = [];
