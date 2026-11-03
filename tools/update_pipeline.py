@@ -39,6 +39,7 @@ FETCH_FULL = [
     ("ادغام تاریخ پرداخت سود", ["tools/merge_dividend_payments.py"]),
     ("خالص ارزش دارایی صندوق‌های شاخصی", ["tools/fetch_index_funds.py"]),
     ("بازده صندوق‌های سهامی فعال", ["tools/fetch_active_funds.py"]),
+    ("اسناد خزانه (اخزا)", ["tools/fetch_treasury_bills.py"]),
 ]
 REBUILD = [
     ("کنترل دامنهٔ نوسان", ["tools/qa_price_limits.py"]),
@@ -53,6 +54,7 @@ REBUILD = [
     ("شاخص بهبودیافته", ["tools/build_replica_x.py"]),
     ("Factor Lab، کیفیت داده، ریسک", ["tools/build_ui_extra.py"]),
     ("صندوق‌های شاخصی", ["tools/build_ui_funds.py"]),
+    ("نرخ بدون ریسک از اخزا", ["tools/build_rf.py"]),
     ("تفکیک فاکتوری صندوق‌ها", ["tools/fund_attribution.py"]),
     ("دستور اجرای پیش‌نویس (بدون ثبت)", ["tools/live_ledger.py", "orders", "--aum", "1e11"]),
     ("دفتر زنده", ["tools/build_ui_live.py"]),

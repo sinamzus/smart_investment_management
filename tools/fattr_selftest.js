@@ -1,6 +1,6 @@
 // تفکیک فاکتوری صندوق در مرورگر (ui/fattr.js) = tools/fund_attribution.py (فصل ۷ §۷٫۹)
 //   node tools/fattr_selftest.js
-// ۱) رگرسیون شش‌فاکتوری و فقط-بازار با نرخ پیش‌فرض همان عددهای پایتون؛ ۲) آخرین بتای غلتان همان؛ ۳) سهم‌ها + آلفا = بازده مازاد؛
+// ۱) رگرسیون شش‌فاکتوری و فقط-بازار با نرخ پیش‌فرض (سری هفتگی اخزا rf_w یا نرخ ثابت) همان عددهای پایتون؛ ۲) آخرین بتای غلتان همان؛ ۳) سهم‌ها + آلفا = بازده مازاد؛
 // ۴) آزمون مصنوعی: سری ساخته‌شده از بتاهای معلوم را بازمی‌یابد.
 const path = require('path');
 global.window = global;
@@ -12,14 +12,14 @@ const ok = (c, m) => { if (!c) { bad++; console.log('خطا:', m); } };
 const near = (a, b, tol, m) => ok(Math.abs(a - b) <= tol, `${m}: ${a} ≠ ${b}`);
 const codes = A.factors.map(x => x.code);
 for (const [sym, F] of Object.entries(A.funds)) {
-  const r = E.regress(F, A.rf_ann, codes, A.hac_lags), P = F.result;
+  const r = E.regress(F, F.rf_w || A.rf_ann, codes, A.hac_lags), P = F.result;
   ok(r && r.weeks === P.weeks, `${sym}: تعداد هفته`);
   for (const k of ['alpha_ann', 'alpha_t', 'r2', 'resid_vol_ann', 'excess_ann', 'vol_ann', 'dimson_beta']) near(r[k], P[k], 1e-3 * Math.max(1, Math.abs(P[k])), `${sym} ${k}`);
   r.factors.forEach((f, i) => { for (const k of ['beta', 't', 'factor_ann', 'contrib_ann']) near(f[k], P.factors[i][k], 2e-3 * Math.max(1, Math.abs(P.factors[i][k])), `${sym} ${f.code} ${k}`); });
   near(r.alpha_ann + r.factors.reduce((s, f) => s + f.contrib_ann, 0), r.excess_ann, 1e-9, `${sym} جمع سهم‌ها`);
-  const m = E.regress(F, A.rf_ann, ['MKT'], A.hac_lags);
+  const m = E.regress(F, F.rf_w || A.rf_ann, ['MKT'], A.hac_lags);
   near(m.r2, F.market_only.r2, 1e-4, `${sym} R² فقط بازار`);
-  const R = E.rolling(F, A.rf_ann, codes, A.hac_lags, A.roll);
+  const R = E.rolling(F, F.rf_w || A.rf_ann, codes, A.hac_lags, A.roll);
   ok(R.end.length === F.rolling.end.length, `${sym}: طول بتای غلتان`);
   if (R.end.length) codes.forEach((c, j) => near(R.beta[j][R.end.length - 1], F.rolling.beta[c][R.end.length - 1], 2e-3, `${sym} بتای غلتان ${c}`));
   console.log(`${sym}: ${r.weeks} هفته، α ${r.alpha_ann.toFixed(2)}٪، R² ${r.r2.toFixed(3)}، β_SMB ${r.factors[1].beta.toFixed(3)}`);

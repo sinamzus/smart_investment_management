@@ -38,11 +38,11 @@ function olsHac(y, X, L) {
 const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
 const sd = (a, ddof = 1) => { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - ddof)); };
 
-/** fund: {y, days, F:{MKT_raw, SMB…}}؛ همان fund_attribution.regress. lo/hi = بازهٔ اندیس هفته‌ها [lo, hi). */
+/** fund: {y, days, F:{MKT_raw, SMB…}}؛ همان fund_attribution.regress. rfAnn: عدد ثابت یا آرایهٔ هفتگی (rf_w). lo/hi = بازهٔ اندیس هفته‌ها [lo, hi). */
 function regress(fund, rfAnn, codes, L, lo = 0, hi = fund.y.length) {
   const y = [], X = [], idx = [];
   for (let t = lo; t < hi; t++) {
-    const rf = Math.pow(1 + rfAnn, fund.days[t] / 365) - 1, row = codes.map(c => c === 'MKT' ? fund.F.MKT_raw[t] - rf : fund.F[c][t]);
+    const rf = Math.pow(1 + (typeof rfAnn === 'number' ? rfAnn : rfAnn[t]), fund.days[t] / 365) - 1, row = codes.map(c => c === 'MKT' ? fund.F.MKT_raw[t] - rf : fund.F[c][t]);
     const v = fund.y[t] - rf;
     if (!isFinite(v) || row.some(x => x == null || !isFinite(x))) continue;
     y.push(v); X.push(row); idx.push(t);
@@ -91,20 +91,21 @@ const TILT = { SMB: ['کوچک‌ها', 'بزرگ‌ها'], HML: ['سهام ار
   LV: ['سهام کم‌نوسان', 'سهام پرنوسان'], ILQ: ['سهام کم‌معامله (نقدناپذیر)', 'سهام پرمعامله'] };
 const CHTIP = { size: 'z لگاریتم ارزش بازار؛ منفی = کوچک‌تر از میانگین وزن‌بازاری بازار.', ep: 'z نسبت سود به قیمت (E/P)؛ مثبت = ارزان‌تر.', mom_12_1: 'z مومنتوم ۱۲−۱؛ مثبت = برنده‌تر.',
   vol_252: 'z نوسان ۲۵۲ روزه؛ مثبت = پرنوسان‌تر.', amihud: 'z نسبت آمیهود؛ مثبت = نقدناپذیرتر.' };
-const st = { sym: null, rf: null, per: 'all', rep: null };
+const st = { sym: null, rf: null, rfMode: 'bills', per: 'all', rep: null };
+const rfArg = fund => st.rfMode === 'bills' && fund.rf_w ? fund.rf_w : st.rf;
 
 function missing(m) { m.innerHTML = '<p style="padding:24px">دادهٔ تفکیک فاکتوری پیدا نشد. اجرا کنید: <code>python tools/fetch_active_funds.py</code> سپس <code>python tools/fund_attribution.py</code></p>'; }
 
 function init() {
   const m = document.getElementById('v-fat'); m.dataset.ready = 1;
   if (!A || !A.funds || !Object.keys(A.funds).length) { missing(m); return; }
-  st.sym = Object.keys(A.funds)[0]; st.rf = A.rf_ann;
+  st.sym = Object.keys(A.funds)[0]; st.rf = A.rf_ann; st.rfMode = A.rf_src === 'bills' ? 'bills' : 'const';
   m.innerHTML = `
   <section class="panel" style="--lg:var(--lg-a)">
     <div class="panel-head"><span class="lg-badge">1</span><span class="panel-title"${tip('بازده هفتگی صندوق (NAV) منهای نرخ بدون ریسک روی شش فاکتور رگرس می‌شود: بازار، اندازه، ارزش، مومنتوم، کم‌نوسان و نقدناپذیری. β می‌گوید صندوق در عمل روی کدام سبک شرط بسته است، چه در امیدنامه گفته باشد چه نه؛ آلفا بخشی است که هیچ فاکتوری توضیحش نمی‌دهد.')}${DOC}>صندوق در عمل روی چه چیزی شرط بسته است؟</span><span class="chip" id="fa-chip"></span></div>
     <div class="ctl">
       <label${tip('صندوق سهامی فعال. صندوق تازه با افزودن به ACTIVE در tools/fetch_active_funds.py اضافه می‌شود.')}>صندوق <select id="fa-sym">${Object.entries(A.funds).map(([k, v]) => `<option value="${esc(k)}">${esc(k)} · ${esc(v.style)}</option>`).join('')}</select></label>
-      <label${tip('نرخ سالانهٔ بدون ریسک (اسناد خزانه یا صندوق درآمد ثابت) به درصد. فقط آلفا و β بازار را جابه‌جا می‌کند؛ βهای سبک (بلند−کوتاه) به آن حساس نیستند. عدد پیش‌فرض راستی‌آزمایی نشده است.')}${DOC}>نرخ بدون ریسک ٪ <input type="number" id="fa-rf" step="1" min="0" max="80" style="width:64px;direction:ltr"></label>
+      <label${tip('نرخ بدون ریسک. «اخزا»: بازده تا سررسید اسناد خزانه در آخرین روز پیش از هر هفته (صفحهٔ «داده و گزارش ← نرخ بدون ریسک»). «ثابت»: یک عدد سالانه برای همهٔ هفته‌ها. فقط آلفا و β بازار را جابه‌جا می‌کند؛ βهای سبک (بلند−کوتاه) به آن حساس نیستند.')}${DOC}>نرخ بدون ریسک <select id="fa-rfm"><option value="bills"${A.rf_src === 'bills' ? '' : ' disabled'}>اخزا (هفتگی)</option><option value="const">ثابت</option></select> <input type="number" id="fa-rf" step="1" min="0" max="80" style="width:64px;direction:ltr">٪</label>
       <span class="seg" id="fa-per"><button data-v="all"${tip('همهٔ هفته‌های عمر صندوق (پس از دو ماه تشکیل سبد).')}>کل عمر</button><button data-v="52"${tip('فقط ۵۲ هفتهٔ اخیر: سبک امروز صندوق.')}>۵۲ هفتهٔ اخیر</button></span>
     </div>
     <div class="kpis" id="fa-kpis"></div>
@@ -121,7 +122,8 @@ function init() {
     <div class="panel-body" id="fa-rollbox"><div class="legend" id="fa-leg2"></div><svg class="chart" id="fa-ch2" dir="ltr" style="height:240px;flex:none"></svg></div>
   </section>
   <section class="panel" style="--lg:var(--lg-e)" id="fa-hold"></section>`;
-  $('fa-rf').value = Math.round(st.rf * 100);
+  $('fa-rf').value = Math.round(st.rf * 100); $('fa-rfm').value = st.rfMode; $('fa-rf').disabled = st.rfMode === 'bills';
+  $('fa-rfm').onchange = e => { st.rfMode = e.target.value; $('fa-rf').disabled = st.rfMode === 'bills'; render(); };
   $('fa-sym').onchange = e => { st.sym = e.target.value; st.rep = null; render(); };
   $('fa-rf').onchange = e => { const v = +e.target.value; if (isFinite(v)) { st.rf = v / 100; render(); } };
   $('fa-per').querySelectorAll('button').forEach(b => { b.onclick = () => { st.per = b.dataset.v; render(); }; });
@@ -149,7 +151,7 @@ function render() {
   const fund = A.funds[st.sym], codes = A.factors.map(x => x.code), n = fund.y.length;
   const lo = st.per === '52' ? Math.max(0, n - 52) : 0;
   $('fa-per').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === st.per)));
-  const r = regress(fund, st.rf, codes, A.hac_lags, lo, n), r1 = regress(fund, st.rf, ['MKT'], A.hac_lags, lo, n);
+  const r = regress(fund, rfArg(fund), codes, A.hac_lags, lo, n), r1 = regress(fund, rfArg(fund), ['MKT'], A.hac_lags, lo, n);
   if (!r) { $('fa-tab').innerHTML = '<tbody><tr><td class="mute">داده برای رگرسیون کافی نیست.</td></tr></tbody>'; return; }
   $('fa-chip').textContent = `${ChartKit.jstr(fund.w_end[r.idx[0]])} تا ${ChartKit.jstr(fund.w_end[r.idx[r.idx.length - 1]])} · ${r.weeks} هفته`;
   const K = [['بازده مازاد سالانه', sg(r.excess_ann, 1) + '٪', `نوسان ${f(r.vol_ann, 0)}٪`, 'میانگین بازده هفتگی صندوق منهای نرخ بدون ریسک × ۵۲ (حسابی، جمع‌پذیر با سهم‌های جدول).'],
@@ -165,7 +167,7 @@ function render() {
     ${r.factors.map(x => row(`<span class="fam" style="background:${FCOL[x.code]}"></span>${esc(A.factors.find(z => z.code === x.code).fa)}`, FTIP[x.code], x.beta, x.t, x.factor_ann, x.contrib_ann)).join('')}
     ${row('آلفا (توضیح‌داده‌نشده)', 'عرض از مبدأ × ۵۲.', null, r.alpha_t, null, r.alpha_ann)}
     ${row('<b>بازده مازاد صندوق</b>', 'جمع ردیف‌های بالا = میانگین بازده هفتگی منهای rf × ۵۲.', null, null, null, r.excess_ann, 'tot')}</tbody>`;
-  $('fa-lin').innerHTML = `<span><b${tip('منبع بازده صندوق.')}>صندوق</b> ${esc(fund.name)} · بازده روزانهٔ NAV (فیپیران)، مرکب هفتگی</span><span><b${tip('جهان و روش ساخت فاکتورها.')}>فاکتورها</b> مرتب‌سازی ۲×۳ وزن‌بازاری، ماهانه، روی واجدان بورس و فرابورس</span><span><b${tip('آخرین روز دادهٔ قیمت سهام که فاکتورها تا آن ساخته شده‌اند.')}>داده تا</b> ${esc(A.asof)}</span><span><b>بازسازی</b> <code>python tools/fund_attribution.py</code></span>`;
+  $('fa-lin').innerHTML = `<span><b${tip('منبع بازده صندوق.')}>صندوق</b> ${esc(fund.name)} · بازده روزانهٔ NAV (فیپیران)، مرکب هفتگی</span><span><b${tip('جهان و روش ساخت فاکتورها.')}>فاکتورها</b> مرتب‌سازی ۲×۳ وزن‌بازاری، ماهانه، روی واجدان بورس و فرابورس</span><span><b${tip('نرخ بدون ریسک کم‌شده از بازده صندوق و بازار در همین بازه.')}>rf</b> ${st.rfMode === 'bills' && fund.rf_w ? `اخزا هفتگی، میانگین ${f(100 * mean(fund.rf_w.slice(lo, n)), 1)}٪ (${f(100 * Math.min(...fund.rf_w.slice(lo, n)), 0)} تا ${f(100 * Math.max(...fund.rf_w.slice(lo, n)), 0)})` : `ثابت ${f(100 * st.rf, 0)}٪`}</span><span><b${tip('آخرین روز دادهٔ قیمت سهام که فاکتورها تا آن ساخته شده‌اند.')}>داده تا</b> ${esc(A.asof)}</span><span><b>بازسازی</b> <code>python tools/fund_attribution.py</code></span>`;
   drawContrib(fund, r, codes); drawRolling(fund, codes, lo, n); renderHold(fund);
 }
 
@@ -180,7 +182,7 @@ function drawContrib(fund, r, codes) {
 }
 
 function drawRolling(fund, codes, lo, n) {
-  const R = rolling(fund, st.rf, codes, A.hac_lags, A.roll, 0, n);
+  const R = rolling(fund, rfArg(fund), codes, A.hac_lags, A.roll, 0, n);
   if (R.end.length < 3) { $('fa-rollbox').innerHTML = `<p class="mute" style="padding:12px">برای پنجرهٔ ${A.roll} هفته‌ای دادهٔ کافی نیست.</p>`; return; }
   const ser = codes.map((c, j) => ({ v: R.beta[j], color: FCOL[c], w: c === 'MKT' ? 1 : 1.4, dash: c === 'MKT' ? '3 3' : null, name: A.factors[j].fa, fmt: x => f(x, 2) }));
   $('fa-leg2').innerHTML = ser.map(s => `<span><i style="color:${s.color}"></i>${esc(s.name)}</span>`).join('');

@@ -23,7 +23,8 @@
 ۲. بر پایهٔ پرتفو (holdings-based، اگر data/funds/holdings_<نماد>.csv هست): در هر گزارش ماهانهٔ کدال، میانگین وزنی امتیاز z
    (اندازه، E/P، مومنتوم، نوسان، آمیهود؛ استانداردشده روی همان جهان با میانگین وزن‌بازاری صفر) برای صندوق و «شاخص كل»؛ وزن صنایع،
    سهم سهام از کل دارایی، سهم فرابورس، تمرکز.
-نرخ بدون ریسک پیش‌فرض RF_ANN سالانه [تأیید لازم]؛ در صفحه قابل‌تغییر است و رگرسیون در مرورگر دوباره حساب می‌شود.
+نرخ بدون ریسک هر هفته: بازده تا سررسید اخزا (data/derived/rf_daily.csv از tools/build_rf.py، فصل ۷ §۷٫۱۰) در آخرین روز پیش از شروع هفته؛
+اگر آن فایل نبود یا --rf داده شد، نرخ ثابت RF_ANN [تأیید لازم]. در صفحه می‌شود به نرخ ثابت رفت و رگرسیون در مرورگر دوباره حساب می‌شود.
 """
 from __future__ import annotations
 
@@ -47,7 +48,8 @@ ACTIVE = ROOT / "data" / "funds" / "active"
 FUNDS = ROOT / "data" / "funds"
 FAC_CSV = ROOT / "data" / "derived" / "factors_daily.csv"
 OUT = ROOT / "ui" / "data" / "fund_attr.js"
-RF_ANN = 0.30                     # نرخ بدون ریسک سالانه (بازده اسناد خزانه/صندوق درآمد ثابت) [تأیید لازم]
+RF_ANN = 0.30                     # نرخ ثابت جایگزین وقتی سری اخزا نیست [تأیید لازم]
+RF_CSV = ROOT / "data" / "derived" / "rf_daily.csv"
 FAC_START = pd.Timestamp("2018-03-21")
 EPOCH = pd.Timestamp("1970-01-01")
 HAC_L = 4
@@ -167,8 +169,19 @@ def weekly(fund: pd.Series, mkt: pd.Series, F: pd.DataFrame, open_days: pd.Datet
     return W.drop(columns="n_open")
 
 
-def regress(W: pd.DataFrame, rf_ann: float, codes=None) -> dict:
+def rf_weekly(W: pd.DataFrame) -> np.ndarray | None:
+    """نرخ سالانهٔ اخزا برای هر هفته: آخرین نرخ معلوم تا پایان هفتهٔ قبل (پیش از شروع هفته)."""
+    if not RF_CSV.exists():
+        return None
+    s = pd.read_csv(RF_CSV, parse_dates=["date"]).set_index("date").rf.dropna()
+    start = W.index - pd.to_timedelta(W.days.values, unit="D")
+    return s.reindex(s.index.union(start)).ffill().reindex(start).values.astype(float)
+
+
+def regress(W: pd.DataFrame, rf_ann=None, codes=None) -> dict:
+    """rf_ann: عدد ثابت، آرایهٔ هفتگی، یا None = ستون rf_ann درون W."""
     codes = codes or [c for c, _ in FACTORS]
+    rf_ann = W.rf_ann.values if rf_ann is None else rf_ann
     rf = (1 + rf_ann) ** (W.days.values / 365.0) - 1
     y = W.y.values - rf
     F = np.column_stack([W.MKT_raw.values - rf if c == "MKT" else W[c].values for c in codes])
@@ -190,7 +203,7 @@ def regress(W: pd.DataFrame, rf_ann: float, codes=None) -> dict:
                          "contrib_ann": float(52 * 100 * b[i + 1] * mF[i])} for i, c in enumerate(codes)]}
 
 
-def rolling(W: pd.DataFrame, rf_ann: float, n: int = ROLL) -> dict:
+def rolling(W: pd.DataFrame, rf_ann=None, n: int = ROLL) -> dict:
     out = {"end": [], "beta": {c: [] for c, _ in FACTORS}, "alpha_ann": [], "r2": []}
     for i in range(n, len(W) + 1):
         r = regress(W.iloc[i - n:i], rf_ann)
@@ -273,7 +286,7 @@ def holdings_view(mk, sym: str) -> dict | None:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--refactor", action="store_true")
-    ap.add_argument("--rf", type=float, default=RF_ANN)
+    ap.add_argument("--rf", type=float, default=None, help="نرخ ثابت سالانه به‌جای سری اخزا")
     a = ap.parse_args()
     mk = load_market()
     last = mk.dates[-1]
@@ -293,9 +306,14 @@ def main():
     for m in meta.to_dict("records"):
         sym = m["symbol"]
         W = weekly(fund_daily(sym), K, F, open_days)
-        res = regress(W, a.rf)
-        res_k = regress(W, a.rf, ["MKT"])
-        print(f"\n══ {sym}: {res['weeks']} هفته ({W.index.min().date()} تا {W.index.max().date()})")
+        rw = None if a.rf is not None else rf_weekly(W)
+        if rw is not None and not np.isfinite(rw).all():
+            print("  سری اخزا همهٔ هفته‌ها را نمی‌پوشاند؛ نرخ ثابت")
+            rw = None
+        W["rf_ann"] = rw if rw is not None else (a.rf if a.rf is not None else RF_ANN)
+        res = regress(W)
+        res_k = regress(W, None, ["MKT"])
+        print(f"\n══ {sym}: {res['weeks']} هفته ({W.index.min().date()} تا {W.index.max().date()})؛ rf میانگین {100 * W.rf_ann.mean():.1f}٪")
         print(f"  بازده مازاد سالانه {res['excess_ann']:.1f}٪، α {res['alpha_ann']:.1f}٪ (t={res['alpha_t']:.2f})، R² {res['r2']:.2f} (فقط بازار {res_k['r2']:.2f})، "
               f"بتای دیمسون {res['dimson_beta']:.2f}")
         for f in res["factors"]:
@@ -309,8 +327,9 @@ def main():
         funds[sym] = {"name": m["name"], "style": m.get("style", ""), "start": str(W.index.min().date()), "end": str(W.index.max().date()),
                       "y": [round(float(x), 6) for x in W.y.values], "w_end": [str(d.date()) for d in W.index], "days": W.days.astype(int).tolist(),
                       "F": {c: [None if x != x else round(float(x), 6) for x in W[c].values] for c in ["MKT_raw", *F.columns]},
-                      "result": res, "market_only": res_k, "rolling": rolling(W, a.rf), "holdings": hv}
-    out = {"asof": str(last.date()), "rf_ann": a.rf, "hac_lags": HAC_L, "roll": ROLL, "factors": [{"code": c, "fa": fa} for c, fa in FACTORS],
+                      "rf_w": [round(float(x), 5) for x in W.rf_ann.values],
+                      "result": res, "market_only": res_k, "rolling": rolling(W), "holdings": hv}
+    out = {"asof": str(last.date()), "rf_ann": a.rf if a.rf is not None else RF_ANN, "rf_src": "const" if a.rf is not None or not RF_CSV.exists() else "bills", "hac_lags": HAC_L, "roll": ROLL, "factors": [{"code": c, "fa": fa} for c, fa in FACTORS],
            "funds": funds}
     OUT.write_text("window.SIM_FATTR = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
     print(f"\n→ {OUT.relative_to(ROOT)} ({OUT.stat().st_size / 1e3:.0f} KB)")
